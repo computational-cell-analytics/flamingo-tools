@@ -1,0 +1,9 @@
+name: lightsheet
+
+channels:
+  - conda-forge
+
+dependencies:
+  - scikit-image
+  - pybdv
+  - z5py
