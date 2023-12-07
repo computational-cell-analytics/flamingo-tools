@@ -1,5 +1,6 @@
 import os
 from typing import List
+from glob import glob
 
 import imageio.v3 as imageio
 import pybdv
@@ -29,21 +30,29 @@ def convert_region_to_bdv_n5(
     scale_factors = [[2, 2, 2]] * 5
     n_threads = 8
 
-    for setup_id, channel_folder in enumerate(channel_folders):
-        file_path = os.path.join(root, channel_folder, file_name_pattern % setup_id)
-        assert os.path.exists(file_path), file_path
+    for channel_id, channel_folder in enumerate(channel_folders):
+        tile_pattern = os.path.join(root, channel_folder, file_name_pattern)
+        file_paths = sorted(glob(tile_pattern))
+        assert len(file_paths) > 0, tile_pattern
+        for tile_id, file_path in enumerate(file_paths):
+            assert os.path.exists(file_path), file_path
 
-        print("Loading data from tif ...")
-        data = imageio.imread(file_path)
-        print("done!")
-        print("The data has the following shape:", data.shape)
+            print("Loading data from tif ...")
+            data = imageio.imread(file_path)
+            print("done!")
+            print("The data has the following shape:", data.shape)
 
-        pybdv.make_bdv(
-            data, out_path,
-            downscale_factors=scale_factors, downscale_mode="mean",
-            setup_id=setup_id, n_threads=n_threads,
-            resolution=resolution, unit=unit,
-        )
+            # TODO give names to the attributes (fall back is just the id)
+            pybdv.make_bdv(
+                data, out_path,
+                downscale_factors=scale_factors, downscale_mode="mean",
+                n_threads=n_threads,
+                resolution=resolution, unit=unit,
+                attributes={
+                    "channel": {"id": channel_id}, "tile": {"id": tile_id},
+                    "angle": {"id": 0}, "illumination": {"id": 0}
+                }
+            )
 
 
 def convert_first_sample():
@@ -86,6 +95,43 @@ def convert_first_sample():
     )
 
 
+def convert_second_sample():
+    """Example for using 'convert_region_to_bdv_n5' for the second sample data that
+    contains channels and tiles.
+    """
+
+    # Root is the folder where all data is stored
+    # (here the folder I have copied the data too for my tests)
+    root = "/scratch-grete/usr/nimcpape/data/moser/lightsheet/data-aleyna/tif"
+    # And these are the names of the channels that contain the tif files for a channel and given region.
+    channel_folders = [
+        "C00", "C01"
+    ]
+    # * is a placeholder for the different tiles in each folder.
+    file_name_pattern = "S000_t000000_V000_R000*"
+
+    # Here we create the folder where the data will be stored.
+    out_folder = os.path.join(root, "converted")
+    os.makedirs(out_folder, exist_ok=True)
+
+    # And then give the path to the output file.
+    # In this case we use the same naming pattern as above, but remove the channel suffix,
+    # since this file will contain all three channels.
+    name = "S000_t000000_V000_X000_Y000_I0_D0_P02995"
+    out_path = os.path.join(out_folder, f"{name}.n5")
+
+    # TODO enter the correct values for the resolution and unit here.
+    # I have kept dummy values for this since I don't know it ...
+    resolution = [1.0, 1.0, 1.0]
+    unit = "pixel"
+
+    # Now we call the convertsion function with all necessary information.
+    convert_region_to_bdv_n5(
+        root, channel_folders, file_name_pattern, out_path,
+        resolution=resolution, unit=unit,
+    )
+
+
 def convert_synthetic_data():
     """Example for using 'convert_region_to_bdv_n5' for converting synthetic data.
     The synthetic data can be created with 'create_synthetic_data.py'.
@@ -100,7 +146,8 @@ def convert_synthetic_data():
 
 def main():
     # convert_first_sample()
-    convert_synthetic_data()
+    # convert_synthetic_data()
+    convert_second_sample()
 
 
 if __name__ == "__main__":
