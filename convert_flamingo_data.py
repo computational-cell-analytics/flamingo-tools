@@ -2,7 +2,7 @@ from flamingo_tools import convert_lightsheet_to_bdv
 
 
 def convert_sample_data():
-    root = "./converted/lightsheet_data_downscaled"
+    root = "./converted/downsampled_tifs"
     channel_folders = {
         "PV": "20230804_075941_MLR_136_1_L_561nm_PV",
         "eYFP": "20230804_093312_MLR_136_1_L_488nm_eYFP"

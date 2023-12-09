@@ -1,10 +1,13 @@
-# Data Processing For Light Sheet Data
+# Flamingo Tools
 
-This repository collects scripts for processing light-sheet data from Flamingo microscopes.
+Data processing for light-sheet microscopy, specifically for data from [Flamingo microscopes](https://huiskenlab.com/flamingo/).
 
-## Converting Data to N5
+This is work in progress!
 
-The script `convert_to_bdv_n5.py` can be used to convert the tif stacks for all channels of a region to a data format that is compatible with BigDataViewer and BigStitcher.
+
+## Converting Data to N5 for BigDataViewer and BigStitcher
+
+The script `convert_flamingo_data.py` can be used to convert the tif stacks for all channels of a region to a data format that is compatible with BigDataViewer and BigStitcher.
 To run this script you will need a python environment with the following dependencies: [pybdv](https://github.com/constantinpape/pybdv) and [z5py](https://github.com/constantinpape/z5).
 You can install these with [conda](https://docs.conda.io/en/latest/) / [mamba](https://github.com/mamba-org/mamba) via `mamba install -c conda-forge z5py pybdv`.
 You can also set up a new environment with these dependencies using the file `environment.yaml`:
