@@ -2,6 +2,7 @@ import multiprocessing as mp
 import os
 
 from glob import glob
+from pathlib import Path
 from typing import Optional, List, Dict
 
 import numpy as np
@@ -65,8 +66,11 @@ def read_metadata_flamingo(metadata_paths, center_tiles):
 
     def _pos_to_trafo(pos):
         pos -= offset
+
         # FIXME: dirty hack
-        scale = 4
+        # scale = 4
+        scale = 1
+
         # The calibration: scale factors on the diagonals.
         calib_trafo = [
             scale * resolution[0], 0.0, 0.0, 0.0,
@@ -95,13 +99,9 @@ def read_metadata_flamingo(metadata_paths, center_tiles):
     return resolution[::-1], unit, transformations
 
 
-# TODO derive the scale factors from the shape
+# TODO derive the scale factors from the shape rather than hard-coding it to 5 levels
 def derive_scale_factors(shape):
-    # downsampling in ZYX
-    # Isotropic donwsampling two times: [[2, 2, 2], [2, 2, 2]]
-    # Anisotropic donwsampling two times: [[1, 2, 2], [1, 2, 2]]
-    # First anisotropic donwsampling than isotropic [[1, 2, 2], [2, 2, 2]]
-    scale_factors = [[2, 2, 2]] * 3
+    scale_factors = [[2, 2, 2]] * 5
     return scale_factors
 
 
@@ -119,28 +119,55 @@ def convert_lightsheet_to_bdv(
     scale_factors: Optional[List[List[int]]] = None,
     n_threads: Optional[int] = None,
 ) -> None:
-    """This function converts the channels of one region/tile into a bdv-n5 file
-    that can be read by BigDataViewer or BigStticher.
+    """Convert channels and tiles acquired with a lightsheet microscope.
+
+    The data is converted to the bdv-n5 file format and can be opened with BigDataViewer
+    or BigStitcher. This function is written with data layout and metadata of flamingo
+    microscopes in mind, but could potentially be adapted to other data formats.
+    We currently don't support multiple timepoints, but support can be added if needed.
+
+    This function assumes the following input data format:
+    <ROOT>/<CHANNEL1>/<TILE1>.tif
+                     /<TILE2>.tif
+                     /...
+          /<CHANNEL2>/<TILE1>.tif
+                     /<TILE2>.tif
+                     /...
 
     Args:
-        root: The folder that contains the channel folders.
-        channel_folders: The list of channel folder names.
-        image_file_name_pattern: The pattern for file names for the tifs that contain the per-channel data.
-            This expects a placeholder 0%i for the index that refers to the channel.
-            See the example 'convert_first_sample' below for details.
-        out_path: Where to save the converted data.
-        metadata_file_name_pattern:
-        metadata_type:
-        center_tiles:
-        resolution: The resolution / physical size of one pixel.
-        unit: The unit of the given resolution.
-        scale_factors:
-        n_threads:
+        root: Folder that contains the folders with tifs for each channel.
+        channel_folders: Dictionary that maps the name of each channel to the corresponding folder name
+            underneath the root folder.
+        image_file_name_pattern: The pattern for the names of the tifs that contain the data.
+            This expects a glob pattern (name with '*') to select the corresponding tif files .
+            The simplest pattern that should work in most cases is '*.tif'.
+        out_path: Output path where the converted data is saved.
+        metadata_file_name_pattern: The pattern for the names of files that contain the metadata.
+            For flamingo metadata the following pattern should work: '*_Settings.txt'.
+        metadata_root: Different root folder for the metadata. By default 'root' is used here as well.
+        metadata_type: The type of the metadata (for now only 'flamingo' is supported).
+        center_tiles: Whether to move the tiles to the origin.
+        resolution: The physical size of one pixel. This is only used if the metadata is not read from file.
+        unit: The unit of the given resolution. This is only used if the metadata is not read from file.
+        scale_factors: The scale factors for downsampling the image data.
+            By default sensible factors will be determined based on the shape of the data.
+            If you want to set the scale factors manually then you have to pass them as a list with the
+            downsampling factors for each level. E.g.:
+            - [[2, 2, 2], [2, 2, 2]] to downsample isotropically by a factor of 2 for two times.
+            - [[1, 2, 2], [1, 2, 2]] to downsample anisotropically for two times.
+            - [[1, 2, 2], [2, 2, 2]] to downsample anisotroically once and then isotropically.
+        n_threads: The number of threads to use for parallelizing the data conversion.
+            By default all available CPU cores will be used.
     """
     if metadata_type != "flamingo":
         raise ValueError(f"Invalid metadata type: {metadata_type}.")
     if n_threads is None:
         n_threads = mp.cpu_count()
+
+    # Make sure we convert to n5, in case no extension is passed.
+    ext = os.path.splitext(out_path)[1]
+    if ext == "":
+        out_path = str(Path(out_path).with_suffix(".n5"))
 
     # Iterate over the channels
     for channel_id, (channel_name, channel_folder) in enumerate(channel_folders.items()):
@@ -193,3 +220,38 @@ def convert_lightsheet_to_bdv(
                 },
                 affine=tile_transformation,
             )
+
+
+# TODO expose more arguments via CLI.
+def convert_lightsheet_to_bdv_cli():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Convert lightsheet data to format compatible with BigDataViewer / BigStitcher. "
+                    "Example useage: To convert the synthetic data created via create_synthetic_data.py run: \n"
+                    "python convert_flamingo_data.py -i synthetic_data -c channel0 channel1 -f *.tif -o synthetic.n5"
+    )
+    parser.add_argument(
+        "--input_root", "-i", required=True,
+        help="Folder that contains the folders with tifs for each channel."
+    )
+    parser.add_argument(
+        "--channel_folders", "-c", nargs="+", required=True,
+        help="Name of folders with the data for each channel."
+    )
+    parser.add_argument(
+        "--image_file_name_pattern", "-f", required=True,
+        help="The pattern for the names of the tifs that contain the data. "
+             "This expects a glob pattern (name with '*') to select the corresponding tif files."
+             "The simplest pattern that should work in most cases is '*.tif'."
+    )
+    parser.add_argument(
+        "--out_path", "-o", required=True,
+        help="Output path where the converted data is saved."
+    )
+
+    args = parser.parse_args()
+    channel_folders = {name: name for name in args.channel_folders}
+    convert_lightsheet_to_bdv(
+        args.input_root, channel_folders, args.image_file_name_pattern, args.out_path,
+    )

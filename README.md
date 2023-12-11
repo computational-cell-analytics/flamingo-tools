@@ -2,20 +2,35 @@
 
 Data processing for light-sheet microscopy, specifically for data from [Flamingo microscopes](https://huiskenlab.com/flamingo/).
 
+The `flamingo_tools` library implements functionality for:
+- converting the lightsheet data into a format compatible with [BigDataViewer](https://imagej.net/plugins/bdv/) and [BigStitcher](https://imagej.net/plugins/bigstitcher/).
+- ... and more functionality is planned!
+
 This is work in progress!
 
 
-## Converting Data to N5 for BigDataViewer and BigStitcher
+## Requirements & Installation
 
-The script `convert_flamingo_data.py` can be used to convert the tif stacks for all channels of a region to a data format that is compatible with BigDataViewer and BigStitcher.
-To run this script you will need a python environment with the following dependencies: [pybdv](https://github.com/constantinpape/pybdv) and [z5py](https://github.com/constantinpape/z5).
-You can install these with [conda](https://docs.conda.io/en/latest/) / [mamba](https://github.com/mamba-org/mamba) via `mamba install -c conda-forge z5py pybdv`.
+You need a python environment with the following dependencies: [pybdv](https://github.com/constantinpape/pybdv) and [z5py](https://github.com/constantinpape/z5).
+You can for example install these dependencies with [mamba](https://github.com/mamba-org/mamba) (a faster implementation of [conda](https://docs.conda.io/en/latest/)) via: 
+````
+mamba install -c conda-forge z5py pybdv
+```
 You can also set up a new environment with these dependencies using the file `environment.yaml`:
 ```bash
 $ mamba env create -f environment.yaml
 ```
-Once you have set up the environment you can run the script via `python convert_to_bdv_n5.py`. Note: the script contains the function `convert_region_to_bdv_n5`, which converts the tif stacks for the channels of a region/tile.
-The two functions `convert_first_samples` and `convert_synthetic_data` show examples for how to use this function: the former was used to create the first converted volume that I have shared, the latter converts synthetic test data.
-The synthetic test data can be created with the script `create_synthetic_data.py` by running `python create_synthetic_data.py`.
 
-Once the data is converted it can be opened with BigDataViewer through Fiji via `Plugins->BigDataViewer->Open XML/HDF5`.
+## Usage
+
+We provide the follwoing scripts:
+- `create_synthetic_data.py`: create small synthetic test data to check that the scripts work. 
+- `convert_flamingo_data.py`: convert flamingo data to a file format comatible with BigDataViewer / BigStitcher via command line interface. Run `python convert_flamingo_data.py -h` for details. 
+- `convert_flamingo_data_examples.py`: convert flamingo data to a file format comatible with BigDataViewer / BigStitcher with parameters defined in the python script. Contains two example functions:
+    - `convert_synthetic_data` to convert the synthetic data created via `create_synthetic_data.py`.
+    - `convert_flamingo_data_moser` to convert sampled flamingo data from the Moser group.
+- `load_data.py`: Example script for how to load sub-regions from the converted data into python.
+
+The data will be converted to the [bdv.n5 format](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md).
+It can be opened with BigDataViewer via `Plugins->BigDataViewer->Open XML/HDF5`.
+Or with BigStitcher as described [here](https://imagej.net/plugins/bigstitcher/open-existing).
