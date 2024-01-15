@@ -23,7 +23,8 @@ def _read_resolution_and_unit_flamingo(mdata_path):
 
     unit = "um"
 
-    # FIXME how do we get in-plane resolution, I don't believe it's always isotropic
+    # NOTE: The resolution for the flamingo system is isotropic.
+    # So we can just return the plane spacing value to get it.
     resolution = [resolution] * 3
     return resolution, unit
 
