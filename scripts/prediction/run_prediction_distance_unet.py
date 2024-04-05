@@ -56,6 +56,8 @@ def prediction_impl(input_path, input_key, output_path, model_path):
             compression="gzip",
         )
 
+        # TODO do the smoothing as post-processing here, so that we can remove it from
+        # the segmentation in order to make that more robust
         predict_with_halo(
             input_, model,
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
@@ -104,20 +106,20 @@ def segmentation_impl(input_path, output_folder, min_size=2000):
     )
 
     hmap = SelectChannel(input_, 2)
-    halo = (4, 16, 16)
+    halo = (2, 8, 8)
     parallel.seeded_watershed(
-        hmap, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True
+        hmap, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True,
     )
 
     if min_size > 0:
-        parallel.size_filter(seg, seg, min_size=min_size, block_shape=block_shape, mask=mask)
+        parallel.size_filter(seg, seg, min_size=min_size, block_shape=block_shape, mask=mask, verbose=True)
 
 
 def run_prediction(input_path, input_key, output_folder, model_path):
     os.makedirs(output_folder, exist_ok=True)
 
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    # prediction_impl(input_path, input_key, pmap_out, model_path)
+    prediction_impl(input_path, input_key, pmap_out, model_path)
 
     segmentation_impl(pmap_out, output_folder)
 
