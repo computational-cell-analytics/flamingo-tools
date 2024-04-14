@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing as mp
 import os
 
 import imageio.v3 as imageio
@@ -7,7 +8,7 @@ import numpy as np
 import vigra
 import torch
 
-from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
+from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper, ResizedVolume
 from elf.io import open_file
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
@@ -31,13 +32,24 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_path, model_path):
+def prediction_impl(input_path, input_key, output_path, model_path, scale):
     model = load_model(model_path)
 
     if input_key is None:
         input_ = imageio.imread(input_path)
     else:
         input_ = open_file(input_path, "r")[input_key]
+
+    if scale is None:
+        original_shape = None
+    else:
+        orignal_shape = input_.shape
+        new_shape = tuple(
+            int(round(sh / scale)) for shape in original_shape
+        )
+        print("The input is processed downsampled by a factor of scale", scale)
+        print("Corresponding to shape", new_shape, "instead of", original_shape)
+        input_ = ResizedVolume(input_, shape=new_shape, order=3)
 
     if torch.cuda.is_available():
         gpu_ids = ["cpu"]
@@ -64,6 +76,8 @@ def prediction_impl(input_path, input_key, output_path, model_path):
             output=output,
         )
 
+    return original_shape
+
 
 def smoothing(x, sigma=2.0):
     try:
@@ -73,7 +87,7 @@ def smoothing(x, sigma=2.0):
     return smoothed
 
 
-def segmentation_impl(input_path, output_folder, min_size=2000):
+def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=None):
     input_ = open_file(input_path, "r")["prediction"]
 
     # The smoothed center distances as input for computing the seeds.
@@ -114,14 +128,36 @@ def segmentation_impl(input_path, output_folder, min_size=2000):
     if min_size > 0:
         parallel.size_filter(seg, seg, min_size=min_size, block_shape=block_shape, mask=mask, verbose=True)
 
+    if original_shape is not None:
+        intermediate_path = os.path.join(output_folder, "seg_downscaled.zarr")
+        os.rename(seg_path, intermediate_path)
 
-def run_prediction(input_path, input_key, output_folder, model_path):
+        # This logic should be refactored.
+        input_seg = open_file(intermediate_path, "r")["segmentation"]
+        output_seg = ResizedVolume(input_seg, shape=original_shape, order=0)
+        with open_file(seg_path, "a") as f:
+            seg = f.create_dataset(
+                "segmentation", shape=original_shape, compression="gzip", dtype="uint64", chunks=block_shape,
+            )
+            n_threads = multiprocessing.cpu_count()
+            blocking = parallel.common.get_blocking(data, block_shape, roi=None, n_threads=n_threads)
+
+            def write_block(block_id):
+                block = blocking.getBlock(block_id)
+                bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
+                seg[bb] = input_seg[bb]
+
+            with futures.ThreadPoolExecutor(n_threads) as tp:
+                tp.map(write_block, range(blocking.numberOfBlocks))
+
+
+def run_prediction(input_path, input_key, output_folder, model_path, scale):
     os.makedirs(output_folder, exist_ok=True)
 
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    prediction_impl(input_path, input_key, pmap_out, model_path)
+    original_shape = prediction_impl(input_path, input_key, pmap_out, model_path, scale)
 
-    segmentation_impl(pmap_out, output_folder)
+    segmentation_impl(pmap_out, output_folder, original_shape=original_shape)
 
 
 def main():
@@ -130,9 +166,10 @@ def main():
     parser.add_argument("-o", "--output_folder", required=True)
     parser.add_argument("-m", "--model", required=True)
     parser.add_argument("-k", "--input_key", default=None)
+    parser.add_argument("-s", "--scale", default=None, type=float, help="Downscale the image by the given factor.")
 
     args = parser.parse_args()
-    run_prediction(args.input, args.input_key, args.output_folder, args.model)
+    run_prediction(args.input, args.input_key, args.output_folder, args.model, scale=args.scale)
 
 
 if __name__ == "__main__":
