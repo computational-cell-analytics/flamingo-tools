@@ -6,7 +6,7 @@ import torch_em
 from torch_em.model import UNet3d
 
 # DATA_ROOT = "/home/pape/Work/data/moser/lightsheet"
-DATA_ROOT = "/scratch-emmy/usr/nimcpape/data/moser/lightsheet"
+DATA_ROOT = "/scratch-grete/usr/nimcpape/data/moser/lightsheet"
 
 
 def get_loader(split, patch_shape, batch_size, filter_empty):
@@ -28,7 +28,7 @@ def get_loader(split, patch_shape, batch_size, filter_empty):
     if split == "train":
         image_paths = image_paths[:n_train]
         label_paths = label_paths[:n_train]
-        n_samples = None
+        n_samples = 250 * batch_size
 
     elif split == "val":
         image_paths = image_paths[n_train:(n_train + n_val)]
@@ -54,7 +54,7 @@ def main(check_loaders=False):
     n_iterations = 1e5
     patch_shape = (64, 128, 128)
     batch_size = 4
-    filter_empty = True
+    filter_empty = False
 
     # The U-Net.
     model = UNet3d(in_channels=1, out_channels=3, initial_features=32, final_activation="Sigmoid")

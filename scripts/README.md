@@ -19,6 +19,13 @@ python run_prediction_distance_unet.py -i /path/to/volume.tif -o /path/to/output
 Here, `-i` specifies the input filepath, `-o` the folder where the results are saved and `-k` the internal path for a zarr or n5 file.
 The result will be stored as `segmentation.zarr` in the output folder, where also the intermediate files `prediction.zarr` and `seeds.zarr` are saved.
 
+In order to downsample the segmentation on the fly for the segmentation process you can use the argument `--scale`.
+E.g. run the command 
+```
+python run_prediction_distance_unet.py ... --scale 2
+```
+to downsample the input by a factor of 2. Note that the segmentation result will be automatically rescaled back to the full shape of the input at the end.
+
 You can use the script `to_tif.py` to convert the zarr object to a tif volume for easier viewing (won't work for very large volumes!).
 
 ## Installation

@@ -1,6 +1,7 @@
 import argparse
 import multiprocessing as mp
 import os
+from concurrent import futures
 
 import imageio.v3 as imageio
 import elf.parallel as parallel
@@ -8,7 +9,8 @@ import numpy as np
 import vigra
 import torch
 
-from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper, ResizedVolume
+from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
+from elf.wrapper.resized_volume import ResizedVolume
 from elf.io import open_file
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
@@ -43,22 +45,24 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
     if scale is None:
         original_shape = None
     else:
-        orignal_shape = input_.shape
+        original_shape = input_.shape
         new_shape = tuple(
-            int(round(sh / scale)) for shape in original_shape
+            int(round(sh / scale)) for sh in original_shape
         )
         print("The input is processed downsampled by a factor of scale", scale)
         print("Corresponding to shape", new_shape, "instead of", original_shape)
         input_ = ResizedVolume(input_, shape=new_shape, order=3)
 
     if torch.cuda.is_available():
-        gpu_ids = ["cpu"]
-        block_shape = (64, 96, 96)
-        halo = (16, 32, 32)
-    else:
+        print("Predict with GPU")
         gpu_ids = [0]
         block_shape = (96, 256, 256)
         halo = (32, 64, 64)
+    else:
+        print("Predict with CPU")
+        gpu_ids = ["cpu"]
+        block_shape = (64, 96, 96)
+        halo = (16, 32, 32)
 
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
@@ -121,8 +125,11 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
 
     hmap = SelectChannel(input_, 2)
     halo = (2, 8, 8)
+    # Lmit the number of cores for seeded watershed, which is otherwise quite memory hungry.
+    n_threads_ws = min(8, mp.cpu_count())
     parallel.seeded_watershed(
         hmap, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True,
+        n_threads=n_threads_ws,
     )
 
     if min_size > 0:
@@ -139,8 +146,8 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
             seg = f.create_dataset(
                 "segmentation", shape=original_shape, compression="gzip", dtype="uint64", chunks=block_shape,
             )
-            n_threads = multiprocessing.cpu_count()
-            blocking = parallel.common.get_blocking(data, block_shape, roi=None, n_threads=n_threads)
+            n_threads = mp.cpu_count()
+            blocking = parallel.common.get_blocking(output_seg, block_shape, roi=None, n_threads=n_threads)
 
             def write_block(block_id):
                 block = blocking.getBlock(block_id)
