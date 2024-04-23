@@ -1,6 +1,6 @@
 import argparse
 
-import imageio.v3 as imageio
+import tifffile
 from elf.io import open_file
 
 parser = argparse.ArgumentParser()
@@ -12,6 +12,8 @@ args = parser.parse_args()
 with open_file(args.input, "r") as f:
     seg = f["segmentation"]
     seg.n_threads = 8
-    seg = seg[:]
+    seg = seg[:].astype("uint16")
 
-imageio.imwrite(args.output, seg, compression="zlib")
+# Don't use compression, so that we can open this tif in Fiji.
+# Write as bigtiff.
+tifffile.imwrite(args.output, seg, bigtiff=True)
