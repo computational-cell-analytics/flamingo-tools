@@ -145,7 +145,7 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
         # This logic should be refactored.
         output_seg = ResizedVolume(seg, shape=original_shape, order=0)
         with open_file(out_path, "a") as f:
-            out_seg = f.create_dataset(
+            out_seg_volume = f.create_dataset(
                 "segmentation", shape=original_shape, compression="gzip", dtype="uint64", chunks=block_shape,
             )
             n_threads = mp.cpu_count()
@@ -154,7 +154,7 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
             def write_block(block_id):
                 block = blocking.getBlock(block_id)
                 bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
-                out_seg[bb] = seg[bb]
+                out_seg_volume[bb] = output_seg[bb]
 
             with futures.ThreadPoolExecutor(n_threads) as tp:
                 tp.map(write_block, range(blocking.numberOfBlocks))
