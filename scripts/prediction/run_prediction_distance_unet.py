@@ -56,13 +56,32 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
     if torch.cuda.is_available():
         print("Predict with GPU")
         gpu_ids = [0]
-        block_shape = (96, 256, 256)
-        halo = (32, 64, 64)
+        # NOTE: we may need to decrease this for a smaller GPU size.
+        block_shape = (64, 128, 128)
+        halo = (16, 64, 64)
     else:
         print("Predict with CPU")
         gpu_ids = ["cpu"]
         block_shape = (64, 96, 96)
         halo = (16, 32, 32)
+
+    # Compute the global mean and standard deviation.
+    n_threads = min(16, mp.cpu_count())
+    mean, std = parallel.mean_and_std(input_, block_shape=block_shape, n_threads=n_threads, verbose=True)
+    print("Mean and standard deviation computed for the full volume:")
+    print(mean, std)
+
+    # Preprocess with fixed mean and standard deviation.
+    def preprocess(raw):
+        raw = raw.astype("float32")
+        raw -= mean
+        raw /= std
+        return raw
+
+    # Smooth the distance prediction channel.
+    def postprocess(x):
+        x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
+        return x
 
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
@@ -72,34 +91,23 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
             compression="gzip",
         )
 
-        # TODO do the smoothing as post-processing here, so that we can remove it from
-        # the segmentation in order to make that more robust
         predict_with_halo(
             input_, model,
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
-            output=output,
+            output=output, preprocess=preprocess, postprocess=postprocess
         )
 
     return original_shape
 
 
-def smoothing(x, sigma=2.0):
-    try:
-        smoothed = vigra.filters.gaussianSmoothing(x, sigma)
-    except RuntimeError:
-        smoothed = x
-    return smoothed
-
-
-def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=None):
+def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
     input_ = open_file(input_path, "r")["prediction"]
 
-    # The smoothed center distances as input for computing the seeds.
-    center_distances = SimpleTransformationWrapper(  # Wrapper to apply smoothing per block.
-        # Wrapper to select the channel corresponding to the distance predictions.
-        SelectChannel(input_, 1), smoothing
-    )
+    # Limit the number of cores for parallelization.
+    n_threads = min(16, mp.cpu_count())
 
+    # The center distances as input for computing the seeds.
+    center_distances = SelectChannel(input_, 1)
     block_shape = center_distances.chunks
 
     # Compute the seeds based on smoothed center distances < 0.5.
@@ -113,7 +121,7 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
 
     parallel.label(
         data=ThresholdWrapper(center_distances, threshold=0.4, operator=np.less),
-        out=seeds, block_shape=block_shape, mask=mask, verbose=True,
+        out=seeds, block_shape=block_shape, mask=mask, verbose=True, n_threads=n_threads
     )
 
     # Run the watershed.
@@ -129,15 +137,15 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
 
     hmap = SelectChannel(input_, 2)
     halo = (2, 8, 8)
-    # Limit the number of cores for seeded watershed, which is otherwise quite memory hungry.
-    n_threads_ws = min(8, mp.cpu_count())
     parallel.seeded_watershed(
         hmap, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True,
-        n_threads=n_threads_ws,
+        n_threads=n_threads,
     )
 
     if min_size > 0:
-        parallel.size_filter(seg, seg, min_size=min_size, block_shape=block_shape, mask=mask, verbose=True)
+        parallel.size_filter(
+            seg, seg, min_size=min_size, block_shape=block_shape, mask=mask, verbose=True, n_threads=n_threads
+        )
 
     if original_shape is not None:
         out_path = os.path.join(output_folder, "segmentation.zarr")
@@ -148,7 +156,6 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
             out_seg_volume = f.create_dataset(
                 "segmentation", shape=original_shape, compression="gzip", dtype="uint64", chunks=block_shape,
             )
-            n_threads = mp.cpu_count()
             blocking = parallel.common.get_blocking(output_seg, block_shape, roi=None, n_threads=n_threads)
 
             def write_block(block_id):
@@ -166,7 +173,8 @@ def run_prediction(input_path, input_key, output_folder, model_path, scale):
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     original_shape = prediction_impl(input_path, input_key, pmap_out, model_path, scale)
 
-    segmentation_impl(pmap_out, output_folder, original_shape=original_shape)
+    min_size = 1000 if scale is None else 250
+    segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
 
 def main():

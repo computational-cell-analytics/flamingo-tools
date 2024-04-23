@@ -6,17 +6,20 @@ Contains the scripts for training a U-Net that predicts foreground probabilties 
 
 ## Prediction
 
-Contains the scripts for running segmentation for a large volume with a distance prediction U-net. (Other scripts are work in progress.)
+Contains the scripts for running segmentation for a large volume with a distance prediction U-Net. (Other scripts are work in progress.)
 
-You can run it like this for input that is stored in n5/zarr:
+You can run it like this for input that is stored in n5:
 ```
-python run_prediction_distance_unet.py -i /path/to/volume.n5 -k setup0/timepoint0/s0 -o /path/to/output_folder
-```
-Or for a tif file like this:
-```
-python run_prediction_distance_unet.py -i /path/to/volume.tif -o /path/to/output_folder
+python run_prediction_distance_unet.py -i /path/to/volume.n5 -k setup0/timepoint0/s0 -m /path/to/model -o /path/to/output_folder
 ```
 Here, `-i` specifies the input filepath, `-o` the folder where the results are saved and `-k` the internal path for a zarr or n5 file.
+The `-m` argument specifies the model to use for prediction. You need to give the path to the folder that contains the checkpoint (the `best.pt` file).
+
+You can also run the script for a tif file. In this case you don't need the `-k` parameter:
+```
+python run_prediction_distance_unet.py -i /path/to/volume.tif -m /path/to/model -o /path/to/output_folder
+```
+
 The result will be stored as `segmentation.zarr` in the output folder, where also the intermediate files `prediction.zarr` and `seeds.zarr` are saved.
 
 In order to downsample the segmentation on the fly for the segmentation process you can use the argument `--scale`.
