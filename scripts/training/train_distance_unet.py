@@ -33,17 +33,22 @@ def get_paths(image_paths, label_paths, split, filter_empty):
     return image_paths, label_paths
 
 
-def get_loader(split, patch_shape, batch_size, filter_empty, train_on_downsampled):
-    all_image_paths = sorted(glob(os.path.join(DATA_ROOT, "images", "*.tif")))
-    all_label_paths = sorted(glob(os.path.join(DATA_ROOT, "masks", "*.tif")))
-    image_paths, label_paths = get_paths(all_image_paths, all_label_paths, split, filter_empty)
+def get_loader(split, patch_shape, batch_size, filter_empty, train_on=["default"]):
+    image_paths, label_paths = [], []
 
-    if train_on_downsampled:
-        ds_image_paths = sorted(glob(os.path.join(DATA_ROOT, "images_s2", "*.tif")))
-        ds_label_paths = sorted(glob(os.path.join(DATA_ROOT, "masks_s2", "*.tif")))
-        image_paths_ds, label_paths_ds = get_paths(ds_image_paths, ds_label_paths, split, filter_empty)
-        image_paths.extend(image_paths_ds)
-        label_paths.extend(label_paths_ds)
+    if "default" in train_on:
+        all_image_paths = sorted(glob(os.path.join(DATA_ROOT, "images", "*.tif")))
+        all_label_paths = sorted(glob(os.path.join(DATA_ROOT, "masks", "*.tif")))
+        this_image_paths, this_label_paths = get_paths(all_image_paths, all_label_paths, split, filter_empty)
+        image_paths.extend(this_image_paths)
+        label_paths.extend(this_label_paths)
+
+    if "downsampled" in train_on:
+        all_image_paths = sorted(glob(os.path.join(DATA_ROOT, "images_s2", "*.tif")))
+        all_label_paths = sorted(glob(os.path.join(DATA_ROOT, "masks_s2", "*.tif")))
+        this_image_paths, this_label_paths = get_paths(all_image_paths, all_label_paths, split, filter_empty)
+        image_paths.extend(this_image_paths)
+        label_paths.extend(this_label_paths)
 
     label_transform = torch_em.transform.label.PerObjectDistanceTransform(
             distances=True, boundary_distances=True, foreground=True,
@@ -69,19 +74,20 @@ def main(check_loaders=False):
     n_iterations = 1e5
     batch_size = 8
     filter_empty = False
-    train_on_downsampled = True
+    train_on = ["downsampled"]
+    # train_on = ["downsampled", "default"]
 
-    patch_shape = (32, 128, 128) if train_on_downsampled else (64, 128, 128)
+    patch_shape = (32, 128, 128) if "downsampled" in train_on else (64, 128, 128)
 
     # The U-Net.
     model = UNet3d(in_channels=1, out_channels=3, initial_features=32, final_activation="Sigmoid")
 
     # Create the training loader with train and val set.
     train_loader = get_loader(
-        "train", patch_shape, batch_size, filter_empty=filter_empty, train_on_downsampled=train_on_downsampled
+        "train", patch_shape, batch_size, filter_empty=filter_empty, train_on=train_on
     )
     val_loader = get_loader(
-        "val", patch_shape, batch_size, filter_empty=filter_empty, train_on_downsampled=train_on_downsampled
+        "val", patch_shape, batch_size, filter_empty=filter_empty, train_on=train_on
     )
 
     if check_loaders:
@@ -96,7 +102,7 @@ def main(check_loaders=False):
     name = "cochlea_distance_unet"
     if filter_empty:
         name += "-filter-empty"
-    if train_on_downsampled:
+    if train_on == ["downsampled"]:
         name += "-train-downsampled"
 
     trainer = torch_em.default_segmentation_trainer(
