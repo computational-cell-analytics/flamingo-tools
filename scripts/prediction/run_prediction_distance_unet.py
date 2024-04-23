@@ -117,7 +117,11 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
     )
 
     # Run the watershed.
-    seg_path = os.path.join(output_folder, "segmentation.zarr")
+    if original_shape is None:
+        seg_path = os.path.join(output_folder, "segmentation.zarr")
+    else:
+        seg_path = os.path.join(output_folder, "seg_downscaled.zarr")
+
     seg_file = open_file(seg_path, "a")
     seg = seg_file.create_dataset(
         "segmentation", shape=seeds.shape, chunks=block_shape, compression="gzip", dtype="uint64"
@@ -125,7 +129,7 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
 
     hmap = SelectChannel(input_, 2)
     halo = (2, 8, 8)
-    # Lmit the number of cores for seeded watershed, which is otherwise quite memory hungry.
+    # Limit the number of cores for seeded watershed, which is otherwise quite memory hungry.
     n_threads_ws = min(8, mp.cpu_count())
     parallel.seeded_watershed(
         hmap, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True,
@@ -136,14 +140,12 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
         parallel.size_filter(seg, seg, min_size=min_size, block_shape=block_shape, mask=mask, verbose=True)
 
     if original_shape is not None:
-        intermediate_path = os.path.join(output_folder, "seg_downscaled.zarr")
-        os.rename(seg_path, intermediate_path)
+        out_path = os.path.join(output_folder, "segmentation.zarr")
 
         # This logic should be refactored.
-        input_seg = open_file(intermediate_path, "r")["segmentation"]
-        output_seg = ResizedVolume(input_seg, shape=original_shape, order=0)
-        with open_file(seg_path, "a") as f:
-            seg = f.create_dataset(
+        output_seg = ResizedVolume(seg, shape=original_shape, order=0)
+        with open_file(out_path, "a") as f:
+            out_seg = f.create_dataset(
                 "segmentation", shape=original_shape, compression="gzip", dtype="uint64", chunks=block_shape,
             )
             n_threads = mp.cpu_count()
@@ -152,7 +154,7 @@ def segmentation_impl(input_path, output_folder, min_size=2000, original_shape=N
             def write_block(block_id):
                 block = blocking.getBlock(block_id)
                 bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
-                seg[bb] = input_seg[bb]
+                out_seg[bb] = seg[bb]
 
             with futures.ThreadPoolExecutor(n_threads) as tp:
                 tp.map(write_block, range(blocking.numberOfBlocks))
