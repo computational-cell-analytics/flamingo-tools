@@ -8,9 +8,13 @@ import numpy as np
 root = "/home/pape/Work/data/moser/lightsheet"
 
 
-def check_visually():
-    images = sorted(glob(os.path.join(root, "images", "*.tif")))
-    masks = sorted(glob(os.path.join(root, "masks", "*.tif")))
+def check_visually(check_downsampled=False):
+    if check_downsampled:
+        images = sorted(glob(os.path.join(root, "images_s2", "*.tif")))
+        masks = sorted(glob(os.path.join(root, "masks_s2", "*.tif")))
+    else:
+        images = sorted(glob(os.path.join(root, "images", "*.tif")))
+        masks = sorted(glob(os.path.join(root, "masks", "*.tif")))
     assert len(images) == len(masks)
 
     for im, mask in zip(images, masks):
@@ -34,5 +38,5 @@ def check_labels():
 
 
 if __name__ == "__main__":
-    check_visually()
+    check_visually(True)
     # check_labels()
