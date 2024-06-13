@@ -89,6 +89,7 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
             shape=(3,) + input_.shape,
             chunks=(1,) + block_shape,
             compression="gzip",
+            dtype="float32",
         )
 
         predict_with_halo(
