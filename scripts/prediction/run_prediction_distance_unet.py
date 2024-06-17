@@ -6,14 +6,17 @@ from concurrent import futures
 import imageio.v3 as imageio
 import elf.parallel as parallel
 import numpy as np
+import nifty.tools as nt
 import vigra
 import torch
+import z5py
 
 from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
 from elf.wrapper.resized_volume import ResizedVolume
 from elf.io import open_file
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
+from tqdm import tqdm
 
 
 class SelectChannel(SimpleTransformationWrapper):
@@ -34,8 +37,11 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_path, model_path, scale):
+def prediction_impl(input_path, input_key, output_folder, model_path, scale):
     model = load_model(model_path)
+
+    mask_path = os.path.join(output_folder, "mask.zarr")
+    image_mask = z5py.File(mask_path, "r")["mask"]
 
     if input_key is None:
         input_ = imageio.imread(input_path)
@@ -62,12 +68,15 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
     else:
         print("Predict with CPU")
         gpu_ids = ["cpu"]
-        block_shape = (64, 96, 96)
+        block_shape = (64, 64, 64)
         halo = (16, 32, 32)
 
     # Compute the global mean and standard deviation.
     n_threads = min(16, mp.cpu_count())
-    mean, std = parallel.mean_and_std(input_, block_shape=block_shape, n_threads=n_threads, verbose=True)
+    mean, std = parallel.mean_and_std(
+        input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
+        mask=image_mask
+    )
     print("Mean and standard deviation computed for the full volume:")
     print(mean, std)
 
@@ -83,6 +92,7 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
         x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
         return x
 
+    output_path = os.path.join(output_folder, "predictions.zarr")
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
             "prediction",
@@ -90,6 +100,7 @@ def prediction_impl(input_path, input_key, output_path, model_path, scale):
             chunks=(1,) + block_shape,
             compression="gzip",
             dtype="float32",
+            mask=image_mask,
         )
 
         predict_with_halo(
@@ -168,13 +179,60 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
                 tp.map(write_block, range(blocking.numberOfBlocks))
 
 
+def find_mask(input_path, input_key, output_folder):
+    mask_path = os.path.join(output_folder, "mask.zarr")
+    f = z5py.File(mask_path, "a")
+
+    mask_key = "mask"
+    if mask_key in f:
+        return
+
+    fin = open_file(input_path, "r")
+    raw = fin[input_key]
+
+    block_shape = raw.chunks
+    blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
+    n_blocks = blocking.numberOfBlocks
+
+    ds_mask = f.create_dataset(mask_key, shape=raw.shape, compression="gzip", dtype="uint8", chunks=block_shape)
+
+    # TODO more sophisticated criterion?!
+    def find_mask_block(block_id):
+        block = blocking.getBlock(block_id)
+        bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
+        data = raw[bb]
+        max_ = np.percentile(data, 95)
+        if max_ > 200:
+            ds_mask[bb] = 1
+
+    n_threads = min(16, mp.cpu_count())
+    with futures.ThreadPoolExecutor(n_threads) as tp:
+        list(tqdm(tp.map(find_mask_block, range(n_blocks)), total=n_blocks))
+
+
 def run_prediction(input_path, input_key, output_folder, model_path, scale):
     os.makedirs(output_folder, exist_ok=True)
 
-    pmap_out = os.path.join(output_folder, "predictions.zarr")
-    original_shape = prediction_impl(input_path, input_key, pmap_out, model_path, scale)
+    find_mask(input_path, input_key, output_folder)
+
+    # Check the mask
+    # with open_file(input_path, "r") as f:
+    #     raw = f[input_key][:]
+    # mask_path = os.path.join(output_folder, "mask.zarr")
+    # with open_file(mask_path, "r") as f:
+    #     mask = f["mask"][:]
+
+    # import napari
+    # v = napari.Viewer()
+    # v.add_image(raw)
+    # v.add_labels(mask)
+    # napari.run()
+    # return
+
+    original_shape = prediction_impl(input_path, input_key, output_folder, model_path, scale)
 
     min_size = 1000 if scale is None else 250
+    pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
 
