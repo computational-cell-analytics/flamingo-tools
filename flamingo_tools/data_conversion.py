@@ -197,6 +197,9 @@ def convert_lightsheet_to_bdv(
             assert len(metadata_paths) == len(file_paths)
             resolution, unit, tile_transformations = read_metadata_flamingo(metadata_paths, center_tiles)
 
+        if channel_name is None or channel_name.strip() == "": #channel name is empty, assign channel id as name
+            channel_name = str(channel_id)
+
         for tile_id, (file_path, tile_transformation) in enumerate(zip(file_paths, tile_transformations)):
 
             # Try to memmap the data. If that doesn't work fall back to loading it into memory.
@@ -216,8 +219,8 @@ def convert_lightsheet_to_bdv(
                 n_threads=n_threads,
                 resolution=resolution, unit=unit,
                 attributes={
-                    "channel": {"id": channel_id, "name": channel_name}, "tile": {"id": tile_id},
-                    "angle": {"id": 0}, "illumination": {"id": 0}
+                    "channel": {"id": channel_id, "name": channel_name}, "tile": {"id": tile_id, "name": str(tile_id)},
+                    "angle": {"id": 0, "name": "0"}, "illumination": {"id": 0, "name": "0"}
                 },
                 affine=tile_transformation,
             )
