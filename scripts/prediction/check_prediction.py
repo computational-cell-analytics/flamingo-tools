@@ -30,6 +30,11 @@ def check_prediction(input_path, output_folder, check_downsampled=False, input_k
         seg_path = os.path.join(output_folder, "segmentation.zarr")
         with open_file(seg_path, "r") as f:
             segmentation = f["segmentation"][:]
+            if "segmentation_postprocessed" in f:
+                seg_pp = f["segmentation_postprocessed"][:]
+            else:
+                seg_pp = None
+
         scale = None
         prediction = None
 
@@ -38,6 +43,8 @@ def check_prediction(input_path, output_folder, check_downsampled=False, input_k
     if prediction is not None:
         v.add_image(prediction)
     v.add_labels(segmentation)
+    if seg_pp is not None:
+        v.add_labels(seg_pp)
     napari.run()
 
 

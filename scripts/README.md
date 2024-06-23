@@ -29,6 +29,8 @@ python run_prediction_distance_unet.py ... --scale 2
 ```
 to downsample the input by a factor of 2. Note that the segmentation result will be automatically rescaled back to the full shape of the input at the end.
 
+In addition, the script `postprocess_seg.py` can be used to filter out false positive nucleus segmentations from regions in the segmentation with a low density of segmented nuclei.
+
 You can use the script `to_tif.py` to convert the zarr object to a tif volume for easier viewing (won't work for very large volumes!).
 
 ## Installation

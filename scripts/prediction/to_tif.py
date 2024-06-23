@@ -12,7 +12,7 @@ parser.add_argument("-c", "--compression", action="store_true")
 args = parser.parse_args()
 
 with open_file(args.input, "r") as f:
-    seg = f["segmentation"]
+    seg = f["segmentation_postprocessed"] if "segmentation_postprocessed" in f else f["segmentation"]
     seg.n_threads = 8
     print("Read segmentation ...")
     seg = seg[:].astype("uint32")
