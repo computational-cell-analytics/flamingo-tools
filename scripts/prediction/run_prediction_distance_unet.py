@@ -58,17 +58,19 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale):
         print("The input is processed downsampled by a factor of scale", scale)
         print("Corresponding to shape", new_shape, "instead of", original_shape)
         input_ = ResizedVolume(input_, shape=new_shape, order=3)
+        image_mask = ResizedVolume(image_mask, new_shape, order=0)
 
     if torch.cuda.is_available():
         print("Predict with GPU")
         gpu_ids = [0]
         # NOTE: we may need to decrease this for a smaller GPU size.
-        block_shape = (64, 128, 128)
+        # block_shape = (64, 128, 128)
+        block_shape = tuple([2 * ch for ch in input_.chunks])
         halo = (16, 64, 64)
     else:
         print("Predict with CPU")
         gpu_ids = ["cpu"]
-        block_shape = (64, 64, 64)
+        block_shape = input_.chunks
         halo = (16, 32, 32)
 
     # Compute the global mean and standard deviation.
@@ -100,13 +102,13 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale):
             chunks=(1,) + block_shape,
             compression="gzip",
             dtype="float32",
-            mask=image_mask,
         )
 
         predict_with_halo(
             input_, model,
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
-            output=output, preprocess=preprocess, postprocess=postprocess
+            output=output, preprocess=preprocess, postprocess=postprocess,
+            mask=image_mask,
         )
 
     return original_shape
@@ -129,7 +131,8 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
         "seeds", shape=center_distances.shape, chunks=block_shape, compression="gzip", dtype="uint64"
     )
 
-    mask = ThresholdWrapper(SelectChannel(input_, 0), threshold=0.5)
+    fg_threshold = 0.5
+    mask = ThresholdWrapper(SelectChannel(input_, 0), threshold=fg_threshold)
 
     parallel.label(
         data=ThresholdWrapper(center_distances, threshold=0.4, operator=np.less),
@@ -156,7 +159,8 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
 
     if min_size > 0:
         parallel.size_filter(
-            seg, seg, min_size=min_size, block_shape=block_shape, mask=mask, verbose=True, n_threads=n_threads
+            seg, seg, min_size=min_size, block_shape=block_shape, mask=mask,
+            verbose=True, n_threads=n_threads, relabel=True,
         )
 
     if original_shape is not None:
@@ -190,7 +194,7 @@ def find_mask(input_path, input_key, output_folder):
     fin = open_file(input_path, "r")
     raw = fin[input_key]
 
-    block_shape = raw.chunks
+    block_shape = tuple(2 * ch for ch in raw.chunks)
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
     n_blocks = blocking.numberOfBlocks
 
@@ -231,7 +235,12 @@ def run_prediction(input_path, input_key, output_folder, model_path, scale):
 
     original_shape = prediction_impl(input_path, input_key, output_folder, model_path, scale)
 
-    min_size = 1000 if scale is None else 250
+    if scale is None:
+        min_size = 1000
+    elif scale > 1:
+        min_size = 250
+    elif scale < 1:
+        min_size = 1000
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
