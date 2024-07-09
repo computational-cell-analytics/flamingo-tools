@@ -191,10 +191,15 @@ def find_mask(input_path, input_key, output_folder):
     if mask_key in f:
         return
 
-    fin = open_file(input_path, "r")
-    raw = fin[input_key]
+    if input_key is None:
+        raw = imageio.imread(input_path)
+        chunks = (64, 64, 64)
+    else:
+        fin = open_file(input_path, "r")
+        raw = fin[input_key]
+        chunks = raw.chunks
 
-    block_shape = tuple(2 * ch for ch in raw.chunks)
+    block_shape = tuple(2 * ch for ch in chunks)
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
     n_blocks = blocking.numberOfBlocks
 
