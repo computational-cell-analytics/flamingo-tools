@@ -6,4 +6,5 @@ channels:
 dependencies:
   - scikit-image
   - pybdv
+  - torch_em
   - z5py
