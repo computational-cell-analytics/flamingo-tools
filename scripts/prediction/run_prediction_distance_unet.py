@@ -32,7 +32,7 @@ def main():
         block_shape = (64, 256, 256) if have_cuda else (64, 64, 64)
         halo = (16, 64, 64) if have_cuda else (8, 32, 32)
     else:
-        chunks = z5py.File(args.input_path, "r")[args.input_key].chunks
+        chunks = z5py.File(args.input, "r")[args.input_key].chunks
         block_shape = tuple([2 * ch for ch in chunks]) if have_cuda else tuple(chunks)
         halo = (16, 64, 64) if have_cuda else (8, 32, 32)
 
