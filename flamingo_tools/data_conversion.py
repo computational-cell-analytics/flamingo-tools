@@ -9,6 +9,10 @@ import numpy as np
 import pybdv
 import tifffile
 
+from cluster_tools.utils.volume_utils import write_format_metadata
+from elf.io import open_file
+from skimage.transform import rescale
+
 
 def _read_resolution_and_unit_flamingo(mdata_path):
     resolution = None
@@ -106,6 +110,51 @@ def derive_scale_factors(shape):
     return scale_factors
 
 
+def _to_bdv(
+    data, out_path, scale_factors, n_threads, resolution, unit, channel_id, channel_name, tile_id, tile_transformation
+):
+    pybdv.make_bdv(
+        data, out_path,
+        downscale_factors=scale_factors, downscale_mode="mean",
+        n_threads=n_threads,
+        resolution=resolution, unit=unit,
+        attributes={
+            "channel": {"id": channel_id, "name": channel_name}, "tile": {"id": tile_id, "name": str(tile_id)},
+            "angle": {"id": 0, "name": "0"}, "illumination": {"id": 0, "name": "0"}
+        },
+        affine=tile_transformation,
+    )
+
+
+def _to_ome_zarr(
+    data, out_path, scale_factors, n_threads, resolution, unit, channel_id, channel_name, tile_id, tile_transformation
+):
+    # Write the base dataset.
+    base_key = f"c{channel_id}-t{tile_id}"
+    chunks = (128, 128, 128)
+    with open_file(out_path, "a") as f:
+        ds = f.create_dataset(f"{base_key}/s0", shape=data.shape, compression='gzip',
+                              chunks=chunks, dtype=data.dtype)
+        ds.n_threads = n_threads
+        ds[:] = data
+
+        # TODO parallelized implementation.
+        # Do downscaling.
+        for level, scale_factor in enumerate(scale_factors, 1):
+            inv_scale = [1.0 / sc for sc in scale_factor]
+            data = rescale(data, inv_scale, preserve_range=True).astype(data.dtype)
+            ds = f.create_dataset(f"{base_key}/s{level}", shape=data.shape, compression='gzip',
+                                  chunks=chunks, dtype=data.dtype)
+            ds.n_threads = n_threads
+            ds[:] = data
+
+    # Write the ome zarr metadata.
+    metadata_dict = {"unit": unit, "resolution": resolution}
+    write_format_metadata(
+        "ome.zarr", out_path, metadata_dict, scale_factors=scale_factors, prefix=base_key
+    )
+
+
 def convert_lightsheet_to_bdv(
     root: str,
     channel_folders: Dict[str, str],
@@ -169,6 +218,11 @@ def convert_lightsheet_to_bdv(
     ext = os.path.splitext(out_path)[1]
     if ext == "":
         out_path = str(Path(out_path).with_suffix(".n5"))
+        conversion_function = _to_bdv
+    elif ext == ".zarr":
+        conversion_function = _to_ome_zarr
+    else:
+        conversion_function = _to_bdv
 
     # Iterate over the channels
     for channel_id, (channel_name, channel_folder) in enumerate(channel_folders.items()):
@@ -197,7 +251,7 @@ def convert_lightsheet_to_bdv(
             assert len(metadata_paths) == len(file_paths)
             resolution, unit, tile_transformations = read_metadata_flamingo(metadata_paths, center_tiles)
 
-        if channel_name is None or channel_name.strip() == "": #channel name is empty, assign channel id as name
+        if channel_name is None or channel_name.strip() == "":  # channel name is empty, assign channel id as name
             channel_name = str(channel_id)
 
         for tile_id, (file_path, tile_transformation) in enumerate(zip(file_paths, tile_transformations)):
@@ -213,16 +267,9 @@ def convert_lightsheet_to_bdv(
             if scale_factors is None:
                 scale_factors = derive_scale_factors(data.shape)
 
-            pybdv.make_bdv(
-                data, out_path,
-                downscale_factors=scale_factors, downscale_mode="mean",
-                n_threads=n_threads,
-                resolution=resolution, unit=unit,
-                attributes={
-                    "channel": {"id": channel_id, "name": channel_name}, "tile": {"id": tile_id, "name": str(tile_id)},
-                    "angle": {"id": 0, "name": "0"}, "illumination": {"id": 0, "name": "0"}
-                },
-                affine=tile_transformation,
+            conversion_function(
+                data, out_path, scale_factors, n_threads, resolution, unit,
+                channel_id, channel_name, tile_id, tile_transformation
             )
 
 
