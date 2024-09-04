@@ -1,3 +1,4 @@
 synthetic_data/
 __pycache__/
 converted/
+*.egg-info/
