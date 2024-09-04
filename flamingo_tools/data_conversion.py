@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import re
 
 from glob import glob
 from pathlib import Path
@@ -54,19 +55,15 @@ def _read_start_position_flamingo(path):
     return start_position
 
 
-def read_metadata_flamingo(metadata_paths, center_tiles):
-    start_positions = []
+def read_metadata_flamingo(metadata_path, offset=None):
     resolution, unit = None, None
-    for path in metadata_paths:
-        resolution, unit = _read_resolution_and_unit_flamingo(path)
-        start_position = _read_start_position_flamingo(path)
-        start_positions.append(start_position)
 
-    start_positions = np.array(start_positions)
-    offset = np.min(start_positions, axis=0) if center_tiles else np.array([0.0, 0.0, 0.0])
+    resolution, unit = _read_resolution_and_unit_flamingo(metadata_path)
+    start_position = _read_start_position_flamingo(metadata_path)
 
     def _pos_to_trafo(pos):
-        pos -= offset
+        if offset is not None:
+            pos -= offset
 
         # FIXME: dirty hack
         # scale = 4
@@ -93,11 +90,9 @@ def read_metadata_flamingo(metadata_paths, center_tiles):
         }
         return trafo
 
-    transformations = [
-        _pos_to_trafo(pos) for pos in start_positions
-    ]
+    transformation = _pos_to_trafo(start_position)
     # We have to reverse the resolution because pybdv expects ZYX.
-    return resolution[::-1], unit, transformations
+    return resolution[::-1], unit, transformation
 
 
 # TODO derive the scale factors from the shape rather than hard-coding it to 5 levels
@@ -106,15 +101,55 @@ def derive_scale_factors(shape):
     return scale_factors
 
 
+def flamingo_filename_parser(file_path, name_mapping):
+    filename = os.path.basename(file_path)
+
+    # Extract the timepoint.
+    match = re.search(r'_t(\d+)_', filename)
+    if match:
+        timepoint = int(match.group(1))
+    else:
+        timepoint = 0
+
+    # Extract the additional attributes.
+    attributes = {}
+    if name_mapping is None:
+        name_mapping = {}
+
+    # Extract the channel.
+    match = re.search(r'_C(\d+)_', filename)
+    channel = int(match.group(1)) if match else 0
+    channel_mapping = name_mapping.get("channel", {})
+    attributes["channel"] = {"id": channel, "name": channel_mapping.get(channel, str(channel))}
+
+    # Extract the tile.
+    match = re.search(r'_R(\d+)_', filename)
+    tile = int(match.group(1)) if match else 0
+    tile_mapping = name_mapping.get("tile", {})
+    attributes["tile"] = {"id": tile, "name": tile_mapping.get(tile, str(tile))}
+
+    # Extract the illumination.
+    match = re.search(r'_I(\d+)_', filename)
+    illumination = int(match.group(1)) if match else 0
+    illumination_mapping = name_mapping.get("illumination", {})
+    attributes["illumination"] = {"id": illumination, "name": illumination_mapping.get(illumination, str(illumination))}
+
+    # BDV also supports an angle attribute, but it does not seem to be stored in the filename
+    # "angle": {"id": 0, "name": "0"}
+
+    attribute_id = f"c{channel}-t{tile}-i{illumination}"
+    return timepoint, attributes, attribute_id
+
+
 def convert_lightsheet_to_bdv(
     root: str,
-    channel_folders: Dict[str, str],
-    image_file_name_pattern: str,
     out_path: str,
+    attribute_parser: callable = flamingo_filename_parser,
+    attribute_names: Optional[Dict[str, Dict[int, str]]] = None,
     metadata_file_name_pattern: Optional[str] = None,
     metadata_root: Optional[str] = None,
     metadata_type: str = "flamingo",
-    center_tiles: bool = True,
+    center_tiles: bool = False,
     resolution: Optional[List[float]] = None,
     unit: Optional[str] = None,
     scale_factors: Optional[List[List[int]]] = None,
@@ -125,24 +160,14 @@ def convert_lightsheet_to_bdv(
     The data is converted to the bdv-n5 file format and can be opened with BigDataViewer
     or BigStitcher. This function is written with data layout and metadata of flamingo
     microscopes in mind, but could potentially be adapted to other data formats.
-    We currently don't support multiple timepoints, but support can be added if needed.
 
-    This function assumes the following input data format:
-    <ROOT>/<CHANNEL1>/<TILE1>.tif
-                     /<TILE2>.tif
-                     /...
-          /<CHANNEL2>/<TILE1>.tif
-                     /<TILE2>.tif
-                     /...
+    TODO explain the attribute parsing.
 
     Args:
-        root: Folder that contains the folders with tifs for each channel.
-        channel_folders: Dictionary that maps the name of each channel to the corresponding folder name
-            underneath the root folder.
-        image_file_name_pattern: The pattern for the names of the tifs that contain the data.
-            This expects a glob pattern (name with '*') to select the corresponding tif files .
-            The simplest pattern that should work in most cases is '*.tif'.
+        root: Folder that contains the image data stored as tifs.
+            This function will take into account all tif files in folders beneath this root directory.
         out_path: Output path where the converted data is saved.
+        attribute_parser: TODO
         metadata_file_name_pattern: The pattern for the names of files that contain the metadata.
             For flamingo metadata the following pattern should work: '*_Settings.txt'.
         metadata_root: Different root folder for the metadata. By default 'root' is used here as well.
@@ -170,18 +195,44 @@ def convert_lightsheet_to_bdv(
     if ext == "":
         out_path = str(Path(out_path).with_suffix(".n5"))
 
-    # Iterate over the channels
-    for channel_id, (channel_name, channel_folder) in enumerate(channel_folders.items()):
+    files = sorted(glob(os.path.join(root, "**/*.tif"), recursive=True))
+    if metadata_file_name_pattern is None:
+        metadata_files = [None] * len(files)
+        offset = None
+    else:
+        metadata_files = sorted(
+            glob(
+                os.path.join(root if metadata_root is None else metadata_root, f"**/{metadata_file_name_pattern}"),
+                recursive=True
+            )
+        )
+        assert len(metadata_files) == len(files)
 
-        # Get all the image file paths for this channel.
-        tile_pattern = os.path.join(root, channel_folder, image_file_name_pattern)
-        file_paths = sorted(glob(tile_pattern))
-        assert len(file_paths) > 0, tile_pattern
+        if center_tiles:
+            start_positions = []
+            for mpath in metadata_files:
+                start_positions.append(_read_start_position_flamingo(mpath))
+            offset = np.min(start_positions, axis=0)
+        else:
+            offset = None
+
+    next_setup_id = 0
+    attrs_to_setups = {}
+
+    for file_path, metadata_file in zip(files, metadata_files):
+        timepoint, attributes, aid = attribute_parser(file_path, attribute_names)
+
+        if aid in attrs_to_setups:
+            setup_id = attrs_to_setups[aid]
+        else:
+            attrs_to_setups[aid] = next_setup_id
+            setup_id = next_setup_id
+            next_setup_id += 1
 
         # Read the metadata if it was given.
-        if metadata_file_name_pattern is None:  # No metadata given.
+        if metadata_file is None:  # No metadata given.
             # We don't use any tile transformation.
-            tile_transformations = [None] * len(file_paths)
+            tile_transformation = [None]
             # Set resolution and unit to their default values if they were not passed.
             if resolution is None:
                 resolution = [1.0, 1.0, 1.0]
@@ -189,41 +240,28 @@ def convert_lightsheet_to_bdv(
                 unit = "pixel"
 
         else:  # We have metadata and read it.
-            metadata_pattern = os.path.join(
-                root if metadata_root is None else metadata_root,
-                channel_folder, metadata_file_name_pattern
-            )
-            metadata_paths = sorted(glob(metadata_pattern))
-            assert len(metadata_paths) == len(file_paths)
-            resolution, unit, tile_transformations = read_metadata_flamingo(metadata_paths, center_tiles)
+            resolution, unit, tile_transformation = read_metadata_flamingo(metadata_file, offset)
 
-        if channel_name is None or channel_name.strip() == "": #channel name is empty, assign channel id as name
-            channel_name = str(channel_id)
+        try:
+            data = tifffile.memmap(file_path, mode="r")
+        except ValueError:
+            print(f"Could not memmap the data from {file_path}. Fall back to load it into memory.")
+            data = tifffile.imread(file_path)
 
-        for tile_id, (file_path, tile_transformation) in enumerate(zip(file_paths, tile_transformations)):
+        print(f"Converting tp={timepoint}, channel={attributes['channel']}, tile={attributes['tile']}")
+        if scale_factors is None:
+            scale_factors = derive_scale_factors(data.shape)
 
-            # Try to memmap the data. If that doesn't work fall back to loading it into memory.
-            try:
-                data = tifffile.memmap(file_path, mode="r")
-            except ValueError:
-                print(f"Could not memmap the data from {file_path}. Fall back to load it into memory.")
-                data = tifffile.imread(file_path)
-
-            print("Converting channel", channel_id, "tile", tile_id, "from", file_path, "with shape", data.shape)
-            if scale_factors is None:
-                scale_factors = derive_scale_factors(data.shape)
-
-            pybdv.make_bdv(
-                data, out_path,
-                downscale_factors=scale_factors, downscale_mode="mean",
-                n_threads=n_threads,
-                resolution=resolution, unit=unit,
-                attributes={
-                    "channel": {"id": channel_id, "name": channel_name}, "tile": {"id": tile_id, "name": str(tile_id)},
-                    "angle": {"id": 0, "name": "0"}, "illumination": {"id": 0, "name": "0"}
-                },
-                affine=tile_transformation,
-            )
+        pybdv.make_bdv(
+            data, out_path,
+            downscale_factors=scale_factors, downscale_mode="mean",
+            n_threads=n_threads,
+            resolution=resolution, unit=unit,
+            attributes=attributes,
+            affine=tile_transformation,
+            timepoint=timepoint,
+            setup_id=setup_id,
+        )
 
 
 # TODO expose more arguments via CLI.
