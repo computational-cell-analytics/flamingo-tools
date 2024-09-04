@@ -22,16 +22,7 @@ class TestDataConversion(unittest.TestCase):
         from flamingo_tools import convert_lightsheet_to_bdv
 
         out_path = os.path.join(self.folder, "converted_data.n5")
-
-        channel_folders = {
-            "channel0": "channel0",
-            "channel1": "channel1",
-        }
-        convert_lightsheet_to_bdv(
-            self.folder, channel_folders,
-            image_file_name_pattern="volume_R*.tif",
-            out_path=out_path
-        )
+        convert_lightsheet_to_bdv(self.folder, out_path=out_path)
 
         self.assertTrue(os.path.exists(out_path))
         xml_path = out_path.replace(".n5", ".xml")

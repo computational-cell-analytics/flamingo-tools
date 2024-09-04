@@ -232,7 +232,7 @@ def convert_lightsheet_to_bdv(
         # Read the metadata if it was given.
         if metadata_file is None:  # No metadata given.
             # We don't use any tile transformation.
-            tile_transformation = [None]
+            tile_transformation = None
             # Set resolution and unit to their default values if they were not passed.
             if resolution is None:
                 resolution = [1.0, 1.0, 1.0]

@@ -7,7 +7,7 @@ from skimage.data import binary_blobs
 # TODO add metadata
 def create_test_data(root, size=256, n_channels=2, n_tiles=4):
     channel_folders = [f"channel{chan_id}" for chan_id in range(n_channels)]
-    file_name_pattern = "volume_R%i_C%i.tif"
+    file_name_pattern = "volume_R%i_C%i_I0.tif"
     for chan_id, channel_folder in enumerate(channel_folders):
         out_folder = os.path.join(root, channel_folder)
         os.makedirs(out_folder, exist_ok=True)
