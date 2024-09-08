@@ -18,8 +18,7 @@ $ smbclient \\\\wfs-medizin.top.gwdg.de\\ukon-all\$\\ukon100 -U GWDG\\pape41"
     - mget *
 - Copy this to HLRN by logging into it and running
 ```
-  $ rsync -e "ssh -i ~/.ssh/id_rsa_hlrn" -avz pape41@login-mdc.hpc.gwdg.de:/scratch1/projects/cca/data/mose
-r/<NAME> /mnt/lustre-emmy-hdd/projects/nim00007/data/moser/lightsheet/volumes/<NAME>
+  $ rsync -e "ssh -i ~/.ssh/id_rsa_hlrn" -avz pape41@login-mdc.hpc.gwdg.de:/scratch1/projects/cca/data/moser/<NAME> /mnt/lustre-emmy-hdd/projects/nim00007/data/moser/lightsheet/volumes/<NAME>
 ```
 - Remove on SCC
 
@@ -28,9 +27,11 @@ r/<NAME> /mnt/lustre-emmy-hdd/projects/nim00007/data/moser/lightsheet/volumes/<N
 - UKON100\archiv\imaging\Lightsheet\Huiskengroup_CTLSM\2024\M171_2R_converted_n5
     - unclear what the converted data is
 - UKON100\archiv\imaging\Lightsheet\Huiskengroup_CTLSM\2024\155_1L_converted_n5\BDVexport.n5
-    - Copied to SCC, need to rsync.
+    - Copied to SCC, rsync in progress.
 - UKON100\archiv\imaging\Lightsheet\Huiskengroup_CTLSM\2024\MLR151_2R_converted_n5
+    - unclear what the converted data is
 - UKON100\archiv\imaging\Lightsheet\Huiskengroup_CTLSM\2024\G11_1L_converted_n5
+    - unclear what the converted data is
 
 ## Improvements
 
