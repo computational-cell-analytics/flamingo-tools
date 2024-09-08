@@ -51,8 +51,10 @@ def convert_to_ome_zarr_v3(name):
 
 
 def main():
-    name = "Platynereis-H2B-TL"
-    # convert_to_ome_zarr_v2(name)
+    # name = "Platynereis-H2B-TL"
+    # name = "Zebrafish-XSPIM-multiview"
+    name = "Zebrafish-H2B-short-timelapse"
+    convert_to_ome_zarr_v2(name)
     convert_to_ome_zarr_v3(name)
 
 

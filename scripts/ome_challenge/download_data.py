@@ -6,7 +6,10 @@ from pydrive2.drive import GoogleDrive
 
 IDS = {
     "Platynereis-H2B-TL": "1jGwaJ62w80GYo5I_Jcb3O_g7y4RKEhjI",
-    "Zebrafish-XSPIM-multiview": "https://drive.google.com/drive/folders/175hZRrUNWM2UzY0wzXPFjuFZ5QKUN-tm?usp=drive_link"  # noqa
+    "Zebrafish-XSPIM-multiview": "175hZRrUNWM2UzY0wzXPFjuFZ5QKUN-tm",  # noqa
+    "Zebrafish-H2B-short-timelapse": "18fGJwQ0i5pBHQO8FHUuFcxqWeD7uwiBM",  # noqa
+    # This doesn't work.
+    # "Zebrafish-H2B-short-4views": "1iyMMCZO1rmamVGNVThJWElJKSKXROscF"
 }
 
 # ROOT = "/mnt/lustre-grete/usr/u12086/data/flamingo"
@@ -17,6 +20,7 @@ def download_folder(drive, name):
     os.makedirs(ROOT, exist_ok=True)
 
     destination_folder = os.path.join(ROOT, name)
+    os.makedirs(destination_folder, exist_ok=True)
     folder_id = IDS[name]
 
     folder_query = f"'{folder_id}' in parents and trashed=false"
@@ -48,7 +52,9 @@ def main():
     drive = get_drive()
 
     # download_from_gdrive(name="Zebrafish-XSPIM-multiview")
-    download_folder(drive, name="Platynereis-H2B-TL")
+    # download_folder(drive, name="Platynereis-H2B-TL")
+    # download_folder(drive, name="Zebrafish-H2B-short-timelapse")
+    download_folder(drive, name="Zebrafish-H2B-short-4views")
 
 
 if __name__ == "__main__":
