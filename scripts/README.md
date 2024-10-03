@@ -1,18 +1,41 @@
 # Segmentation for large lightsheet volumes
 
+
+## Installation
+
+Needs [torch-em](https://github.com/constantinpape/torch-em) in the python environment. See [here](https://github.com/constantinpape/torch-em?tab=readme-ov-file#installation) for installation instructions. (If possible use `mamba` instead of `conda`.)
+After setting up the environment you also have to add support for the MoBIE python library via
+```
+conda install -c conda-forge mobie_utils
+```
+
+
 ## Training
 
 Contains the scripts for training a U-Net that predicts foreground probabilties and normalized object distances.
 
+
 ## Prediction
 
-Contains the scripts for running segmentation for a large volume with a distance prediction U-Net. (Other scripts are work in progress.)
+Contains the scripts for running segmentation for a large volume with a distance prediction U-Net, postprocessing the segmentation
+and exporting the segmentation result to MoBIE
 
-You can run it like this for input that is stored in n5:
+To run the full segmentation workflow, including the export to MoBIE you can use the `segmentation_workflow.py` script as follows:
+```
+python segmentation_workflow.py -i /path/to/volume.xml -o /path/to/output_folder --scale 0 -m data_name --model /path/to/model.pt
+```
+
+Here, `-i` must point to the xml file of the fused data exported from BigSticher, `-o` indicates the output folder where the MoBIE project with the semgentation result will be saved, `--scale` indicates the scale to use for the segmentation, `-m` the name of the data in MoBIE and `--model` the path to the segmentation model.
+
+### Individual Workflow Steps
+
+You can also run individual steps of the workflow, like prediction and segmentation: 
+
+You can run it like this for an input volume that is stored in n5, e.g. the fused export from bigstitcher:
 ```
 python run_prediction_distance_unet.py -i /path/to/volume.n5 -k setup0/timepoint0/s0 -m /path/to/model -o /path/to/output_folder
 ```
-Here, `-i` specifies the input filepath, `-o` the folder where the results are saved and `-k` the internal path for a zarr or n5 file.
+Here, `-i` specifies the input filepath, `-o` the folder where the results are saved and `-k` the internal path in the n5 file.
 The `-m` argument specifies the model to use for prediction. You need to give the path to the folder that contains the checkpoint (the `best.pt` file).
 
 You can also run the script for a tif file. In this case you don't need the `-k` parameter:
@@ -31,8 +54,4 @@ to downsample the input by a factor of 2. Note that the segmentation result will
 
 In addition, the script `postprocess_seg.py` can be used to filter out false positive nucleus segmentations from regions in the segmentation with a low density of segmented nuclei.
 
-You can use the script `to_tif.py` to convert the zarr object to a tif volume for easier viewing (won't work for very large volumes!).
-
-## Installation
-
-Needs [torch-em](https://github.com/constantinpape/torch-em) in the python environment. See [here](https://github.com/constantinpape/torch-em?tab=readme-ov-file#installation) for installation instructions. (If possible use `mamba` instead of `conda`.)
+You can use the script `to_tif.py` to convert the zarr object to a tif volume for easier viewing (won't work for large volumes!).
