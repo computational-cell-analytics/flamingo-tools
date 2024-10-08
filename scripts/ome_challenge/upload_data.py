@@ -25,7 +25,10 @@ def upload_data(name):
 
 
 def main():
-    name = "Platynereis-H2B-TL.ome.zarr"
+    # name = "Platynereis-H2B-TL.ome.zarr"
+    # name = "Zebrafish-H2B-short-timelapse.ome.zarr"
+    name = "Zebrafish-XSPIM-multiview.ome.zarr"
+
     upload_data(name)
 
 
