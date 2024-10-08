@@ -171,10 +171,16 @@ def flamingo_filename_parser(file_path, name_mapping):
     illumination_mapping = name_mapping.get("illumination", {})
     attributes["illumination"] = {"id": illumination, "name": illumination_mapping.get(illumination, str(illumination))}
 
+    # Extract D. TODO what is this?
+    match = re.search(r'_D(\d+)_', filename)
+    D = int(match.group(1)) if match else 0
+    D_mapping = name_mapping.get("D", {})
+    attributes["D"] = {"id": D, "name": D_mapping.get(D, str(D))}
+
     # BDV also supports an angle attribute, but it does not seem to be stored in the filename
     # "angle": {"id": 0, "name": "0"}
 
-    attribute_id = f"c{channel}-t{tile}-i{illumination}"
+    attribute_id = f"c{channel}-t{tile}-i{illumination}-d{D}"
     return timepoint, attributes, attribute_id
 
 
@@ -282,13 +288,13 @@ def convert_lightsheet_to_bdv(
         else:  # We have metadata and read it.
             resolution, unit, tile_transformation = read_metadata_flamingo(metadata_file, offset)
 
+        print(f"Converting tp={timepoint}, channel={attributes['channel']}, tile={attributes['tile']}")
         try:
             data = tifffile.memmap(file_path, mode="r")
         except ValueError:
             print(f"Could not memmap the data from {file_path}. Fall back to load it into memory.")
             data = tifffile.imread(file_path)
 
-        print(f"Converting tp={timepoint}, channel={attributes['channel']}, tile={attributes['tile']}")
         if scale_factors is None:
             scale_factors = derive_scale_factors(data.shape)
 
