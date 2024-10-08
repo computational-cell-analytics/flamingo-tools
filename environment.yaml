@@ -6,6 +6,7 @@ channels:
 
 dependencies:
   - cpuonly
+  - cluster_tools
   - scikit-image
   - pybdv
   - pytorch
