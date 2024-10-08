@@ -10,6 +10,10 @@ import numpy as np
 import pybdv
 import tifffile
 
+from cluster_tools.utils.volume_utils import write_format_metadata
+from elf.io import open_file
+from skimage.transform import rescale
+
 
 def _read_resolution_and_unit_flamingo(mdata_path):
     resolution = None
@@ -99,6 +103,39 @@ def read_metadata_flamingo(metadata_path, offset=None):
 def derive_scale_factors(shape):
     scale_factors = [[2, 2, 2]] * 5
     return scale_factors
+
+
+def _to_ome_zarr(data, out_path, scale_factors, timepoint, setup_id, attributes, unit, resolution):
+    n_threads = mp.cpu_count()
+    chunks = (128, 128, 128)
+
+    # Write the base dataset.
+    base_key = f"setup{setup_id}/timepoint{timepoint}"
+
+    with open_file(out_path, "a") as f:
+        ds = f.create_dataset(f"{base_key}/s0", shape=data.shape, compression="gzip",
+                              chunks=chunks, dtype=data.dtype)
+        ds.n_threads = n_threads
+        ds[:] = data
+
+        # TODO parallelized implementation.
+        # Do downscaling.
+        for level, scale_factor in enumerate(scale_factors, 1):
+            inv_scale = [1.0 / sc for sc in scale_factor]
+            data = rescale(data, inv_scale, preserve_range=True).astype(data.dtype)
+            ds = f.create_dataset(f"{base_key}/s{level}", shape=data.shape, compression="gzip",
+                                  chunks=chunks, dtype=data.dtype)
+            ds.n_threads = n_threads
+            ds[:] = data
+
+        g = f[f"setup{setup_id}"]
+        g.attrs.update(attributes)
+
+    # Write the ome zarr metadata.
+    metadata_dict = {"unit": unit, "resolution": resolution}
+    write_format_metadata(
+        "ome.zarr", out_path, metadata_dict, scale_factors=scale_factors, prefix=base_key
+    )
 
 
 def flamingo_filename_parser(file_path, name_mapping):
@@ -198,8 +235,11 @@ def convert_lightsheet_to_bdv(
 
     # Make sure we convert to n5, in case no extension is passed.
     ext = os.path.splitext(out_path)[1]
+    convert_to_ome_zarr = False
     if ext == "":
         out_path = str(Path(out_path).with_suffix(".n5"))
+    elif ext == ".zarr":
+        convert_to_ome_zarr = True
 
     files = sorted(glob(os.path.join(root, "**/*.tif"), recursive=True))
     if metadata_file_name_pattern is None:
@@ -258,16 +298,19 @@ def convert_lightsheet_to_bdv(
         if scale_factors is None:
             scale_factors = derive_scale_factors(data.shape)
 
-        pybdv.make_bdv(
-            data, out_path,
-            downscale_factors=scale_factors, downscale_mode="mean",
-            n_threads=n_threads,
-            resolution=resolution, unit=unit,
-            attributes=attributes,
-            affine=tile_transformation,
-            timepoint=timepoint,
-            setup_id=setup_id,
-        )
+        if convert_to_ome_zarr:
+            _to_ome_zarr(data, out_path, scale_factors, timepoint, setup_id, attributes, unit, resolution)
+        else:
+            pybdv.make_bdv(
+                data, out_path,
+                downscale_factors=scale_factors, downscale_mode="mean",
+                n_threads=n_threads,
+                resolution=resolution, unit=unit,
+                attributes=attributes,
+                affine=tile_transformation,
+                timepoint=timepoint,
+                setup_id=setup_id,
+            )
 
 
 # TODO expose more arguments via CLI.
