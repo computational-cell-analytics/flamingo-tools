@@ -207,10 +207,29 @@ def _write_missing_views(out_path):
     tree.write(xml_path)
 
 
-def _load_data(file_path):
-    # TODO how do we read the raw data.
+def _parse_shape(metadata_file):
+    depth, height, width = None, None, None
+
+    with open(metadata_file, "r") as f:
+        for line in f.readlines():
+            line = line.strip().rstrip("\n")
+            if line.startswith("AOI width"):
+                width = int(line.split(" ")[-1])
+            if line.startswith("AOI height"):
+                height = int(line.split(" ")[-1])
+            if line.startswith("Number of planes saved"):
+                depth = int(line.split(" ")[-1])
+
+    assert depth is not None
+    assert height is not None
+    assert width is not None
+    return (depth, height, width)
+
+
+def _load_data(file_path, metadata_file):
     if Path(file_path).suffix == ".raw":
-        pass
+        shape = _parse_shape(metadata_file)
+        data = np.memmap(file_path, mode="r", dtype="uint16", shape=shape)
     else:
         try:
             data = tifffile.memmap(file_path, mode="r")
@@ -223,7 +242,7 @@ def _load_data(file_path):
 def convert_lightsheet_to_bdv(
     root: str,
     out_path: str,
-    ext: str = ".tif",
+    file_ext: str = ".tif",
     attribute_parser: callable = flamingo_filename_parser,
     attribute_names: Optional[Dict[str, Dict[int, str]]] = None,
     metadata_file_name_pattern: Optional[str] = None,
@@ -247,7 +266,7 @@ def convert_lightsheet_to_bdv(
         root: Folder that contains the image data stored as tifs.
             This function will take into account all tif files in folders beneath this root directory.
         out_path: Output path where the converted data is saved.
-        ext: The name of the file extension. By default assumes tif files (.tif).
+        file_ext: The name of the file extension. By default assumes tif files (.tif).
             Change to '.raw' to read files stored in raw format instead.
         attribute_parser: TODO
         metadata_file_name_pattern: The pattern for the names of files that contain the metadata.
@@ -280,10 +299,10 @@ def convert_lightsheet_to_bdv(
     elif ext == ".zarr":
         convert_to_ome_zarr = True
 
-    files = sorted(glob(os.path.join(root, f"**/*{ext}"), recursive=True))
+    files = sorted(glob(os.path.join(root, f"**/*{file_ext}"), recursive=True))
     # Raise an error if we could not find any files.
     if len(files) == 0:
-        raise ValueError(f"Could not find any files in {root} with extension {ext}.")
+        raise ValueError(f"Could not find any files in {root} with extension {file_ext}.")
 
     if metadata_file_name_pattern is None:
         metadata_files = [None] * len(files)
@@ -295,7 +314,7 @@ def convert_lightsheet_to_bdv(
                 recursive=True
             )
         )
-        assert len(metadata_files) == len(files)
+        assert len(metadata_files) == len(files), f"{len(metadata_files)}, {len(files)}"
 
         if center_tiles:
             start_positions = []
@@ -336,7 +355,7 @@ def convert_lightsheet_to_bdv(
             )
 
         print(f"Converting tp={timepoint}, channel={attributes['channel']}, tile={attributes['tile']}")
-        data = _load_data(file_path)
+        data = _load_data(file_path, metadata_file)
         if scale_factors is None:
             scale_factors = derive_scale_factors(data.shape)
 
@@ -352,6 +371,7 @@ def convert_lightsheet_to_bdv(
                 affine=tile_transformation,
                 timepoint=timepoint,
                 setup_id=setup_id,
+                chunks=(128, 128, 128),
             )
 
     # We don't need to add additional xml metadata if we convert to ome-zarr.
