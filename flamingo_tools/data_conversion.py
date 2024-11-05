@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import os
 import re
+import xml.etree.ElementTree as ET
 
 from glob import glob
 from pathlib import Path
@@ -26,7 +27,7 @@ def _read_resolution_and_unit_flamingo(mdata_path):
     if resolution is None:
         raise RuntimeError
 
-    unit = "um"
+    unit = "micrometer"
 
     # NOTE: The resolution for the flamingo system is isotropic.
     # So we can just return the plane spacing value to get it.
@@ -59,7 +60,7 @@ def _read_start_position_flamingo(path):
     return start_position
 
 
-def read_metadata_flamingo(metadata_path, offset=None):
+def read_metadata_flamingo(metadata_path, offset=None, parse_affine=False):
     resolution, unit = None, None
 
     resolution, unit = _read_resolution_and_unit_flamingo(metadata_path)
@@ -69,8 +70,9 @@ def read_metadata_flamingo(metadata_path, offset=None):
         if offset is not None:
             pos -= offset
 
-        # FIXME: dirty hack
-        # scale = 4
+        # NOTE: the scale should be kept at 1.
+        # This is only here for development purposes,
+        # to support handling downsampled datasets.
         scale = 1
 
         # The calibration: scale factors on the diagonals.
@@ -94,7 +96,14 @@ def read_metadata_flamingo(metadata_path, offset=None):
         }
         return trafo
 
-    transformation = _pos_to_trafo(start_position)
+    if parse_affine:
+        transformation = _pos_to_trafo(start_position)
+    else:
+        transformation = [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+        ]
     # We have to reverse the resolution because pybdv expects ZYX.
     return resolution[::-1], unit, transformation
 
@@ -182,6 +191,20 @@ def flamingo_filename_parser(file_path, name_mapping):
 
     attribute_id = f"c{channel}-t{tile}-i{illumination}-d{D}"
     return timepoint, attributes, attribute_id
+
+
+def _write_missing_views(out_path):
+    xml_path = Path(out_path).with_suffix(".xml")
+    assert os.path.exists(xml_path)
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    seqdesc = root.find("SequenceDescription")
+    ET.SubElement(seqdesc, "MissingViews")
+
+    pybdv.metadata.indent_xml(root)
+    tree = ET.ElementTree(root)
+    tree.write(xml_path)
 
 
 def convert_lightsheet_to_bdv(
@@ -286,7 +309,11 @@ def convert_lightsheet_to_bdv(
                 unit = "pixel"
 
         else:  # We have metadata and read it.
-            resolution, unit, tile_transformation = read_metadata_flamingo(metadata_file, offset)
+            # NOTE: we don't add the calibration transformation here, as this
+            # leads to issues with the BigStitcher export.
+            resolution, unit, tile_transformation = read_metadata_flamingo(
+                metadata_file, offset, parse_affine=False
+            )
 
         print(f"Converting tp={timepoint}, channel={attributes['channel']}, tile={attributes['tile']}")
         try:
@@ -311,6 +338,14 @@ def convert_lightsheet_to_bdv(
                 timepoint=timepoint,
                 setup_id=setup_id,
             )
+
+    # We don't need to add additional xml metadata if we convert to ome-zarr.
+    if convert_to_ome_zarr:
+        return
+
+    # Add an empty missing views field.
+    # This is expected by BigStitcher.
+    _write_missing_views(out_path)
 
 
 # TODO expose more arguments via CLI.

@@ -4,7 +4,7 @@
 
 Current approach to the data transfer:
 - Log in to SCC login node:
-  $ 
+  $ ssh -i ~/.ssh/id_rsa_scc pape41@transfer-mdc.hpc.gwdg.de
 - Go to "/scratch1/projects/cca/data/moser"
 - Create subfolder <NAME> for cochlea to be copied 
 - Log in via $ smbclient \\\\wfs-medizin.top.gwdg.de\\ukon-all\$\\ukon100 -U GWDG\\pape41"
