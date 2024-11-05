@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import warnings
 from concurrent import futures
 
 import imageio.v3 as imageio
@@ -37,10 +38,12 @@ class SelectChannel(SimpleTransformationWrapper):
 
 
 def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo):
-    if os.path.isdir(model_path):
-        model = load_model(model_path)
-    else:
-        model = torch.load(model_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if os.path.isdir(model_path):
+            model = load_model(model_path)
+        else:
+            model = torch.load(model_path)
 
     mask_path = os.path.join(output_folder, "mask.zarr")
     image_mask = z5py.File(mask_path, "r")["mask"]

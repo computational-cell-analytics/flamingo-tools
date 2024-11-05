@@ -36,7 +36,7 @@ You can run it like this for an input volume that is stored in n5, e.g. the fuse
 python run_prediction_distance_unet.py -i /path/to/volume.n5 -k setup0/timepoint0/s0 -m /path/to/model -o /path/to/output_folder
 ```
 Here, `-i` specifies the input filepath, `-o` the folder where the results are saved and `-k` the internal path in the n5 file.
-The `-m` argument specifies the model to use for prediction. You need to give the path to the folder that contains the checkpoint (the `best.pt` file).
+The `-m` argument specifies the filepath to the model for prediction. You need to give the path to the folder that contains the checkpoint (the `best.pt` file).
 
 You can also run the script for a tif file. In this case you don't need the `-k` parameter:
 ```
