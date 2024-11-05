@@ -15,8 +15,7 @@ Current approach to the data transfer:
     - mget *
 - Copy this to HLRN by logging into it and running
   $ rsync  pape41:/scratch1/projects/cca/data/moser/<NAME>
-  $ rsync -e "ssh -i ~/.ssh/id_rsa_hlrn" -avz pape41@login-mdc.hpc.gwdg.de:/scratch1/projects/cca/data/mose
-r/<NAME> /mnt/lustre-grete/usr/u12086/moser/lightsheet/<NAME>
+  $ rsync -e "ssh -i ~/.ssh/id_rsa_hlrn" -avz pape41@login-mdc.hpc.gwdg.de:/scratch1/projects/cca/data/moser/<NAME> /mnt/lustre-grete/usr/u12086/moser/lightsheet/<NAME>
 - Remove on SCC
 
 ## Next files

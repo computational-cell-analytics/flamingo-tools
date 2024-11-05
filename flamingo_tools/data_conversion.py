@@ -207,9 +207,23 @@ def _write_missing_views(out_path):
     tree.write(xml_path)
 
 
+def _load_data(file_path):
+    # TODO how do we read the raw data.
+    if Path(file_path).suffix == ".raw":
+        pass
+    else:
+        try:
+            data = tifffile.memmap(file_path, mode="r")
+        except ValueError:
+            print(f"Could not memmap the data from {file_path}. Fall back to load it into memory.")
+            data = tifffile.imread(file_path)
+    return data
+
+
 def convert_lightsheet_to_bdv(
     root: str,
     out_path: str,
+    ext: str = ".tif",
     attribute_parser: callable = flamingo_filename_parser,
     attribute_names: Optional[Dict[str, Dict[int, str]]] = None,
     metadata_file_name_pattern: Optional[str] = None,
@@ -233,6 +247,8 @@ def convert_lightsheet_to_bdv(
         root: Folder that contains the image data stored as tifs.
             This function will take into account all tif files in folders beneath this root directory.
         out_path: Output path where the converted data is saved.
+        ext: The name of the file extension. By default assumes tif files (.tif).
+            Change to '.raw' to read files stored in raw format instead.
         attribute_parser: TODO
         metadata_file_name_pattern: The pattern for the names of files that contain the metadata.
             For flamingo metadata the following pattern should work: '*_Settings.txt'.
@@ -264,7 +280,11 @@ def convert_lightsheet_to_bdv(
     elif ext == ".zarr":
         convert_to_ome_zarr = True
 
-    files = sorted(glob(os.path.join(root, "**/*.tif"), recursive=True))
+    files = sorted(glob(os.path.join(root, f"**/*{ext}"), recursive=True))
+    # Raise an error if we could not find any files.
+    if len(files) == 0:
+        raise ValueError(f"Could not find any files in {root} with extension {ext}.")
+
     if metadata_file_name_pattern is None:
         metadata_files = [None] * len(files)
         offset = None
@@ -316,12 +336,7 @@ def convert_lightsheet_to_bdv(
             )
 
         print(f"Converting tp={timepoint}, channel={attributes['channel']}, tile={attributes['tile']}")
-        try:
-            data = tifffile.memmap(file_path, mode="r")
-        except ValueError:
-            print(f"Could not memmap the data from {file_path}. Fall back to load it into memory.")
-            data = tifffile.imread(file_path)
-
+        data = _load_data(file_path)
         if scale_factors is None:
             scale_factors = derive_scale_factors(data.shape)
 
