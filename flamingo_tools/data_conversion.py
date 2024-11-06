@@ -245,7 +245,7 @@ def convert_lightsheet_to_bdv(
     file_ext: str = ".tif",
     attribute_parser: callable = flamingo_filename_parser,
     attribute_names: Optional[Dict[str, Dict[int, str]]] = None,
-    metadata_file_name_pattern: Optional[str] = None,
+    metadata_file_name_pattern: Optional[str] = "*_Settings.txt",
     metadata_root: Optional[str] = None,
     metadata_type: str = "flamingo",
     center_tiles: bool = False,
@@ -383,36 +383,35 @@ def convert_lightsheet_to_bdv(
     _write_missing_views(out_path)
 
 
-# TODO expose more arguments via CLI.
 def convert_lightsheet_to_bdv_cli():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Convert lightsheet data to format compatible with BigDataViewer / BigStitcher. "
-                    "Example useage: To convert the synthetic data created via create_synthetic_data.py run: \n"
-                    "python convert_flamingo_data.py -i synthetic_data -c channel0 channel1 -f *.tif -o synthetic.n5"
+        description="Convert lightsheet data from a flamingo microscope to a format compatible with BigDataViewer / BigStitcher. "  # noqa
+                    "For most flamingo data it should be sufficient to run the script like this: \n"
+                    "python convert_flamingo_data.py -i /path/to/flamingo_data -o /path/to/output.n5 \n"
+                    "Here, -i specifies the path to the input folder and -o specifies the path to the output data. \n"
+                    "In order to process flamingo data stored in raw format you also need to pass the argument '-f .raw'."  # noqa
     )
     parser.add_argument(
-        "--input_root", "-i", required=True,
-        help="Folder that contains the folders with tifs for each channel."
+        "--input_root", "-i", required=True, help="Folder that contains the data from the flamingo microscope."
     )
     parser.add_argument(
-        "--channel_folders", "-c", nargs="+", required=True,
-        help="Name of folders with the data for each channel."
+        "--out_path", "-o", required=True, help="Output path where the converted data will be saved."
     )
     parser.add_argument(
-        "--image_file_name_pattern", "-f", required=True,
-        help="The pattern for the names of the tifs that contain the data. "
-             "This expects a glob pattern (name with '*') to select the corresponding tif files."
-             "The simplest pattern that should work in most cases is '*.tif'."
+        "--file_ext", "-f", default=".tif",
+        help="The file extension of the image data. By default '.tif' is used, pass '.raw' if your data is stored as raw files."  # noqa
     )
     parser.add_argument(
-        "--out_path", "-o", required=True,
-        help="Output path where the converted data is saved."
+        "--metadata_pattern", default="*_Settings.txt",
+        help="The filepattern for finding metadata information. The default value works for flamingo data."
     )
 
     args = parser.parse_args()
-    channel_folders = {name: name for name in args.channel_folders}
     convert_lightsheet_to_bdv(
-        args.input_root, channel_folders, args.image_file_name_pattern, args.out_path,
+        root=args.input_root,
+        out_path=args.out_path,
+        file_ext=args.file_ext,
+        metadata_file_name_pattern=args.metadata_pattern
     )
