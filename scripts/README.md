@@ -22,10 +22,10 @@ and exporting the segmentation result to MoBIE
 
 To run the full segmentation workflow, including the export to MoBIE you can use the `segmentation_workflow.py` script as follows:
 ```
-python segmentation_workflow.py -i /path/to/volume.xml -o /path/to/output_folder --scale 0 -m data_name --model /path/to/model.pt
+python segmentation_workflow.py -i /path/to/volume.xml -o /path/to/output_folder -s /path/to/seg_results --scale 0 --mobie_dataset name_in_mobie --model /path/to/model.pt
 ```
 
-Here, `-i` must point to the xml file of the fused data exported from BigSticher, `-o` indicates the output folder where the MoBIE project with the semgentation result will be saved, `--scale` indicates the scale to use for the segmentation, `-m` the name of the data in MoBIE and `--model` the path to the segmentation model.
+Here, `-i` must point to the xml file of the fused data exported from BigSticher, `-o` indicates the output folder where the MoBIE project with the semgentation result will be saved, `-s` is a folder where intermediate segmentation results will be saved, `--scale` indicates the scale to use for the segmentation, `--mobie_dataset` the (optional) name of the data in MoBIE and `--model` the path to the segmentation model.
 
 ### Individual Workflow Steps
 
