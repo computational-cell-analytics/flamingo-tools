@@ -1,3 +1,0 @@
-from flamingo_tools import convert_lightsheet_to_bdv_cli
-
-convert_lightsheet_to_bdv_cli()

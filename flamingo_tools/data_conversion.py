@@ -300,6 +300,9 @@ def convert_lightsheet_to_bdv(
         convert_to_ome_zarr = True
 
     files = sorted(glob(os.path.join(root, f"**/*{file_ext}"), recursive=True))
+    if file_ext == ".tif":
+        # We need to exlcude the max-projetion tifs that are saved alongside the tifs.
+        files = [ff for ff in files if "_MP.tif" not in ff]
     # Raise an error if we could not find any files.
     if len(files) == 0:
         raise ValueError(f"Could not find any files in {root} with extension {file_ext}.")
@@ -409,9 +412,14 @@ def convert_lightsheet_to_bdv_cli():
     )
 
     args = parser.parse_args()
+    if args.metadata_pattern == "":
+        metadata_pattern = None
+    else:
+        metadata_pattern = args.metadata_pattern
+
     convert_lightsheet_to_bdv(
         root=args.input_root,
         out_path=args.out_path,
         file_ext=args.file_ext,
-        metadata_file_name_pattern=args.metadata_pattern
+        metadata_file_name_pattern=metadata_pattern
     )

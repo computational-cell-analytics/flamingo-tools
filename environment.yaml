@@ -1,4 +1,4 @@
-name: lightsheet
+name: flamingo
 
 channels:
   - pytorch
