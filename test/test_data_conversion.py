@@ -19,7 +19,7 @@ class TestDataConversion(unittest.TestCase):
         from flamingo_tools import convert_lightsheet_to_bdv
 
         out_path = os.path.join(self.folder, "converted_data.n5")
-        convert_lightsheet_to_bdv(self.folder, out_path=out_path)
+        convert_lightsheet_to_bdv(self.folder, out_path=out_path, metadata_file_name_pattern=None)
 
         self.assertTrue(os.path.exists(out_path))
         xml_path = out_path.replace(".n5", ".xml")
