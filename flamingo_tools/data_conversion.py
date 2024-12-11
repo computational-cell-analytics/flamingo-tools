@@ -409,9 +409,14 @@ def convert_lightsheet_to_bdv_cli():
     )
 
     args = parser.parse_args()
+    if args.metadata_pattern == "":
+        metadata_pattern = None
+    else:
+        metadata_pattern = args.metadata_pattern
+
     convert_lightsheet_to_bdv(
         root=args.input_root,
         out_path=args.out_path,
         file_ext=args.file_ext,
-        metadata_file_name_pattern=args.metadata_pattern
+        metadata_file_name_pattern=metadata_pattern
     )
