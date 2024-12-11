@@ -300,6 +300,9 @@ def convert_lightsheet_to_bdv(
         convert_to_ome_zarr = True
 
     files = sorted(glob(os.path.join(root, f"**/*{file_ext}"), recursive=True))
+    if file_ext == ".tif":
+        # We need to exlcude the max-projetion tifs that are saved alongside the tifs.
+        files = [ff for ff in files if "_MP.tif" not in ff]
     # Raise an error if we could not find any files.
     if len(files) == 0:
         raise ValueError(f"Could not find any files in {root} with extension {file_ext}.")
