@@ -15,7 +15,7 @@ This is work in progress!
 You need a python environment with the following dependencies: [pybdv](https://github.com/constantinpape/pybdv) and [z5py](https://github.com/constantinpape/z5).
 You install these dependencies with [mamba](https://github.com/mamba-org/mamba) or [conda](https://docs.conda.io/en/latest/) via: 
 ```bash
-conda install -c conda-forge z5py pybdv
+conda install -c conda-forge z5py pybdv cluster_tools
 ```
 (for an existing conda environment). You can also set up a new environment with all required dependencies using the file `environment.yaml`:
 ```bash
