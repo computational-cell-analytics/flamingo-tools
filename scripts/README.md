@@ -13,6 +13,7 @@ conda install -c conda-forge mobie_utils
 ## Training
 
 Contains the scripts for training a U-Net that predicts foreground probabilties and normalized object distances.
+It also contains a documentation for how to run training on new annotated data.
 
 
 ## Prediction
