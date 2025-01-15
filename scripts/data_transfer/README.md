@@ -33,3 +33,10 @@ Try to automate via https://github.com/jborean93/smbprotocol see `sync_smb.py` f
 
 For transfering back MoBIE results.
 ...
+
+# Data Transfer Huisken
+
+See "Transfer via smbclient" above:
+```
+smbclient \\\\wfs-biologie-spezial.top.gwdg.de\\UBM1-all\$\\ -U GWDG\\pape41
+```

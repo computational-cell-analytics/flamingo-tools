@@ -1,42 +1,57 @@
+import argparse
 import os
-from glob import glob
 
 import imageio.v3 as imageio
 import napari
 import numpy as np
 
-root = "/home/pape/Work/data/moser/lightsheet"
+from train_distance_unet import get_image_and_label_paths
+from tqdm import tqdm
+
+# Root folder on my laptop.
+# This is just for convenience, so that I don't have to pass
+# the root argument during development.
+ROOT_CP = "/home/pape/Work/data/moser/lightsheet"
 
 
-def check_visually(check_downsampled=False):
-    if check_downsampled:
-        images = sorted(glob(os.path.join(root, "images_s2", "*.tif")))
-        masks = sorted(glob(os.path.join(root, "masks_s2", "*.tif")))
-    else:
-        images = sorted(glob(os.path.join(root, "images", "*.tif")))
-        masks = sorted(glob(os.path.join(root, "masks", "*.tif")))
-    assert len(images) == len(masks)
-
-    for im, mask in zip(images, masks):
-        print(im)
+def check_visually(images, labels):
+    for im, label in tqdm(zip(images, labels), total=len(images)):
 
         vol = imageio.imread(im)
-        seg = imageio.imread(mask).astype("uint32")
+        seg = imageio.imread(label).astype("uint32")
 
         v = napari.Viewer()
-        v.add_image(vol)
-        v.add_labels(seg)
+        v.add_image(vol, name="pv-channel")
+        v.add_labels(seg, name="annotations")
+        folder, name = os.path.split(im)
+        folder = os.path.basename(folder)
+        v.title = f"{folder}/{name}"
         napari.run()
 
 
-def check_labels():
-    masks = sorted(glob(os.path.join(root, "masks", "*.tif")))
-    for mask_path in masks:
-        labels = imageio.imread(mask_path)
+def check_labels(images, labels):
+    for label_path in labels:
+        labels = imageio.imread(label_path)
         n_labels = len(np.unique(labels))
-        print(mask_path, n_labels)
+        print(label_path, n_labels)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--root", "-i", help="The root folder with the annotated training crops.",
+        default=ROOT_CP,
+    )
+    parser.add_argument("--check_labels", "-l", action="store_true")
+    args = parser.parse_args()
+    root = args.root
+
+    images, labels = get_image_and_label_paths(root)
+
+    check_visually(images, labels)
+    if args.check_labels:
+        check_labels(images, labels)
 
 
 if __name__ == "__main__":
-    check_visually(True)
-    # check_labels()
+    main()
