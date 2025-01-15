@@ -6,7 +6,7 @@ from glob import glob
 import torch_em
 from torch_em.model import UNet3d
 
-ROOT_CLUSTER = "/scratch-grete/usr/nimcpape/data/moser/lightsheet"
+ROOT_CLUSTER = "/scratch-grete/usr/nimcpape/data/moser/lightsheet/training"
 
 
 def get_image_and_label_paths(root):
@@ -77,7 +77,7 @@ def get_loader(root, split, patch_shape, batch_size, filter_empty):
     elif split == "val":
         n_samples = 20 * batch_size
 
-    sampler = torch_em.data.sampler.MinInstanceSampler(p_reject=0.95)
+    sampler = torch_em.data.sampler.MinInstanceSampler(p_reject=0.8)
     loader = torch_em.default_segmentation_loader(
         raw_paths=image_paths, raw_key=None, label_paths=label_paths, label_key=None,
         batch_size=batch_size, patch_shape=patch_shape, label_transform=label_transform,
@@ -94,6 +94,11 @@ def main():
         default=ROOT_CLUSTER,
     )
     parser.add_argument(
+        "--batch_size", "-b", help="The batch size for training. Set to 8 by default."
+        "You may need to choose a smaller batch size to train on yoru GPU.",
+        default=8, type=int,
+    )
+    parser.add_argument(
         "--check_loaders", "-l", action="store_true",
         help="Visualize the data loader output instead of starting a training run."
     )
@@ -106,13 +111,13 @@ def main():
     )
     args = parser.parse_args()
     root = args.root
+    batch_size = args.batch_size
     check_loaders = args.check_loaders
     filter_empty = args.filter_empty
     run_name = datetime.now().strftime("%Y%m%d") if args.name is None else args.name
 
     # Parameters for training on A100.
     n_iterations = 1e5
-    batch_size = 8
     patch_shape = (64, 128, 128)
 
     # The U-Net.
