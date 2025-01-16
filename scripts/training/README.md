@@ -14,4 +14,4 @@ They will load the **image data** according to the following rules:
 The training script will save the trained model in `checkpoints/cochlea_distance_unet_<CURRENT_DATE>`, e.g. `checkpoints/cochlea_distance_unet_20250115`.
 For further options for the scripts run `python check_training_data.py -h` / `python train_distance_unet.py -h`.
 
-The script `train_micro_sam.py` works similar to the U-Net training script. It saves the finetuned model for annotation with `micro_sam` to `checkpoints/`.
+The script `train_micro_sam.py` works similar to the U-Net training script. It saves the finetuned model for annotation with `micro_sam` to `checkpoints/cochlea_micro_sam_<CURRENT_DATE>`.
