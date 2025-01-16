@@ -46,7 +46,6 @@ def select_paths(image_paths, label_paths, split, filter_empty):
     assert len(image_paths) == len(label_paths)
 
     n_files = len(image_paths)
-
     train_fraction = 0.85
 
     n_train = int(train_fraction * n_files)
