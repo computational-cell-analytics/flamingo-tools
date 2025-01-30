@@ -3,8 +3,8 @@ import sys
 
 from detection_dataset import DetectionDataset
 
-# sys.path.append()
-sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
+# sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
+sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
 
 from utils.training import supervised_training  # noqa
 
@@ -74,6 +74,8 @@ def train():
         test_label_paths=test_label_paths,
         # save_root="",
         dataset_class=DetectionDataset,
+        n_samples_train=800,
+        n_samples_val=80,
     )
 
 
