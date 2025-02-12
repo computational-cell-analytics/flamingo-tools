@@ -3,8 +3,8 @@ import sys
 
 from detection_dataset import DetectionDataset
 
-# sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
-sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
+sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
+# sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
 
 from utils.training.training import supervised_training  # noqa
 
