@@ -6,7 +6,7 @@ from detection_dataset import DetectionDataset
 # sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
 sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
 
-from utils.training import supervised_training  # noqa
+from utils.training.training import supervised_training  # noqa
 
 TRAIN_ROOT = "./training_data/images"
 LABEL_ROOT = "./training_data/labels"
@@ -49,9 +49,8 @@ def train():
     print(len(train_paths), "tomograms for training")
     print(len(val_paths), "tomograms for validation")
 
-    patch_shape = [32, 96, 96]
-
-    batch_size = 8
+    patch_shape = [40, 112, 112]
+    batch_size = 32
     check = False
 
     supervised_training(
@@ -60,10 +59,11 @@ def train():
         train_label_paths=train_label_paths,
         val_paths=val_paths,
         val_label_paths=val_label_paths,
+        raw_key="raw",
         patch_shape=patch_shape, batch_size=batch_size,
         check=check,
         lr=1e-4,
-        n_iterations=int(2.5e4),
+        n_iterations=int(5e4),
         out_channels=1,
         augmentations=None,
         eps=1e-5,
@@ -74,8 +74,8 @@ def train():
         test_label_paths=test_label_paths,
         # save_root="",
         dataset_class=DetectionDataset,
-        n_samples_train=800,
-        n_samples_val=80,
+        n_samples_train=3200,
+        n_samples_val=160,
     )
 
 

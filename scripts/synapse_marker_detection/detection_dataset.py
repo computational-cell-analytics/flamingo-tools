@@ -9,29 +9,61 @@ from torch_em.util import ensure_tensor_with_channels
 
 # Process labels stored in json napari style.
 # I don't actually think that we need the epsilon here, but will leave it for now.
-def process_labels(label_path, shape, sigma, eps):
-    labels = np.zeros(shape, dtype="float32")
+def process_labels(label_path, shape, sigma, eps, bb=None):
     points = pd.read_csv(label_path)
+
+    if bb:
+        (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
+        restricted_shape = (z_max - z_min, y_max - y_min, x_max - x_min)
+        labels = np.zeros(restricted_shape, dtype="float32")
+        shape = restricted_shape
+    else:
+        labels = np.zeros(shape, dtype="float32")
+
     assert len(points.columns) == len(shape)
+    z_coords, y_coords, x_coords = points["axis-0"], points["axis-1"], points["axis-2"]
+    if bb is not None:
+        z_coords -= z_min
+        y_coords -= y_min
+        x_coords -= x_min
+        mask = np.logical_and.reduce([
+            np.logical_and(z_coords >= 0, z_coords < (z_max - z_min)),
+            np.logical_and(y_coords >= 0, y_coords < (y_max - y_min)),
+            np.logical_and(x_coords >= 0, x_coords < (x_max - x_min)),
+        ])
+        z_coords, y_coords, x_coords = z_coords[mask], y_coords[mask], x_coords[mask]
+
     coords = tuple(
-        np.clip(np.round(points[ax].values).astype("int"), 0, shape[i] - 1)
-        for i, ax in enumerate(points.columns)
+        np.clip(np.round(coord).astype("int"), 0, coord_max - 1) for coord, coord_max in zip(
+            (z_coords, y_coords, x_coords), shape
+        )
     )
+
     labels[coords] = 1
     labels = gaussian(labels, sigma)
     # TODO better normalization?
-    labels /= labels.max()
+    labels /= (labels.max() + 1e-7)
+    labels *= 4
     return labels
 
 
 class DetectionDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500
 
+    @staticmethod
+    def compute_len(shape, patch_shape):
+        if patch_shape is None:
+            return 1
+        else:
+            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            return n_samples
+
     def __init__(
         self,
-        raw_image_paths,
-        label_paths,
+        raw_path,
+        label_path,
         patch_shape,
+        raw_key,
         raw_transform=None,
         label_transform=None,
         transform=None,
@@ -43,10 +75,9 @@ class DetectionDataset(torch.utils.data.Dataset):
         sigma=None,
         **kwargs,
     ):
-        self.raw_images = raw_image_paths
-        # TODO make this a parameter
-        self.raw_key = "raw"
-        self.label_images = label_paths
+        self.raw_path = raw_path
+        self.label_path = label_path
+        self.raw_key = raw_key
         self._ndim = 3
 
         assert len(patch_shape) == self._ndim
@@ -63,12 +94,13 @@ class DetectionDataset(torch.utils.data.Dataset):
         self.eps = eps
         self.sigma = sigma
 
+        with zarr.open(self.raw_path, "r") as f:
+            self.shape = f[self.raw_key].shape
+
         if n_samples is None:
-            self._len = len(self.raw_images)
-            self.sample_random_index = False
+            self._len = self.compute_len(self.shape, self.patch_shape) if n_samples is None else n_samples
         else:
             self._len = n_samples
-            self.sample_random_index = True
 
     def __len__(self):
         return self._len
@@ -89,21 +121,19 @@ class DetectionDataset(torch.utils.data.Dataset):
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
 
     def _get_sample(self, index):
-        if self.sample_random_index:
-            index = np.random.randint(0, len(self.raw_images))
-        raw, label = self.raw_images[index], self.label_images[index]
+        raw, label_path = self.raw_path, self.label_path
 
         raw = zarr.open(raw)[self.raw_key]
-        # Note: this is quite inefficient, because we process the full crop rather than
-        # just the requested bounding box.
-        label = process_labels(label, raw.shape, self.sigma, self.eps)
+        shape = raw.shape
+
+        bb = self._sample_bounding_box(shape)
+        label = process_labels(label_path, shape, self.sigma, self.eps, bb=bb)
 
         have_raw_channels = raw.ndim == 4  # 3D with channels
         have_label_channels = label.ndim == 4
         if have_label_channels:
             raise NotImplementedError("Multi-channel labels are not supported.")
 
-        shape = raw.shape
         prefix_box = tuple()
         if have_raw_channels:
             if shape[-1] < 16:
@@ -112,19 +142,19 @@ class DetectionDataset(torch.utils.data.Dataset):
                 shape = shape[1:]
                 prefix_box = (slice(None), )
 
-        bb = self._sample_bounding_box(shape)
         raw_patch = np.array(raw[prefix_box + bb])
-        label_patch = np.array(label[bb])
+        label_patch = np.array(label)
 
         if self.sampler is not None:
-            sample_id = 0
-            while not self.sampler(raw_patch, label_patch):
-                bb = self._sample_bounding_box(shape)
-                raw_patch = np.array(raw[prefix_box + bb])
-                label_patch = np.array(label[bb])
-                sample_id += 1
-                if sample_id > self.max_sampling_attempts:
-                    raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+            assert False, "Sampler not implemented"
+            # sample_id = 0
+            # while not self.sampler(raw_patch, label_patch):
+            #     bb = self._sample_bounding_box(shape)
+            #     raw_patch = np.array(raw[prefix_box + bb])
+            #     label_patch = np.array(label[bb])
+            #     sample_id += 1
+            #     if sample_id > self.max_sampling_attempts:
+            #         raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
         if have_raw_channels and len(prefix_box) == 0:
             raw_patch = raw_patch.transpose((3, 0, 1, 2))  # Channels, Depth, Height, Width
