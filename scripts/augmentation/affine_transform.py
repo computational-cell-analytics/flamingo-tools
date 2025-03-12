@@ -155,10 +155,26 @@ def affine_transform_euler(data, euler_angles, label_flag = False):
 	offset = [t_vec[0][0], t_vec[1][0], t_vec[2][0]]
 
 	if label_flag:
-		result = scipy.ndimage.affine_transform(data, rot_matrix, order=0, offset=offset, prefilter=False)
+		result = scipy.ndimage.affine_transform(data, rot_matrix, order=0, offset=offset, prefilter=False).astype(np.int32)
 	else:
-		result = scipy.ndimage.affine_transform(data, rot_matrix, offset=offset)
+		cval = get_cval(data)
+		result = scipy.ndimage.affine_transform(data, rot_matrix, offset=offset, cval=cval)
 	return result
+
+def get_cval(arr):
+	"""
+	Get constant value 'cval' for padding of affine transformation.
+	The value is the mean value of the corner section of the volume with the smallest standard deviation.
+
+	:param np.ndarray arr: Input array with format [x y z]
+	:returns: Value for padding
+	:rtype:float
+	"""
+	corner_arrays = [arr[0:arr.shape[0]//10, 0:arr.shape[1]//10, :], arr[0:arr.shape[0]//10, -arr.shape[1]//10:], arr[-arr.shape[0]//10:, 0:arr.shape[1]//10], arr[-arr.shape[0]//10:, -arr.shape[1]//10:]]
+	stdv = [np.std(a) for a in corner_arrays]
+	min_std_index = stdv.index(min(stdv))
+	pad_value = np.mean(corner_arrays[min_std_index])
+	return pad_value
 
 def pad_scaled_output(arr, target_shape, pad_type = 'zero'):
 	"""
@@ -173,10 +189,7 @@ def pad_scaled_output(arr, target_shape, pad_type = 'zero'):
 	"""
 
 	if "mean" == pad_type:
-		corner_arrays = [arr[0:arr.shape[0]//10, 0:arr.shape[1]//10, :], arr[0:arr.shape[0]//10, -arr.shape[1]//10:], arr[-arr.shape[0]//10:, 0:arr.shape[1]//10], arr[-arr.shape[0]//10:, -arr.shape[1]//10:]]
-		stdv = [np.std(a) for a in corner_arrays]
-		min_std_index = stdv.index(min(stdv))
-		pad_value = np.mean(corner_arrays[min_std_index])
+		pad_value = get_cval(arr)
 	elif "zero" == pad_type:
 		pad_value = 0
 	else:
