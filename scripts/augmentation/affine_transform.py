@@ -12,7 +12,7 @@ import scipy.ndimage
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial import ConvexHull
 
-from tifffile import tifffile
+import imageio.v3 as imageio
 
 # https://github.com/mrirecon/dl-segmentation-realtime-cmr/blob/main/scripts/assess_dl_seg_utils.py
 def mask_from_polygon_mplt(coordinates:list, img_shape:list):
@@ -132,7 +132,7 @@ def read_tif_stack(file):
 	"""
 	Read stack of TIF files.
 	"""
-	images = tifffile.imread(file)
+	images = imageio.imread(file)
 	images = np.transpose(images, (1,2,0))
 	return images
 
@@ -266,7 +266,7 @@ def main(input_file, dir_out, scale, ex, ey, ez, make_convex):
 		save_images = os.path.join(dir_out, basename + "_affExyz" + str(int(ex)).zfill(2) + str(int(ey)).zfill(2) + str(int(ez)).zfill(2) + ".tif")
 
 	array_out = np.transpose(images_aff, (2,0,1))
-	tifffile.imwrite(save_images, array_out)
+	imageio.imwrite(save_images, array_out, compression="zlib")
 
 	#---Labels---
 	if label_path != "":
@@ -286,7 +286,7 @@ def main(input_file, dir_out, scale, ex, ey, ez, make_convex):
 			save_labels = os.path.join(dir_out, basename + "_affExyz" + str(int(ex)).zfill(2) + str(int(ey)).zfill(2) + str(int(ez)).zfill(2) + "_annotations.tif")
 
 		array_out = np.transpose(labels_aff, (2,0,1))
-		tifffile.imwrite(save_labels, array_out)
+		imageio.imwrite(save_labels, array_out, compression="zlib")
 
 if __name__ == "__main__":
 
