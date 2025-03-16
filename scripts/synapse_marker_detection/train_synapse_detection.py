@@ -3,13 +3,14 @@ import sys
 
 from detection_dataset import DetectionDataset
 
-sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
-# sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
+# sys.path.append("/home/pape/Work/my_projects/czii-protein-challenge")
+sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
 
 from utils.training.training import supervised_training  # noqa
 
-TRAIN_ROOT = "./training_data/images"
-LABEL_ROOT = "./training_data/labels"
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/training_data/v1"  # noqa
+TRAIN_ROOT = os.path.join(ROOT, "images")
+LABEL_ROOT = os.path.join(ROOT, "labels")
 
 
 def get_paths(split):
