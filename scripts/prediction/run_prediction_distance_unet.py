@@ -8,7 +8,7 @@ sys.path.append("../..")
 
 
 def main():
-    from flamingo_tools.segmentation import run_unet_prediction
+    from flamingo_tools.segmentation import run_unet_prediction, run_unet_prediction_slurm
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", required=True)
@@ -39,12 +39,22 @@ def main():
 
     prediction_instances = args.number_gpu if have_cuda else 1
 
-    run_unet_prediction(
-        args.input, args.input_key, args.output_folder, args.model,
-        scale=scale, min_size=min_size,
-        block_shape=block_shape, halo=halo,
-        prediction_instances=prediction_instances,
-    )
+    if 1 > prediction_instances:
+        # FIXME: only does prediction part, no segmentation yet
+        # FIXME: implement array job
+        run_unet_prediction_slurm(
+            args.input, args.input_key, args.output_folder, args.model,
+            scale=scale,
+            block_shape=block_shape, halo=halo,
+            prediction_instances=prediction_instances,
+        )
+    else:
+
+        run_unet_prediction(
+            args.input, args.input_key, args.output_folder, args.model,
+            scale=scale, min_size=min_size,
+            block_shape=block_shape, halo=halo,
+        )
 
 
 if __name__ == "__main__":

@@ -80,7 +80,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         halo = (16, 32, 32)
 
     # Compute the global mean and standard deviation.
-    n_threads = min(2, mp.cpu_count())
+    n_threads = min(16, mp.cpu_count())
     mean, std = parallel.mean_and_std(
         input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
         mask=image_mask
@@ -243,25 +243,17 @@ def run_unet_prediction(
     output_folder, model_path,
     min_size, scale=None,
     block_shape=None, halo=None,
-    prediction_instances=1,
 ):
-    if prediction_instances > 1:
-        run_unet_prediction_slurm(
-            input_path, input_key, output_folder, model_path,
-            scale=scale, block_shape=block_shape, halo=halo,
-            prediction_instances=prediction_instances,
-        )
-    else:
-        os.makedirs(output_folder, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
 
-        find_mask(input_path, input_key, output_folder)
+    find_mask(input_path, input_key, output_folder)
 
-        original_shape = prediction_impl(
-            input_path, input_key, output_folder, model_path, scale, block_shape, halo
-        )
+    original_shape = prediction_impl(
+        input_path, input_key, output_folder, model_path, scale, block_shape, halo
+    )
 
-        pmap_out = os.path.join(output_folder, "predictions.zarr")
-        segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+    pmap_out = os.path.join(output_folder, "predictions.zarr")
+    segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
 def run_unet_prediction_slurm(
     input_path, input_key, output_folder, model_path,
@@ -271,8 +263,11 @@ def run_unet_prediction_slurm(
     os.makedirs(output_folder, exist_ok=True)
     prediction_instances = int(prediction_instances)
     slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
+
     if slurm_task_id is not None:
         slurm_task_id = int(slurm_task_id)
+    else:
+        raise ValueError("The SLURM_ARRAY_TASK_ID is not set. Ensure that you are using the '-a' option with SBATCH.")
 
     find_mask(input_path, input_key, output_folder)
 
