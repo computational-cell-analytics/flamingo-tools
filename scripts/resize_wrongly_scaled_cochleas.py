@@ -60,4 +60,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.input, args.output, args.scale, args.input_key, args.interpolation_order)
+    main(args.input_file, args.output_folder, args.scale, args.input_key, args.interpolation_order)
