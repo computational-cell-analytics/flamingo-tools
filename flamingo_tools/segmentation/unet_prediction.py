@@ -37,13 +37,13 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo):
+def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances=1, slurm_task_id=0):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if os.path.isdir(model_path):
             model = load_model(model_path)
         else:
-            model = torch.load(model_path)
+            model = torch.load(model_path, weights_only=False)
 
     mask_path = os.path.join(output_folder, "mask.zarr")
     image_mask = z5py.File(mask_path, "r")["mask"]
@@ -65,22 +65,24 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         input_ = ResizedVolume(input_, shape=new_shape, order=3)
         image_mask = ResizedVolume(image_mask, new_shape, order=0)
 
+    chunks  = (128, 128, 128)
+    block_shape = chunks
+
     have_cuda = torch.cuda.is_available()
-    if block_shape is None:
-        block_shape = tuple([2 * ch for ch in input_.chunks]) if have_cuda else input_.chunks
-    if halo is None:
-        halo = (16, 64, 64) if have_cuda else (16, 32, 32)
+    assert have_cuda
     if have_cuda:
         print("Predict with GPU")
         gpu_ids = [0]
     else:
         print("Predict with CPU")
         gpu_ids = ["cpu"]
+    if halo is None:
+        halo = (16, 32, 32)
 
     # Compute the global mean and standard deviation.
-    n_threads = min(16, mp.cpu_count())
+    n_threads = min(2, mp.cpu_count())
     mean, std = parallel.mean_and_std(
-        input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
+        input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
         mask=image_mask
     )
     print("Mean and standard deviation computed for the full volume:")
@@ -98,12 +100,24 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
         return x
 
+    shape = input_.shape
+    ndim = len(shape)
+
+    blocking = nt.blocking([0] * ndim, shape, block_shape)
+    n_blocks = blocking.numberOfBlocks
+    iteration_ids = []
+    if 1 != prediction_instances:
+        iteration_ids = [x.tolist() for x in np.array_split(list(range(n_blocks)), prediction_instances)]
+        slurm_iteration = iteration_ids[slurm_task_id]
+    else:
+        slurm_iteration = list(range(n_blocks))
+
     output_path = os.path.join(output_folder, "predictions.zarr")
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
             "prediction",
             shape=(3,) + input_.shape,
-            chunks=(1,) + block_shape,
+            chunks=(1,) + chunks,
             compression="gzip",
             dtype="float32",
         )
@@ -113,6 +127,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
             output=output, preprocess=preprocess, postprocess=postprocess,
             mask=image_mask,
+            iter_list=slurm_iteration,
         )
 
     return original_shape
@@ -228,14 +243,45 @@ def run_unet_prediction(
     output_folder, model_path,
     min_size, scale=None,
     block_shape=None, halo=None,
+    prediction_instances=1,
+):
+    if prediction_instances > 1:
+        run_unet_prediction_slurm(
+            input_path, input_key, output_folder, model_path,
+            scale=scale, block_shape=block_shape, halo=halo,
+            prediction_instances=prediction_instances,
+        )
+    else:
+        os.makedirs(output_folder, exist_ok=True)
+
+        find_mask(input_path, input_key, output_folder)
+
+        original_shape = prediction_impl(
+            input_path, input_key, output_folder, model_path, scale, block_shape, halo
+        )
+
+        pmap_out = os.path.join(output_folder, "predictions.zarr")
+        segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+
+def run_unet_prediction_slurm(
+    input_path, input_key, output_folder, model_path,
+    scale=None,
+    block_shape=None, halo=None, prediction_instances=1,
 ):
     os.makedirs(output_folder, exist_ok=True)
+    prediction_instances = int(prediction_instances)
+    slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
+    if slurm_task_id is not None:
+        slurm_task_id = int(slurm_task_id)
 
     find_mask(input_path, input_key, output_folder)
 
     original_shape = prediction_impl(
-        input_path, input_key, output_folder, model_path, scale, block_shape, halo
+        input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances, slurm_task_id
     )
 
+# does NOT need GPU, FIXME: only run on CPU
+def run_unet_segmentation_slurm(output_folder, min_size):
+    min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+    segmentation_impl(pmap_out, output_folder, min_size=min_size)

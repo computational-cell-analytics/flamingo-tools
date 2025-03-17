@@ -16,6 +16,7 @@ def main():
     parser.add_argument("-m", "--model", required=True)
     parser.add_argument("-k", "--input_key", default=None)
     parser.add_argument("-s", "--scale", default=None, type=float, help="Downscale the image by the given factor.")
+    parser.add_argument("-n", "--number_gpu", default=1, type=int, help="Number of GPUs to use in parallel.")
 
     args = parser.parse_args()
 
@@ -36,10 +37,13 @@ def main():
         block_shape = tuple([2 * ch for ch in chunks]) if have_cuda else tuple(chunks)
         halo = (16, 64, 64) if have_cuda else (8, 32, 32)
 
+    prediction_instances = args.number_gpu if have_cuda else 1
+
     run_unet_prediction(
         args.input, args.input_key, args.output_folder, args.model,
         scale=scale, min_size=min_size,
         block_shape=block_shape, halo=halo,
+        prediction_instances=prediction_instances,
     )
 
 
