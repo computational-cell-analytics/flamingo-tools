@@ -4,8 +4,11 @@ from glob import glob
 import h5py
 import imageio.v3 as imageio
 import napari
+import pandas as pd
 import zarr
 
+# from skimage.feature import blob_dog
+from skimage.feature import peak_local_max
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from train_synapse_detection import get_paths
@@ -34,10 +37,22 @@ def require_prediction(image_data, output_path):
     return pred
 
 
-def visualize_results(image_data, pred):
+def run_postprocessing(pred):
+    # print("Running local max ...")
+    # coords = blob_dog(pred)
+    coords = peak_local_max(pred, min_distance=2, threshold_abs=0.2)
+    # print("... done")
+    return coords
+
+
+def visualize_results(image_data, pred, coords=None, val_coords=None):
     v = napari.Viewer()
     v.add_image(image_data)
     v.add_image(pred)
+    if coords is None:
+        v.add_points(coords, name="predicted_synapses")
+    if val_coords is None:
+        v.add_points(val_coords, face_color="green", name="synapse_annotations")
     napari.run()
 
 
@@ -59,6 +74,7 @@ def check_new_images():
     output_folder = os.path.join(OUTPUT_ROOT, "new_crops")
     os.makedirs(output_folder, exist_ok=True)
     for path in tqdm(inputs):
+        print(path)
         name = os.path.basename(path)
         if name == "M_AMD_58L_avgblendfused_RibB.tif":
             continue
