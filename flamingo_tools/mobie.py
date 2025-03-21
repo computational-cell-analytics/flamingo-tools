@@ -51,7 +51,7 @@ def add_segmentation_to_mobie(
     source_name: str,
     segmentation_path: str,
     segmentation_key: str,
-    resolution: Tuple[int, int, int],
+    resolution: Tuple[float, float, float],
     unit: str,
     scale_factors: Tuple[Tuple[int, int, int]],
     chunks: Tuple[int, int, int],
