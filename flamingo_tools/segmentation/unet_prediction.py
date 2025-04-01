@@ -10,6 +10,7 @@ import nifty.tools as nt
 import vigra
 import torch
 import z5py
+import json
 
 from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
 from elf.wrapper.resized_volume import ResizedVolume
@@ -37,7 +38,7 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances=1, slurm_task_id=0):
+def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances=1, slurm_task_id=0, mean=None, std=None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if os.path.isdir(model_path):
@@ -79,12 +80,13 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
     if halo is None:
         halo = (16, 32, 32)
 
-    # Compute the global mean and standard deviation.
-    n_threads = min(16, mp.cpu_count())
-    mean, std = parallel.mean_and_std(
-        input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
-        mask=image_mask
-    )
+    if None == mean or None == std:
+        # Compute the global mean and standard deviation.
+        n_threads = min(16, mp.cpu_count())
+        mean, std = parallel.mean_and_std(
+            input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
+            mask=image_mask
+        )
     print("Mean and standard deviation computed for the full volume:")
     print(mean, std)
 
@@ -238,6 +240,30 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
                 tp.map(write_block, range(blocking.numberOfBlocks))
 
 
+def calc_mean_and_std(input_path, input_key, output_folder):
+    """
+    Calculate mean and standard deviation of full volume.
+    Parameters are saved in 'mean_std.json' within the output folder.
+    """
+    json_file = os.path.join(output_folder, "mean_std.json")
+    mask_path = os.path.join(output_folder, "mask.zarr")
+    image_mask = z5py.File(mask_path, "r")["mask"]
+
+    if input_key is None:
+        input_ = imageio.imread(input_path)
+    else:
+        input_ = open_file(input_path, "r")[input_key]
+
+    # Compute the global mean and standard deviation.
+    n_threads = min(16, mp.cpu_count())
+    mean, std = parallel.mean_and_std(
+        input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
+        mask=image_mask
+    )
+    ddict = {"mean":str(mean), "std": str(std)}
+    with open(json_file, "w") as f:
+        json.dump(ddict, f)
+
 def run_unet_prediction(
     input_path, input_key,
     output_folder, model_path,
@@ -255,6 +281,18 @@ def run_unet_prediction(
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
+def run_unet_prediction_slurm_preprocess(
+        input_path, input_key, output_folder,
+):
+    """
+    Pre-processing for the parallel prediction with U-Net models.
+    Masks are stored in mask.zarr in the output folder.
+    The mean and standard deviation are precomputed for later usage during prediction
+    and stored in a JSON file within the output folder as mean_std.json
+    """
+    find_mask(input_path, input_key, output_folder)
+    calc_mean_and_std(input_path, input_key, output_folder)
+
 def run_unet_prediction_slurm(
     input_path, input_key, output_folder, model_path,
     scale=None,
@@ -269,10 +307,21 @@ def run_unet_prediction_slurm(
     else:
         raise ValueError("The SLURM_ARRAY_TASK_ID is not set. Ensure that you are using the '-a' option with SBATCH.")
 
-    find_mask(input_path, input_key, output_folder)
+    if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
+        find_mask(input_path, input_key, output_folder)
+
+    # get pre-computed mean and standard deviation of full volume from JSON file
+    if os.path.isfile(os.path.join(output_folder, "mean_std.json")):
+        with open(os.path.join(output_folder, "mean_std.json")) as f:
+            d = json.load(f)
+            mean = float(d["mean"])
+            std = float(d["std"])
+    else:
+        mean = None
+        std = None
 
     original_shape = prediction_impl(
-        input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances, slurm_task_id
+        input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances, slurm_task_id, mean=mean, std=std
     )
 
 # does NOT need GPU, FIXME: only run on CPU
