@@ -1,7 +1,6 @@
 import os
 import argparse
 import numpy as np
-import h5py
 import z5py
 
 """
@@ -30,8 +29,6 @@ def main(input_file, output_dir, input_key, resolution, coords, roi_halo):
 
     if "" == output_dir:
         output_dir = input_dir
-
-    input_key = "setup0/timepoint0/s0"
 
     output_file = os.path.join(output_dir, basename + "_crop" + ".n5")
 

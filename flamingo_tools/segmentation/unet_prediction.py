@@ -19,6 +19,11 @@ from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
 
+"""
+Prediction using distance U-Net.
+Parallelization using multiple GPUs is currently only possible by calling functions directly.
+Functions for the parallelization end with '_slurm' and divide the process into preprocessing, prediction, and segmentation.
+"""
 
 class SelectChannel(SimpleTransformationWrapper):
     def __init__(self, volume, channel):
@@ -281,7 +286,9 @@ def run_unet_prediction(
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
-def run_unet_prediction_slurm_preprocess(
+#---Workflow for parallel prediction using slurm---
+
+def run_unet_prediction_preprocess_slurm(
         input_path, input_key, output_folder,
 ):
     """

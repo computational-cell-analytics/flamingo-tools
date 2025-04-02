@@ -1,2 +1,2 @@
-from .unet_prediction import run_unet_prediction, run_unet_prediction_slurm
+from .unet_prediction import run_unet_prediction
 from .postprocessing import filter_isolated_objects

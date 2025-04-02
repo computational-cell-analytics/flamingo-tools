@@ -6,9 +6,14 @@ import z5py
 
 sys.path.append("../..")
 
+"""
+Prediction using distance U-Net.
+Parallelization using multiple GPUs is currently only possible by calling functions located in segmentation/unet_prediction.py directly.
+Functions for the parallelization end with '_slurm' and divide the process into preprocessing, prediction, and segmentation.
+"""
 
 def main():
-    from flamingo_tools.segmentation import run_unet_prediction, run_unet_prediction_slurm
+    from flamingo_tools.segmentation import run_unet_prediction
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", required=True)
@@ -16,7 +21,6 @@ def main():
     parser.add_argument("-m", "--model", required=True)
     parser.add_argument("-k", "--input_key", default=None)
     parser.add_argument("-s", "--scale", default=None, type=float, help="Downscale the image by the given factor.")
-    parser.add_argument("-n", "--number_gpu", default=1, type=int, help="Number of GPUs to use in parallel.")
 
     args = parser.parse_args()
 
@@ -37,24 +41,11 @@ def main():
         block_shape = tuple([2 * ch for ch in chunks]) if have_cuda else tuple(chunks)
         halo = (16, 64, 64) if have_cuda else (8, 32, 32)
 
-    prediction_instances = args.number_gpu if have_cuda else 1
-
-    if 1 > prediction_instances:
-        # FIXME: only does prediction part, no segmentation yet
-        # FIXME: implement array job
-        run_unet_prediction_slurm(
-            args.input, args.input_key, args.output_folder, args.model,
-            scale=scale,
-            block_shape=block_shape, halo=halo,
-            prediction_instances=prediction_instances,
-        )
-    else:
-
-        run_unet_prediction(
-            args.input, args.input_key, args.output_folder, args.model,
-            scale=scale, min_size=min_size,
-            block_shape=block_shape, halo=halo,
-        )
+    run_unet_prediction(
+        args.input, args.input_key, args.output_folder, args.model,
+        scale=scale, min_size=min_size,
+        block_shape=block_shape, halo=halo,
+    )
 
 
 if __name__ == "__main__":
