@@ -73,11 +73,8 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
 
     have_cuda = torch.cuda.is_available()
 
-    if have_cuda:
-        chunks  = (128, 128, 128)
-
     if block_shape is None:
-        block_shape = chunks if have_cuda else input_.chunks
+        block_shape = (128, 128, 128) if have_cuda else input_.chunks
     if halo is None:
         halo = (16, 32, 32)
     if have_cuda:
@@ -91,7 +88,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         # Compute the global mean and standard deviation.
         n_threads = min(16, mp.cpu_count())
         mean, std = parallel.mean_and_std(
-            input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
+            input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
             mask=image_mask
         )
     print("Mean and standard deviation computed for the full volume:")
