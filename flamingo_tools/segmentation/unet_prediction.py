@@ -71,19 +71,21 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         input_ = ResizedVolume(input_, shape=new_shape, order=3)
         image_mask = ResizedVolume(image_mask, new_shape, order=0)
 
-    chunks  = (128, 128, 128)
-    block_shape = chunks
-
     have_cuda = torch.cuda.is_available()
-    assert have_cuda
+
+    if have_cuda:
+        chunks  = (128, 128, 128)
+
+    if block_shape is None:
+        block_shape = chunks if have_cuda else input_.chunks
+    if halo is None:
+        halo = (16, 32, 32)
     if have_cuda:
         print("Predict with GPU")
         gpu_ids = [0]
     else:
         print("Predict with CPU")
         gpu_ids = ["cpu"]
-    if halo is None:
-        halo = (16, 32, 32)
 
     if None == mean or None == std:
         # Compute the global mean and standard deviation.
@@ -124,7 +126,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         output = f.require_dataset(
             "prediction",
             shape=(3,) + input_.shape,
-            chunks=(1,) + chunks,
+            chunks=(1,) + block_shape,
             compression="gzip",
             dtype="float32",
         )
@@ -328,7 +330,9 @@ def run_unet_prediction_slurm(
         std = None
 
     original_shape = prediction_impl(
-        input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances, slurm_task_id, mean=mean, std=std
+        input_path, input_key, output_folder, model_path, scale, block_shape, halo,
+        prediction_instances=prediction_instances, slurm_task_id=slurm_task_id,
+        mean=mean, std=std,
     )
 
 # does NOT need GPU, FIXME: only run on CPU
