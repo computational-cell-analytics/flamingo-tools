@@ -6,6 +6,11 @@ import z5py
 
 sys.path.append("../..")
 
+"""
+Prediction using distance U-Net.
+Parallelization using multiple GPUs is currently only possible by calling functions located in segmentation/unet_prediction.py directly.
+Functions for the parallelization end with '_slurm' and divide the process into preprocessing, prediction, and segmentation.
+"""
 
 def main():
     from flamingo_tools.segmentation import run_unet_prediction

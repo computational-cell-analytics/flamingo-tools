@@ -10,6 +10,7 @@ import nifty.tools as nt
 import vigra
 import torch
 import z5py
+import json
 
 from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
 from elf.wrapper.resized_volume import ResizedVolume
@@ -18,6 +19,11 @@ from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
 
+"""
+Prediction using distance U-Net.
+Parallelization using multiple GPUs is currently only possible by calling functions directly.
+Functions for the parallelization end with '_slurm' and divide the process into preprocessing, prediction, and segmentation.
+"""
 
 class SelectChannel(SimpleTransformationWrapper):
     def __init__(self, volume, channel):
@@ -37,13 +43,13 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo):
+def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances=1, slurm_task_id=0, mean=None, std=None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if os.path.isdir(model_path):
             model = load_model(model_path)
         else:
-            model = torch.load(model_path)
+            model = torch.load(model_path, weights_only=False)
 
     mask_path = os.path.join(output_folder, "mask.zarr")
     image_mask = z5py.File(mask_path, "r")["mask"]
@@ -66,10 +72,11 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         image_mask = ResizedVolume(image_mask, new_shape, order=0)
 
     have_cuda = torch.cuda.is_available()
+
     if block_shape is None:
-        block_shape = tuple([2 * ch for ch in input_.chunks]) if have_cuda else input_.chunks
+        block_shape = (128, 128, 128) if have_cuda else input_.chunks
     if halo is None:
-        halo = (16, 64, 64) if have_cuda else (16, 32, 32)
+        halo = (16, 32, 32)
     if have_cuda:
         print("Predict with GPU")
         gpu_ids = [0]
@@ -77,12 +84,13 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         print("Predict with CPU")
         gpu_ids = ["cpu"]
 
-    # Compute the global mean and standard deviation.
-    n_threads = min(16, mp.cpu_count())
-    mean, std = parallel.mean_and_std(
-        input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
-        mask=image_mask
-    )
+    if mean is None or std is None:
+        # Compute the global mean and standard deviation.
+        n_threads = min(16, mp.cpu_count())
+        mean, std = parallel.mean_and_std(
+            input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
+            mask=image_mask
+        )
     print("Mean and standard deviation computed for the full volume:")
     print(mean, std)
 
@@ -97,6 +105,17 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
     def postprocess(x):
         x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
         return x
+
+    shape = input_.shape
+    ndim = len(shape)
+
+    blocking = nt.blocking([0] * ndim, shape, block_shape)
+    n_blocks = blocking.numberOfBlocks
+    if prediction_instances != 1:
+        iteration_ids = [x.tolist() for x in np.array_split(list(range(n_blocks)), prediction_instances)]
+        slurm_iteration = iteration_ids[slurm_task_id]
+    else:
+        slurm_iteration = list(range(n_blocks))
 
     output_path = os.path.join(output_folder, "predictions.zarr")
     with open_file(output_path, "a") as f:
@@ -113,6 +132,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
             output=output, preprocess=preprocess, postprocess=postprocess,
             mask=image_mask,
+            iter_list=slurm_iteration,
         )
 
     return original_shape
@@ -223,6 +243,30 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
                 tp.map(write_block, range(blocking.numberOfBlocks))
 
 
+def calc_mean_and_std(input_path, input_key, output_folder):
+    """
+    Calculate mean and standard deviation of full volume.
+    Parameters are saved in 'mean_std.json' within the output folder.
+    """
+    json_file = os.path.join(output_folder, "mean_std.json")
+    mask_path = os.path.join(output_folder, "mask.zarr")
+    image_mask = z5py.File(mask_path, "r")["mask"]
+
+    if input_key is None:
+        input_ = imageio.imread(input_path)
+    else:
+        input_ = open_file(input_path, "r")[input_key]
+
+    # Compute the global mean and standard deviation.
+    n_threads = min(16, mp.cpu_count())
+    mean, std = parallel.mean_and_std(
+        input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
+        mask=image_mask
+    )
+    ddict = {"mean":mean, "std":std}
+    with open(json_file, "w") as f:
+        json.dump(ddict, f)
+
 def run_unet_prediction(
     input_path, input_key,
     output_folder, model_path,
@@ -239,3 +283,56 @@ def run_unet_prediction(
 
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+
+#---Workflow for parallel prediction using slurm---
+
+def run_unet_prediction_preprocess_slurm(
+        input_path, input_key, output_folder,
+):
+    """
+    Pre-processing for the parallel prediction with U-Net models.
+    Masks are stored in mask.zarr in the output folder.
+    The mean and standard deviation are precomputed for later usage during prediction
+    and stored in a JSON file within the output folder as mean_std.json
+    """
+    find_mask(input_path, input_key, output_folder)
+    calc_mean_and_std(input_path, input_key, output_folder)
+
+def run_unet_prediction_slurm(
+    input_path, input_key, output_folder, model_path,
+    scale=None,
+    block_shape=None, halo=None, prediction_instances=1,
+):
+    os.makedirs(output_folder, exist_ok=True)
+    prediction_instances = int(prediction_instances)
+    slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
+
+    if slurm_task_id is not None:
+        slurm_task_id = int(slurm_task_id)
+    else:
+        raise ValueError("The SLURM_ARRAY_TASK_ID is not set. Ensure that you are using the '-a' option with SBATCH.")
+
+    if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
+        find_mask(input_path, input_key, output_folder)
+
+    # get pre-computed mean and standard deviation of full volume from JSON file
+    if os.path.isfile(os.path.join(output_folder, "mean_std.json")):
+        with open(os.path.join(output_folder, "mean_std.json")) as f:
+            d = json.load(f)
+            mean = float(d["mean"])
+            std = float(d["std"])
+    else:
+        mean = None
+        std = None
+
+    original_shape = prediction_impl(
+        input_path, input_key, output_folder, model_path, scale, block_shape, halo,
+        prediction_instances=prediction_instances, slurm_task_id=slurm_task_id,
+        mean=mean, std=std,
+    )
+
+# does NOT need GPU, FIXME: only run on CPU
+def run_unet_segmentation_slurm(output_folder, min_size):
+    min_size = int(min_size)
+    pmap_out = os.path.join(output_folder, "predictions.zarr")
+    segmentation_impl(pmap_out, output_folder, min_size=min_size)
