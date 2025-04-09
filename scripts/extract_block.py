@@ -1,10 +1,14 @@
 import os
+import sys
 import argparse
 import numpy as np
 import z5py
 import zarr
 
-import s3fs
+from inspect import getsourcefile
+
+sys.path.append(os.path.join(os.path.dirname(getsourcefile(lambda:0)), "prediction"))
+import upload_to_s3
 
 """
 This script extracts data around an input center coordinate in a given ROI halo.
@@ -18,7 +22,10 @@ export AWS_SECRET_ACCESS_KEY=<secret access key>
 """
 
 
-def main(input_file, output_dir, input_key, resolution, coords, roi_halo, s3):
+def main(
+    input_file, output_dir, coords, input_key, resolution, roi_halo,
+    s3, s3_credentials, s3_bucket_name, s3_service_endpoint,
+    ):
     """
 
     :param str input_file: File path to input folder in n5 format
@@ -28,6 +35,9 @@ def main(input_file, output_dir, input_key, resolution, coords, roi_halo, s3):
     :param str coords: Center coordinates of extracted 3D volume in format 'x,y,z'
     :param str roi_halo: ROI halo of extracted 3D volume in format 'x,y,z'
     :param bool s3: Flag for using an S3 bucket
+    :param str s3_credentials: Path to file containing S3 credentials
+    :param str s3_bucket_name: S3 bucket name. Optional if BUCKET_NAME has been exported
+    :param str s3_service_endpoint: S3 service endpoint. Optional if SERVICE_ENDPOINT has been exported
     """
 
     coords =  [int(r) for r in coords.split(",")]
@@ -61,33 +71,18 @@ def main(input_file, output_dir, input_key, resolution, coords, roi_halo, s3):
     roi = tuple(slice(co - rh, co + rh) for co, rh in zip(coords, roi_halo))
 
     if s3:
+        bucket_name, service_endpoint, credentials = upload_to_s3.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
 
-        # Define S3 bucket and OME-Zarr dataset path
+        s3_path, fs = upload_to_s3.get_s3_path(input_file, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
 
-        bucket_name = "cochlea-lightsheet"
-        zarr_path = f"{bucket_name}/{input_file}"
-
-        # Create an S3 filesystem
-        fs = s3fs.S3FileSystem(
-            client_kwargs={"endpoint_url": "https://s3.fs.gwdg.de"},
-            anon=False
-        )
-
-        if not fs.exists(zarr_path):
-            print("Error: Path does not exist!")
-
-        # Open the OME-Zarr dataset
-        store = zarr.storage.FSStore(zarr_path, fs=fs)
-        print(f"Opening file {zarr_path} from the S3 bucket.")
-
-        with zarr.open(store, mode="r") as f:
+        with zarr.open(s3_path, mode="r") as f:
             raw = f[input_key][roi]
 
     else:
-        with z5py.File(input_file, "r") as f:
+        with zarr.open(input_file, mode="r") as f:
             raw = f[input_key][roi]
 
-    with z5py.File(output_file, "w") as f_out:
+    with zarr.open(output_file, mode="w") as f_out:
         f_out.create_dataset("raw", data=raw, compression="gzip")
 
 if __name__ == "__main__":
@@ -103,8 +98,15 @@ if __name__ == "__main__":
     parser.add_argument('-r', "--resolution", type=float, default=0.38, help="Resolution of input in micrometer")
 
     parser.add_argument("--roi_halo", type=str, default="128,128,64", help="ROI halo around center coordinate in format 'x,y,z'")
+
     parser.add_argument("--s3", action="store_true", help="Use S3 bucket")
+    parser.add_argument("--s3_credentials", default=None, help="Input file containing S3 credentials")
+    parser.add_argument("--s3_bucket_name", default=None, help="S3 bucket name")
+    parser.add_argument("--s3_service_endpoint", default=None, help="S3 service endpoint")
 
     args = parser.parse_args()
 
-    main(args.input, args.output, args.input_key, args.resolution, args.coord, args.roi_halo, args.s3)
+    main(
+        args.input, args.output, args.coord, args.input_key, args.resolution, args.roi_halo,
+        args.s3, args.s3_credentials, args.s3_bucket_name, args.s3_service_endpoint,
+    )

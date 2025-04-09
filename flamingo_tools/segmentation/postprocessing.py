@@ -1,16 +1,55 @@
 import numpy as np
 import vigra
+import multiprocessing as mp
+from concurrent import futures
 
 from skimage import measure
 from scipy.spatial import distance
 from scipy.sparse import csr_matrix
+from tqdm import tqdm
 
+import elf.parallel as parallel
+from elf.io import open_file
+import nifty.tools as nt
 
-def filter_isolated_objects(segmentation, distance_threshold=15, neighbor_threshold=5):
-    segmentation, n_ids, _ = vigra.analysis.relabelConsecutive(segmentation, start_label=1, keep_zeros=True)
+def filter_isolated_objects(
+        segmentation, output_path, tsv_table=None,
+        distance_threshold=15, neighbor_threshold=5, min_size=1000,
+        output_key="segmentation_postprocessed",
+        ):
+    """
+    Postprocessing step to filter isolated objects from a segmentation.
+    Instance segmentations are filtered if they have fewer neighbors than a given threshold in a given distance around them.
+    Additionally, size filtering is possible if a TSV file is supplied.
 
-    props = measure.regionprops(segmentation)
-    coordinates = np.array([prop.centroid for prop in props])
+    :param dataset segmentation: Dataset containing the segmentation
+    :param str out_path: Output path for postprocessed segmentation
+    :param str tsv_file: Optional TSV file containing segmentation parameters in MoBIE format
+    :param int distance_threshold: Distance in micrometer to check for neighbors
+    :param int neighbor_threshold: Minimal number of neighbors for filtering
+    :param int min_size: Minimal number of pixels for filtering small instances
+    :param str output_key: Output key for postprocessed segmentation
+    """
+    if tsv_table is not None:
+        n_pixels = tsv_table["n_pixels"].to_list()
+        label_ids = tsv_table["label_id"].to_list()
+        centroids = list(zip(tsv_table["anchor_x"], tsv_table["anchor_y"], tsv_table["anchor_z"]))
+        n_ids = len(label_ids)
+
+        # filter out cells smaller than min_size
+        if min_size is not None:
+            min_size_label_ids = [l for (l,n) in zip(label_ids, n_pixels) if n <= min_size]
+            centroids = [c for (c,l) in zip(centroids, label_ids) if l not in min_size_label_ids]
+            label_ids = [int(l) for l in label_ids if l not in min_size_label_ids]
+
+        coordinates = np.array(centroids)
+        label_ids = np.array(label_ids)
+
+    else:
+        segmentation, n_ids, _ = vigra.analysis.relabelConsecutive(segmentation[:], start_label=1, keep_zeros=True)
+        props = measure.regionprops(segmentation)
+        coordinates = np.array([prop.centroid for prop in props])
+        label_ids = np.unique(segmentation)[1:]
 
     # Calculate pairwise distances and convert to a square matrix
     dist_matrix = distance.pdist(coordinates)
@@ -22,13 +61,38 @@ def filter_isolated_objects(segmentation, distance_threshold=15, neighbor_thresh
     # Sum each row to count neighbors
     neighbor_counts = sparse_matrix.sum(axis=1)
 
-    seg_ids = np.unique(segmentation)[1:]
     filter_mask = np.array(neighbor_counts < neighbor_threshold).squeeze()
-    filter_ids = seg_ids[filter_mask]
+    filter_ids = label_ids[filter_mask]
 
-    seg_filtered = segmentation.copy()
-    seg_filtered[np.isin(seg_filtered, filter_ids)] = 0
+    shape = segmentation.shape
+    block_shape=(128,128,128)
+    chunks=(128,128,128)
 
-    seg_filtered, n_ids_filtered, _ = vigra.analysis.relabelConsecutive(seg_filtered, start_label=1, keep_zeros=True)
+    blocking = nt.blocking([0] * len(shape), shape, block_shape)
+
+    output = open_file(output_path, mode="a")
+
+    output_dataset = output.create_dataset(
+        output_key, shape=shape, dtype=segmentation.dtype,
+        chunks=chunks, compression="gzip"
+    )
+
+    def filter_chunk(block_id):
+        """
+        Set all points within a chunk to zero if they match filter IDs.
+        """
+        block = blocking.getBlock(block_id)
+        volume_index = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
+        data = segmentation[volume_index]
+        data[np.isin(data, filter_ids)] = 0
+        output_dataset[volume_index] = data
+
+    # Limit the number of cores for parallelization.
+    n_threads = min(16, mp.cpu_count())
+
+    with futures.ThreadPoolExecutor(n_threads) as filter_pool:
+        list(tqdm(filter_pool.map(filter_chunk, range(blocking.numberOfBlocks)), total=blocking.numberOfBlocks))
+
+    seg_filtered, n_ids_filtered, _ = parallel.relabel_consecutive(output_dataset, start_label=1, keep_zeros=True, block_shape=(128,128,128))
 
     return seg_filtered, n_ids, n_ids_filtered
