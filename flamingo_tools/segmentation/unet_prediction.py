@@ -84,7 +84,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         print("Predict with CPU")
         gpu_ids = ["cpu"]
 
-    if None == mean or None == std:
+    if mean is None or std is None:
         # Compute the global mean and standard deviation.
         n_threads = min(16, mp.cpu_count())
         mean, std = parallel.mean_and_std(
@@ -111,8 +111,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
 
     blocking = nt.blocking([0] * ndim, shape, block_shape)
     n_blocks = blocking.numberOfBlocks
-    iteration_ids = []
-    if 1 != prediction_instances:
+    if prediction_instances != 1:
         iteration_ids = [x.tolist() for x in np.array_split(list(range(n_blocks)), prediction_instances)]
         slurm_iteration = iteration_ids[slurm_task_id]
     else:
@@ -264,7 +263,7 @@ def calc_mean_and_std(input_path, input_key, output_folder):
         input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
         mask=image_mask
     )
-    ddict = {"mean":str(mean), "std": str(std)}
+    ddict = {"mean":mean, "std":std}
     with open(json_file, "w") as f:
         json.dump(ddict, f)
 
