@@ -60,11 +60,14 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
 
     if input_key is None:
         input_ = imageio.imread(input_path)
+        chunks = (64, 64, 64)
     elif s3 is not None:
         with zarr.open(input_path, mode="r") as f:
             input_ = f[input_key]
+        chunks = input_.chunks()
     else:
         input_ = open_file(input_path, "r")[input_key]
+        chunks = (64, 64, 64)
 
     if scale is None or scale == 1:
         original_shape = None
@@ -95,7 +98,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         # Compute the global mean and standard deviation.
         n_threads = min(16, mp.cpu_count())
         mean, std = parallel.mean_and_std(
-            input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
+            input_, block_shape=tuple([2* i for i in chunks]), n_threads=n_threads, verbose=True,
             mask=image_mask
         )
     print("Mean and standard deviation computed for the full volume:")
@@ -163,7 +166,7 @@ def find_mask(input_path, input_key, output_folder, s3=None):
     else:
         fin = open_file(input_path, "r")
         raw = fin[input_key]
-        chunks = raw.chunks
+        chunks = (64, 64, 64)
 
     block_shape = tuple(2 * ch for ch in chunks)
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
