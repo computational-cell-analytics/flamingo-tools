@@ -23,5 +23,9 @@ def main():
     s3_utils.upload_data()
 
 
+def remote_metadata():
+    add_remote_project_metadata(MOBIE_FOLDER, BUCKET_NAME, SERVICE_ENDPOINT)
+
+
 if __name__ == "__main__":
     main()

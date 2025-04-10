@@ -3,7 +3,6 @@ import os
 import s3fs
 import zarr
 
-from mobie.metadata import add_remote_project_metadata
 from tqdm import tqdm
 
 # Using incucyte s3 as a temporary measure.
@@ -85,10 +84,6 @@ def create_s3_target(url, anon=False, credential_file=None):
     else:
         fs = s3fs.S3FileSystem(anon=anon, client_kwargs=client_kwargs)
     return fs
-
-
-def remote_metadata():
-    add_remote_project_metadata(MOBIE_FOLDER, BUCKET_NAME, SERVICE_ENDPOINT)
 
 
 def upload_data():
