@@ -7,10 +7,37 @@ from skimage import measure
 from scipy.spatial import distance
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
+from sklearn.neighbors import NearestNeighbors
 
 import elf.parallel as parallel
 from elf.io import open_file
 import nifty.tools as nt
+
+def distance_nearest_neighbors(tsv_table, n_neighbors=10, expand_table=True):
+    """
+    Calculate average distance of n nearest neighbors.
+
+    :param DataFrame tsv_table:
+    :param int n_neighbors: Number of nearest neighbors
+    :param bool expand_table: Flag for expanding DataFrame
+    :returns: List of average distances
+    :rtype: list
+    """
+    centroids = list(zip(tsv_table["anchor_x"], tsv_table["anchor_y"], tsv_table["anchor_z"]))
+
+    coordinates = np.array(centroids)
+
+    # nearest neighbor is always itself, so n_neighbors+=1
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors+1).fit(coordinates)
+    distances, indices = nbrs.kneighbors(coordinates)
+
+    # Average distance to nearest neighbors
+    distance_avg = [sum(d) / len(d) for d in distances[:, 1:]]
+
+    if expand_table:
+        tsv_table['distance_nn'+str(n_neighbors)] = distance_avg
+
+    return distance_avg
 
 def filter_isolated_objects(
         segmentation, output_path, tsv_table=None,
