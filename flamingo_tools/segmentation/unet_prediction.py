@@ -20,10 +20,8 @@ from elf.io import open_file
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
-from inspect import getsourcefile
 
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(getsourcefile(lambda:0)))), "scripts", "prediction"))
-import upload_to_s3
+import flamingo_tools.s3_utils as s3_utils
 
 """
 Prediction using distance U-Net.
@@ -97,7 +95,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         # Compute the global mean and standard deviation.
         n_threads = min(16, mp.cpu_count())
         mean, std = parallel.mean_and_std(
-            input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
+            input_, block_shape=tuple([2* i for i in input_.chunks]), n_threads=n_threads, verbose=True,
             mask=image_mask
         )
     print("Mean and standard deviation computed for the full volume:")
@@ -317,9 +315,9 @@ def run_unet_prediction_preprocess_slurm(
     and stored in a JSON file within the output folder as mean_std.json.
     """
     if s3 is not None:
-        bucket_name, service_endpoint, credentials = upload_to_s3.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
+        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
 
-        input_path, fs = upload_to_s3.get_s3_path(input_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
         find_mask(input_path, input_key, output_folder, s3=s3)
@@ -354,9 +352,9 @@ def run_unet_prediction_slurm(
     slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
 
     if s3 is not None:
-        bucket_name, service_endpoint, credentials = upload_to_s3.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
+        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
 
-        input_path, fs = upload_to_s3.get_s3_path(input_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
 
     if slurm_task_id is not None:
         slurm_task_id = int(slurm_task_id)
