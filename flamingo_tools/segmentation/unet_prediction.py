@@ -12,6 +12,7 @@ import vigra
 import torch
 import z5py
 import zarr
+import tifffile
 import json
 
 from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
@@ -59,15 +60,18 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
     image_mask = z5py.File(mask_path, "r")["mask"]
 
     if input_key is None:
-        input_ = imageio.imread(input_path)
-        chunks = (64, 64, 64)
-    elif s3 is not None:
+        try:
+            input_ = tifffile.memmap(input_path, mode="r")
+        except ValueError:
+            print(f"Could not memmap the data from {input_path}. Fall back to load it into memory.")
+            input_ = imageio.imread(input_path)
+    elif isinstance(input_path, str):
+        input_ = open_file(input_path, "r")[input_key]
+    else:
         with zarr.open(input_path, mode="r") as f:
             input_ = f[input_key]
-        chunks = input_.chunks()
-    else:
-        input_ = open_file(input_path, "r")[input_key]
-        chunks = (64, 64, 64)
+
+    chunks = getattr(input_, "chunks", (64,64,64))
 
     if scale is None or scale == 1:
         original_shape = None
@@ -157,16 +161,19 @@ def find_mask(input_path, input_key, output_folder, s3=None):
         return
 
     if input_key is None:
-        raw = imageio.imread(input_path)
-        chunks = (64, 64, 64)
-    elif s3 is not None:
-        with zarr.open(input_path, mode="r") as fin:
-            raw = fin[input_key]
-        chunks = raw.chunks
-    else:
+        try:
+            raw = tifffile.memmap(input_path, mode="r")
+        except ValueError:
+            print(f"Could not memmap the data from {input_path}. Fall back to load it into memory.")
+            raw = imageio.imread(input_path)
+    elif isinstance(input_path, str):
         fin = open_file(input_path, "r")
         raw = fin[input_key]
-        chunks = (64, 64, 64)
+    else:
+        with zarr.open(input_path, mode="r") as fin:
+            raw = fin[input_key]
+
+    chunks = getattr(raw, "chunks", (64,64,64))
 
     block_shape = tuple(2 * ch for ch in chunks)
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
@@ -318,9 +325,7 @@ def run_unet_prediction_preprocess_slurm(
     and stored in a JSON file within the output folder as mean_std.json.
     """
     if s3 is not None:
-        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
-
-        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
         find_mask(input_path, input_key, output_folder, s3=s3)
@@ -355,9 +360,7 @@ def run_unet_prediction_slurm(
     slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
 
     if s3 is not None:
-        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
-
-        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
 
     if slurm_task_id is not None:
         slurm_task_id = int(slurm_task_id)

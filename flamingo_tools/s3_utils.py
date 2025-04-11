@@ -3,49 +3,74 @@ import os
 import s3fs
 import zarr
 
-from tqdm import tqdm
+"""
+This script contains utility functions for processing data located on an S3 storage.
+The upload of data to the storage system should be performed with 'rclone'.
+"""
 
-# Using incucyte s3 as a temporary measure.
-MOBIE_FOLDER = "/mnt/lustre-emmy-hdd/projects/nim00007/data/moser/lightsheet/mobie"
+# Dedicated bucket for cochlea lightsheet project
+MOBIE_FOLDER = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet"
 SERVICE_ENDPOINT = "https://s3.gwdg.de/"
-BUCKET_NAME = "incucyte-general/lightsheet"
+BUCKET_NAME = "cochlea-lightsheet"
+
+DEFAULT_CREDENTIALS = os.path.expanduser("~/.aws/credentials")
 
 # For MoBIE:
 # https://s3.gwdg.de/incucyte-general/lightsheet
 
-def check_s3_credentials(bucket_name, service_endpoint, credentials):
+def check_s3_credentials(bucket_name, service_endpoint, credential_file):
     """
     Check if S3 parameter and credentials were set either as a function input or were exported as environment variables.
     """
     if bucket_name is None:
         bucket_name = os.getenv('BUCKET_NAME')
         if bucket_name is None:
-            raise ValueError("Provide a bucket name for accessing S3 data.\nEither by using an optional argument or exporting an environment variable:\n--s3_bucket_name <bucket_name>\nexport BUCKET_NAME=<bucket_name>")
+            if BUCKET_NAME in globals():
+                bucket_name = BUCKET_NAME
+            else:
+                raise ValueError("Provide a bucket name for accessing S3 data.\nEither by using an optional argument or exporting an environment variable:\n--s3_bucket_name <bucket_name>\nexport BUCKET_NAME=<bucket_name>")
 
     if service_endpoint is None:
         service_endpoint = os.getenv('SERVICE_ENDPOINT')
         if service_endpoint is None:
-            raise ValueError("Provide a service endpoint for accessing S3 data.\nEither by using an optional argument or exporting an environment variable:\n--s3_service_endpoint <endpoint>\nexport SERVICE_ENDPOINT=<endpoint>")
+            if SERVICE_ENDPOINT in globals():
+                service_endpoint = SERVICE_ENDPOINT
+            else:
+                raise ValueError("Provide a service endpoint for accessing S3 data.\nEither by using an optional argument or exporting an environment variable:\n--s3_service_endpoint <endpoint>\nexport SERVICE_ENDPOINT=<endpoint>")
 
-    if credentials is None:
+    if credential_file is None:
         access_key = os.getenv('AWS_ACCESS_KEY_ID')
         secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+
+        # check for default credentials if no credential_file is provided
         if access_key is None:
-            raise ValueError("Either provide a credential file as an optional argument or export an access key as an environment variable:\nexport AWS_ACCESS_KEY_ID=<access_key>")
+            if os.path.isfile(DEFAULT_CREDENTIALS):
+                access_key, _ = read_s3_credentials(credential_file=DEFAULT_CREDENTIALS)
+            else:
+                raise ValueError(f"Either provide a credential file as an optional argument, have credentials at '{DEFAULT_CREDENTIALS}', or export an access key as an environment variable:\nexport AWS_ACCESS_KEY_ID=<access_key>")
         if secret_key is None:
-            raise ValueError("Either provide a credential file as an optional argument or export a secret access key as an environment variable:\nexport AWS_SECRET_ACCESS_KEY=<secret_key>")
+            # check for default credentials
+            if os.path.isfile(DEFAULT_CREDENTIALS):
+                _, secret_key = read_s3_credentials(credential_file=DEFAULT_CREDENTIALS)
+            else:
+                raise ValueError(f"Either provide a credential file as an optional argument, have credentials at '{DEFAULT_CREDENTIALS}', or export a secret access key as an environment variable:\nexport AWS_SECRET_ACCESS_KEY=<secret_key>")
 
-    return bucket_name, service_endpoint, credentials
+    else:
+        # check validity of credential file
+        _, _ = read_s3_credentials(credential_file=credential_file)
 
+    return bucket_name, service_endpoint, credential_file
 
 def get_s3_path(
     input_path,
-    bucket_name, service_endpoint,
+    bucket_name=None, service_endpoint=None,
     credential_file=None,
 ):
     """
     Get S3 path for a file or folder and file system based on S3 parameters and credentials.
     """
+    bucket_name, service_endpoint, credential_file = check_s3_credentials(bucket_name, service_endpoint, credential_file)
+
     fs = create_s3_target(url=service_endpoint, anon=False, credential_file=credential_file)
 
     zarr_path=f"{bucket_name}/{input_path}"
@@ -84,24 +109,3 @@ def create_s3_target(url, anon=False, credential_file=None):
     else:
         fs = s3fs.S3FileSystem(anon=anon, client_kwargs=client_kwargs)
     return fs
-
-
-def upload_data():
-    target = create_s3_target(
-        SERVICE_ENDPOINT,
-        credential_file="./credentials.incucyte"
-    )
-    to_upload = []
-    for root, dirs, files in os.walk(MOBIE_FOLDER):
-        dirs.sort()
-        for ff in files:
-            if ff.endswith(".xml"):
-                to_upload.append(os.path.join(root, ff))
-
-    print("Uploading", len(to_upload), "files to")
-
-    for path in tqdm(to_upload):
-        rel_path = os.path.relpath(path, MOBIE_FOLDER)
-        target.put(
-            path, os.path.join(BUCKET_NAME, rel_path)
-        )

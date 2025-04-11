@@ -37,14 +37,12 @@ def main():
     tsv_table=None
 
     if args.s3_input is not None:
-        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(args.s3_bucket_name, args.s3_service_endpoint, args.s3_credentials)
-
-        s3_path, fs = s3_utils.get_s3_path(args.s3_input, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        s3_path, fs = s3_utils.get_s3_path(args.s3_input, bucket_name=args.s3_bucket_name, service_endpoint=args.s3_service_endpoint, credential_file=args.s3_credentials)
         with zarr.open(s3_path, mode="r") as f:
             segmentation = f[args.input_key]
 
         if args.tsv is not None:
-            tsv_path, fs = s3_utils.get_s3_path(args.tsv, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+            tsv_path, fs = s3_utils.get_s3_path(args.tsv, bucket_name=args.s3_bucket_name, service_endpoint=args.s3_service_endpoint, credential_file=args.s3_credentials)
             with fs.open(tsv_path, 'r') as f:
                 tsv_table = pd.read_csv(f, sep="\t")
 

@@ -19,8 +19,7 @@ def main(
     :param str s3_service_endpoint: S3 service endpoint. Optional if SERVICE_ENDPOINT has been exported
     """
     if s3:
-        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
-        tsv_path, fs = s3_utils.get_s3_path(in_path, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        tsv_path, fs = s3_utils.get_s3_path(in_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
         with fs.open(tsv_path, 'r') as f:
             tsv_table = pd.read_csv(f, sep="\t")
     else:

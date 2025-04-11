@@ -28,9 +28,7 @@ def main():
         raise ValueError("Either provide an output_folder containing 'segmentation.zarr' or an S3 input.")
 
     if args.s3_input is not None:
-        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(args.s3_bucket_name, args.s3_service_endpoint, args.s3_credentials)
-
-        s3_path, fs = s3_utils.get_s3_path(args.s3_input, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        s3_path, fs = s3_utils.get_s3_path(args.s3_input, bucket_name=args.s3_bucket_name, service_endpoint=args.s3_service_endpoint, credential_file=args.s3_credentials)
         with zarr.open(s3_path, mode="r") as f:
             dataset = f[args.input_key]
 

@@ -66,9 +66,7 @@ def main(
     roi = tuple(slice(co - rh, co + rh) for co, rh in zip(coords, roi_halo))
 
     if s3:
-        bucket_name, service_endpoint, credentials = s3_utils.check_s3_credentials(s3_bucket_name, s3_service_endpoint, s3_credentials)
-
-        s3_path, fs = s3_utils.get_s3_path(input_file, bucket_name=bucket_name, service_endpoint=service_endpoint, credential_file=credentials)
+        s3_path, fs = s3_utils.get_s3_path(input_file, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
 
         with zarr.open(s3_path, mode="r") as f:
             raw = f[input_key][roi]
