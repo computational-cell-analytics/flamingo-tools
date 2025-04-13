@@ -8,6 +8,7 @@ import elf.parallel as parallel
 import numpy as np
 import nifty.tools as nt
 import vigra
+import tifffile
 import torch
 import z5py
 
@@ -37,7 +38,10 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo):
+def prediction_impl(
+    input_path, input_key, output_folder, model_path, scale, block_shape, halo,
+    output_channels=3, apply_postprocessing=True,
+):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if os.path.isdir(model_path):
@@ -46,10 +50,16 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
             model = torch.load(model_path)
 
     mask_path = os.path.join(output_folder, "mask.zarr")
-    image_mask = z5py.File(mask_path, "r")["mask"]
+    if os.path.exists(mask_path):
+        image_mask = z5py.File(mask_path, "r")["mask"]
+    else:
+        image_mask = None
 
     if input_key is None:
-        input_ = imageio.imread(input_path)
+        try:
+            input_ = tifffile.memmap(input_path)
+        except Exception:
+            input_ = imageio.imread(input_path)
     else:
         input_ = open_file(input_path, "r")[input_key]
 
@@ -93,17 +103,27 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         raw /= std
         return raw
 
-    # Smooth the distance prediction channel.
-    def postprocess(x):
-        x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
-        return x
+    if apply_postprocessing:
+        # Smooth the distance prediction channel.
+        def postprocess(x):
+            x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
+            return x
+    else:
+        postprocess = None if output_channels > 1 else lambda x: x.squeeze()
+
+    if output_channels > 1:
+        output_shape = (output_channels,) + input_.shape
+        output_chunks = (1,) + block_shape
+    else:
+        output_shape = input_.shape
+        output_chunks = block_shape
 
     output_path = os.path.join(output_folder, "predictions.zarr")
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
             "prediction",
-            shape=(3,) + input_.shape,
-            chunks=(1,) + block_shape,
+            shape=output_shape,
+            chunks=output_chunks,
             compression="gzip",
             dtype="float32",
         )
