@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import sys
 import warnings
 from concurrent import futures
 
@@ -10,6 +11,8 @@ import nifty.tools as nt
 import vigra
 import torch
 import z5py
+import zarr
+import tifffile
 import json
 
 from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
@@ -18,6 +21,8 @@ from elf.io import open_file
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
+
+import flamingo_tools.s3_utils as s3_utils
 
 """
 Prediction using distance U-Net.
@@ -43,7 +48,7 @@ class SelectChannel(SimpleTransformationWrapper):
         return self._volume.ndim - 1
 
 
-def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances=1, slurm_task_id=0, mean=None, std=None):
+def prediction_impl(input_path, input_key, output_folder, model_path, scale, block_shape, halo, prediction_instances=1, slurm_task_id=0, mean=None, std=None, s3=None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if os.path.isdir(model_path):
@@ -55,9 +60,18 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
     image_mask = z5py.File(mask_path, "r")["mask"]
 
     if input_key is None:
-        input_ = imageio.imread(input_path)
-    else:
+        try:
+            input_ = tifffile.memmap(input_path, mode="r")
+        except ValueError:
+            print(f"Could not memmap the data from {input_path}. Fall back to load it into memory.")
+            input_ = imageio.imread(input_path)
+    elif isinstance(input_path, str):
         input_ = open_file(input_path, "r")[input_key]
+    else:
+        with zarr.open(input_path, mode="r") as f:
+            input_ = f[input_key]
+
+    chunks = getattr(input_, "chunks", (64,64,64))
 
     if scale is None or scale == 1:
         original_shape = None
@@ -88,7 +102,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
         # Compute the global mean and standard deviation.
         n_threads = min(16, mp.cpu_count())
         mean, std = parallel.mean_and_std(
-            input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
+            input_, block_shape=tuple([2* i for i in chunks]), n_threads=n_threads, verbose=True,
             mask=image_mask
         )
     print("Mean and standard deviation computed for the full volume:")
@@ -138,7 +152,7 @@ def prediction_impl(input_path, input_key, output_folder, model_path, scale, blo
     return original_shape
 
 
-def find_mask(input_path, input_key, output_folder):
+def find_mask(input_path, input_key, output_folder, s3=None):
     mask_path = os.path.join(output_folder, "mask.zarr")
     f = z5py.File(mask_path, "a")
 
@@ -147,12 +161,19 @@ def find_mask(input_path, input_key, output_folder):
         return
 
     if input_key is None:
-        raw = imageio.imread(input_path)
-        chunks = (64, 64, 64)
-    else:
+        try:
+            raw = tifffile.memmap(input_path, mode="r")
+        except ValueError:
+            print(f"Could not memmap the data from {input_path}. Fall back to load it into memory.")
+            raw = imageio.imread(input_path)
+    elif isinstance(input_path, str):
         fin = open_file(input_path, "r")
         raw = fin[input_key]
-        chunks = raw.chunks
+    else:
+        with zarr.open(input_path, mode="r") as fin:
+            raw = fin[input_key]
+
+    chunks = getattr(raw, "chunks", (64,64,64))
 
     block_shape = tuple(2 * ch for ch in chunks)
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
@@ -243,7 +264,10 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
                 tp.map(write_block, range(blocking.numberOfBlocks))
 
 
-def calc_mean_and_std(input_path, input_key, output_folder):
+def calc_mean_and_std(
+    input_path, input_key, output_folder,
+    s3=None,
+    ):
     """
     Calculate mean and standard deviation of full volume.
     Parameters are saved in 'mean_std.json' within the output folder.
@@ -254,6 +278,9 @@ def calc_mean_and_std(input_path, input_key, output_folder):
 
     if input_key is None:
         input_ = imageio.imread(input_path)
+    elif s3 is not None:
+        with zarr.open(input_path, mode="r") as f:
+            input_ = f[input_key]
     else:
         input_ = open_file(input_path, "r")[input_key]
 
@@ -266,6 +293,7 @@ def calc_mean_and_std(input_path, input_key, output_folder):
     ddict = {"mean":mean, "std":std}
     with open(json_file, "w") as f:
         json.dump(ddict, f)
+
 
 def run_unet_prediction(
     input_path, input_key,
@@ -288,24 +316,51 @@ def run_unet_prediction(
 
 def run_unet_prediction_preprocess_slurm(
         input_path, input_key, output_folder,
+        s3=None, s3_bucket_name=None, s3_service_endpoint=None, s3_credentials=None,
 ):
     """
     Pre-processing for the parallel prediction with U-Net models.
     Masks are stored in mask.zarr in the output folder.
     The mean and standard deviation are precomputed for later usage during prediction
-    and stored in a JSON file within the output folder as mean_std.json
+    and stored in a JSON file within the output folder as mean_std.json.
     """
-    find_mask(input_path, input_key, output_folder)
-    calc_mean_and_std(input_path, input_key, output_folder)
+    if s3 is not None:
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
+
+    if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
+        find_mask(input_path, input_key, output_folder, s3=s3)
+
+    calc_mean_and_std(input_path, input_key, output_folder, s3=s3)
+
 
 def run_unet_prediction_slurm(
     input_path, input_key, output_folder, model_path,
     scale=None,
     block_shape=None, halo=None, prediction_instances=1,
+    s3=None, s3_bucket_name=None, s3_service_endpoint=None, s3_credentials=None,
 ):
+    """
+    Run prediction of distance U-Net for data stored locally or on an S3 bucket.
+
+    :param str input_path: File path to input data
+    :param str input_key: Input key for data in ome.zarr format
+    :param str output_folder: Output folder for prediction.zarr
+    :param str model_path: File path to distance U-Net model
+    :param float scale:
+    :param tuple block_shape:
+    :param tuple halo:
+    :param int prediction_instances: Number of workers for parallel computation within slurm array
+    :param bool s3: Flag for accessing data on S3 bucket
+    :param str s3_bucket_name: S3 bucket name. Optional if BUCKET_NAME has been exported
+    :param str s3_service_endpoint: S3 service endpoint. Optional if SERVICE_ENDPOINT has been exported
+    :param str s3_credentials: Path to file containing S3 credentials
+    """
     os.makedirs(output_folder, exist_ok=True)
     prediction_instances = int(prediction_instances)
     slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
+
+    if s3 is not None:
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
 
     if slurm_task_id is not None:
         slurm_task_id = int(slurm_task_id)
@@ -313,7 +368,7 @@ def run_unet_prediction_slurm(
         raise ValueError("The SLURM_ARRAY_TASK_ID is not set. Ensure that you are using the '-a' option with SBATCH.")
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
-        find_mask(input_path, input_key, output_folder)
+        find_mask(input_path, input_key, output_folder, s3=s3)
 
     # get pre-computed mean and standard deviation of full volume from JSON file
     if os.path.isfile(os.path.join(output_folder, "mean_std.json")):
@@ -328,8 +383,9 @@ def run_unet_prediction_slurm(
     original_shape = prediction_impl(
         input_path, input_key, output_folder, model_path, scale, block_shape, halo,
         prediction_instances=prediction_instances, slurm_task_id=slurm_task_id,
-        mean=mean, std=std,
+        mean=mean, std=std, s3=s3,
     )
+
 
 # does NOT need GPU, FIXME: only run on CPU
 def run_unet_segmentation_slurm(output_folder, min_size):
