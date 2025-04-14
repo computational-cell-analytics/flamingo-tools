@@ -5,7 +5,15 @@ from skimage.data import binary_blobs
 
 
 # TODO add metadata
-def create_test_data(root, size=256, n_channels=2, n_tiles=4):
+def create_test_data(root: str, size: int = 256, n_channels: int = 2, n_tiles: int = 4) -> None:
+    """Create test data in the flamingo data format.
+
+    Args:
+        root: Directory for saving the data.
+        size: The axis length for the data.
+        n_channels The number of channels to create:
+        n_tiles: The number of tiles to create.
+    """
     channel_folders = [f"channel{chan_id}" for chan_id in range(n_channels)]
     file_name_pattern = "volume_R%i_C%i_I0.tif"
     for chan_id, channel_folder in enumerate(channel_folders):
