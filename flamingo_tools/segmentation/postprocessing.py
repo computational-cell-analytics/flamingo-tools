@@ -13,9 +13,9 @@ import elf.parallel as parallel
 from elf.io import open_file
 import nifty.tools as nt
 
+
 def distance_nearest_neighbors(tsv_table, n_neighbors=10, expand_table=True):
-    """
-    Calculate average distance of n nearest neighbors.
+    """Calculate average distance of n nearest neighbors.
 
     :param DataFrame tsv_table:
     :param int n_neighbors: Number of nearest neighbors
@@ -39,14 +39,16 @@ def distance_nearest_neighbors(tsv_table, n_neighbors=10, expand_table=True):
 
     return distance_avg
 
+
 def filter_isolated_objects(
-        segmentation, output_path, tsv_table=None,
-        distance_threshold=15, neighbor_threshold=5, min_size=1000,
-        output_key="segmentation_postprocessed",
-        ):
-    """
-    Postprocessing step to filter isolated objects from a segmentation.
-    Instance segmentations are filtered if they have fewer neighbors than a given threshold in a given distance around them.
+    segmentation, output_path, tsv_table=None,
+    distance_threshold=15, neighbor_threshold=5, min_size=1000,
+    output_key="segmentation_postprocessed",
+):
+    """Postprocessing step to filter isolated objects from a segmentation.
+
+    Instance segmentations are filtered if they have fewer neighbors
+    than a given threshold in a given distance around them.
     Additionally, size filtering is possible if a TSV file is supplied.
 
     :param dataset segmentation: Dataset containing the segmentation
@@ -65,9 +67,9 @@ def filter_isolated_objects(
 
         # filter out cells smaller than min_size
         if min_size is not None:
-            min_size_label_ids = [l for (l,n) in zip(label_ids, n_pixels) if n <= min_size]
-            centroids = [c for (c,l) in zip(centroids, label_ids) if l not in min_size_label_ids]
-            label_ids = [int(l) for l in label_ids if l not in min_size_label_ids]
+            min_size_label_ids = [l for (l, n) in zip(label_ids, n_pixels) if n <= min_size]
+            centroids = [c for (c, l) in zip(centroids, label_ids) if l not in min_size_label_ids]
+            label_ids = [int(lid) for lid in label_ids if lid not in min_size_label_ids]
 
         coordinates = np.array(centroids)
         label_ids = np.array(label_ids)
@@ -92,8 +94,8 @@ def filter_isolated_objects(
     filter_ids = label_ids[filter_mask]
 
     shape = segmentation.shape
-    block_shape=(128,128,128)
-    chunks=(128,128,128)
+    block_shape = (128, 128, 128)
+    chunks = (128, 128, 128)
 
     blocking = nt.blocking([0] * len(shape), shape, block_shape)
 
@@ -105,8 +107,7 @@ def filter_isolated_objects(
     )
 
     def filter_chunk(block_id):
-        """
-        Set all points within a chunk to zero if they match filter IDs.
+        """Set all points within a chunk to zero if they match filter IDs.
         """
         block = blocking.getBlock(block_id)
         volume_index = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
@@ -120,6 +121,8 @@ def filter_isolated_objects(
     with futures.ThreadPoolExecutor(n_threads) as filter_pool:
         list(tqdm(filter_pool.map(filter_chunk, range(blocking.numberOfBlocks)), total=blocking.numberOfBlocks))
 
-    seg_filtered, n_ids_filtered, _ = parallel.relabel_consecutive(output_dataset, start_label=1, keep_zeros=True, block_shape=(128,128,128))
+    seg_filtered, n_ids_filtered, _ = parallel.relabel_consecutive(
+        output_dataset, start_label=1, keep_zeros=True, block_shape=(128, 128, 128)
+    )
 
     return seg_filtered, n_ids, n_ids_filtered
