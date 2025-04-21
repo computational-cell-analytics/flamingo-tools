@@ -55,7 +55,7 @@ def read_tif(file_path: str) -> Union[np.ndarray, np.memmap]:
         The memory-mapped data. If not possible to memmap, the data in memory.
     """
     try:
-        x = tifffile.memmap(file_path, "r")
+        x = tifffile.memmap(file_path)
     except ValueError:
         warnings.warn(f"Cannot memmap the tif file at {file_path}. Fall back to loading it into memory.")
         x = imageio.imread(file_path)
