@@ -25,7 +25,7 @@ from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
 
 import flamingo_tools.s3_utils as s3_utils
-from flamingl_tools.file_utils import read_image_data
+from flamingo_tools.file_utils import read_image_data
 
 
 class SelectChannel(SimpleTransformationWrapper):
@@ -35,7 +35,7 @@ class SelectChannel(SimpleTransformationWrapper):
         volume: The array-like input dataset.
         channel: The channel that will be selected.
     """
-    def __init__(self, volume: np.array_like, channel: int):
+    def __init__(self, volume: np.typing.ArrayLike, channel: int):
         self.channel = channel
         super().__init__(volume, lambda x: x[self.channel], with_channels=True)
 

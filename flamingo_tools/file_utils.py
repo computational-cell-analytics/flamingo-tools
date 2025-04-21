@@ -64,7 +64,7 @@ def read_tif(file_path: str) -> Union[np.ndarray, np.memmap]:
 
 # TODO: Update the any types:
 # The first should be the type of a zarr s3 store,
-def read_image_data(input_path: Union[str, Any], input_key: Optional[str]) -> np.array_like:
+def read_image_data(input_path: Union[str, Any], input_key: Optional[str]) -> np.typing.ArrayLike:
     """Read flamingo image data, stored in various formats.
 
     Args:

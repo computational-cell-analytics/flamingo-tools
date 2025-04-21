@@ -1,16 +1,15 @@
 import argparse
 import os
-import sys
 
 import pandas as pd
 import zarr
 
-sys.path.append("../..")
-
 import flamingo_tools.s3_utils as s3_utils
+from flamingo_tools.segmentation import filter_segmentation
 
+
+# TODO needs updates
 def main():
-    from flamingo_tools.segmentation import filter_isolated_objects
 
     parser = argparse.ArgumentParser(
         description="Script for postprocessing segmentation data in zarr format. Either locally or on an S3 bucket.")
