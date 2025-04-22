@@ -10,7 +10,7 @@ import zarr
 
 # Dedicated bucket for cochlea lightsheet project
 MOBIE_FOLDER = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet"
-SERVICE_ENDPOINT = "https://s3.gwdg.de/"
+SERVICE_ENDPOINT = "https://s3.fs.gwdg.de/"
 BUCKET_NAME = "cochlea-lightsheet"
 
 DEFAULT_CREDENTIALS = os.path.expanduser("~/.aws/credentials")
