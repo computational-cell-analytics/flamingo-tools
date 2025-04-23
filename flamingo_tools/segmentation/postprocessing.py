@@ -6,7 +6,6 @@ import elf.parallel as parallel
 import numpy as np
 import nifty.tools as nt
 import pandas as pd
-import vigra
 
 from elf.io import open_file
 from scipy.spatial import distance
@@ -113,15 +112,14 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 # Filter the segmentation based on a spatial statistics from above.
 #
 
-# FIXME: functions causes ValueError by using arrays of different lengths
 
-
+# FIXME: this computes the distance in pixels, but the MoBIE table contains it in physical units (=nm)
+# This is inconsistent.
 def _compute_table(segmentation):
-    segmentation, n_ids, _ = vigra.analysis.relabelConsecutive(segmentation[:], start_label=1, keep_zeros=True)
     props = measure.regionprops(segmentation)
-    coordinates = np.array([prop.centroid for prop in props])[1:]
-    label_ids = np.unique(segmentation)[1:]
-    sizes = np.array([prop.area for prop in props])[1:]
+    label_ids = np.array([prop.label for prop in props])
+    coordinates = np.array([prop.centroid for prop in props])
+    sizes = np.array([prop.area for prop in props])
     table = pd.DataFrame({
         "label_id": label_ids,
         "n_pixels": sizes,
