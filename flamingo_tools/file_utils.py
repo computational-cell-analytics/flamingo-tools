@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import imageio.v3 as imageio
 import numpy as np
@@ -62,9 +62,7 @@ def read_tif(file_path: str) -> Union[np.ndarray, np.memmap]:
     return x
 
 
-# TODO: Update the any types:
-# The first should be the type of a zarr s3 store,
-def read_image_data(input_path: Union[str, Any], input_key: Optional[str]) -> np.typing.ArrayLike:
+def read_image_data(input_path: Union[str, zarr.storage.FSStore], input_key: Optional[str]) -> np.typing.ArrayLike:
     """Read flamingo image data, stored in various formats.
 
     Args:

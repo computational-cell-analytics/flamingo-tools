@@ -341,13 +341,27 @@ def run_unet_prediction(
 
 
 def run_unet_prediction_preprocess_slurm(
-    input_path, input_key, output_folder,
-    s3=None, s3_bucket_name=None, s3_service_endpoint=None, s3_credentials=None,
-):
+    input_path: str,
+    input_key: Optional[str],
+    output_folder: str,
+    s3: Optional[str] = None,
+    s3_bucket_name: Optional[str] = None,
+    s3_service_endpoint: Optional[str] = None,
+    s3_credentials: Optional[str] = None,
+) -> None:
     """Pre-processing for the parallel prediction with U-Net models.
     Masks are stored in mask.zarr in the output folder.
     The mean and standard deviation are precomputed for later usage during prediction
     and stored in a JSON file within the output folder as mean_std.json.
+
+    Args:
+        input_path: The path to the input data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the segmentation related data.
+        s3: Flag for considering input_path fo S3 bucket.
+        s3_bucket_name: S3 bucket name.
+        s3_service_endpoint: S3 service endpoint.
+        s3_credentials: File path to credentials for S3 bucket.
     """
     if s3 is not None:
         input_path, fs = s3_utils.get_s3_path(
@@ -361,26 +375,35 @@ def run_unet_prediction_preprocess_slurm(
 
 
 def run_unet_prediction_slurm(
-    input_path, input_key, output_folder, model_path,
-    scale=None,
-    block_shape=None, halo=None, prediction_instances=1,
-    s3=None, s3_bucket_name=None, s3_service_endpoint=None, s3_credentials=None,
-):
-    """
-    Run prediction of distance U-Net for data stored locally or on an S3 bucket.
+    input_path: str,
+    input_key: Optional[str],
+    output_folder: str,
+    model_path: str,
+    scale: Optional[float] = None,
+    block_shape: Optional[Tuple[int, int, int]] = None,
+    halo: Optional[Tuple[int, int, int]] = None,
+    prediction_instances: Optional[int] = 1,
+    s3: Optional[str] = None,
+    s3_bucket_name: Optional[str] = None,
+    s3_service_endpoint: Optional[str] = None,
+    s3_credentials: Optional[str] = None,
+) -> None:
+    """Run prediction of distance U-Net for data stored locally or on an S3 bucket.
 
-    :param str input_path: File path to input data
-    :param str input_key: Input key for data in ome.zarr format
-    :param str output_folder: Output folder for prediction.zarr
-    :param str model_path: File path to distance U-Net model
-    :param float scale:
-    :param tuple block_shape:
-    :param tuple halo:
-    :param int prediction_instances: Number of workers for parallel computation within slurm array
-    :param bool s3: Flag for accessing data on S3 bucket
-    :param str s3_bucket_name: S3 bucket name. Optional if BUCKET_NAME has been exported
-    :param str s3_service_endpoint: S3 service endpoint. Optional if SERVICE_ENDPOINT has been exported
-    :param str s3_credentials: Path to file containing S3 credentials
+    Args:
+        input_path: The path to the input data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the segmentation related data.
+        model_path: The path to the model to use for segmentation.
+        scale: A factor to rescale the data before prediction.
+            By default the data will not be rescaled.
+        block_shape: The block-shape for running the prediction.
+        halo: The halo (= block overlap) to use for prediction.
+        prediction_instances: Number of instances for parallel prediction.
+        s3: Flag for considering input_path fo S3 bucket.
+        s3_bucket_name: S3 bucket name.
+        s3_service_endpoint: S3 service endpoint.
+        s3_credentials: File path to credentials for S3 bucket.
     """
     os.makedirs(output_folder, exist_ok=True)
     prediction_instances = int(prediction_instances)
@@ -417,7 +440,13 @@ def run_unet_prediction_slurm(
 
 
 # does NOT need GPU, FIXME: only run on CPU
-def run_unet_segmentation_slurm(output_folder, min_size):
+def run_unet_segmentation_slurm(output_folder: str, min_size: int) -> None:
+    """Create segmentation from prediction.
+
+    Args:
+        output_folder: The output folder for storing the segmentation related data.
+        min_size: The minimal size of segmented objects in the output.
+    """
     min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size)

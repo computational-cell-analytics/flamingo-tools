@@ -113,6 +113,8 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 # Filter the segmentation based on a spatial statistics from above.
 #
 
+# FIXME: functions causes ValueError by using arrays of different lengths
+
 
 def _compute_table(segmentation):
     segmentation, n_ids, _ = vigra.analysis.relabelConsecutive(segmentation[:], start_label=1, keep_zeros=True)
@@ -138,6 +140,7 @@ def filter_segmentation(
     min_size: int = 1000,
     table: Optional[pd.DataFrame] = None,
     output_key: str = "segmentation_postprocessed",
+    **spatial_statistics_kwargs,
 ) -> Tuple[int, int]:
     """Postprocessing step to filter isolated objects from a segmentation.
 
@@ -147,11 +150,12 @@ def filter_segmentation(
     Args:
         segmentation: Dataset containing the segmentation
         output_path: Output path for postprocessed segmentation
-        spatial_statistics:
+        spatial_statistics: Function to calculate density measure for elements of segmentation
         threshold: Distance in micrometer to check for neighbors
         min_size: Minimal number of pixels for filtering small instances
-        table:
+        table: Dataframe of segmentation table
         output_key: Output key for postprocessed segmentation
+        spatial_statistics_kwargs: Arguments for spatial statistics function
 
     Returns:
         n_ids
@@ -165,7 +169,7 @@ def filter_segmentation(
 
     # First apply the size filter.
     table = table[table.n_pixels > min_size]
-    stat_values = spatial_statistics(table)
+    stat_values = spatial_statistics(table, **spatial_statistics_kwargs)
 
     keep_mask = np.array(stat_values > threshold).squeeze()
     keep_ids = table.label_id.values[keep_mask]
