@@ -23,6 +23,8 @@ def main():
                         help="The key / internal path of the segmentation.")
     parser.add_argument("--output_key", type=str, default="segmentation_postprocessed",
                         help="The key / internal path of the output.")
+    parser.add_argument('-r', "--resolution", type=float, default=0.38,
+                        help="Resolution of segmentation in micrometer.")
 
     parser.add_argument("--s3_input", type=str, default=None, help="Input file path on S3 bucket.")
     parser.add_argument("--s3_credentials", type=str, default=None,
@@ -102,6 +104,7 @@ def main():
                                         spatial_statistics=spatial_statistics,
                                         threshold=threshold,
                                         min_size=args.min_size, table=tsv_table,
+                                        resolution=args.resolution,
                                         output_key=args.output_key, **spatial_statistics_kwargs)
 
     print(f"Number of pre-filtered objects: {n_pre}\nNumber of post-filtered objects: {n_post}")

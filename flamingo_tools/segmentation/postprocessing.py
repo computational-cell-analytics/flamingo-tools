@@ -113,12 +113,12 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 #
 
 
-# FIXME: this computes the distance in pixels, but the MoBIE table contains it in physical units (=nm)
-# This is inconsistent.
-def _compute_table(segmentation):
+def _compute_table(segmentation, resolution):
     props = measure.regionprops(segmentation)
     label_ids = np.array([prop.label for prop in props])
     coordinates = np.array([prop.centroid for prop in props])
+    # transform pixel distance to physical units
+    coordinates = coordinates * resolution
     sizes = np.array([prop.area for prop in props])
     table = pd.DataFrame({
         "label_id": label_ids,
@@ -137,6 +137,7 @@ def filter_segmentation(
     threshold: float,
     min_size: int = 1000,
     table: Optional[pd.DataFrame] = None,
+    resolution: float = 0.38,
     output_key: str = "segmentation_postprocessed",
     **spatial_statistics_kwargs,
 ) -> Tuple[int, int]:
@@ -152,6 +153,7 @@ def filter_segmentation(
         threshold: Distance in micrometer to check for neighbors
         min_size: Minimal number of pixels for filtering small instances
         table: Dataframe of segmentation table
+        resolution: Resolution of segmentation in micrometer
         output_key: Output key for postprocessed segmentation
         spatial_statistics_kwargs: Arguments for spatial statistics function
 
@@ -162,7 +164,7 @@ def filter_segmentation(
     # Compute the table on the fly.
     # NOTE: this currently doesn't work for large segmentations.
     if table is None:
-        table = _compute_table(segmentation)
+        table = _compute_table(segmentation, resolution=resolution)
     n_ids = len(table)
 
     # First apply the size filter.
