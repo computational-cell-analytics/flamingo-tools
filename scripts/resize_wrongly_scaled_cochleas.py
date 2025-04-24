@@ -14,7 +14,7 @@ from flamingo_tools.file_utils import read_tif
 
 def main(
         input_path: str,
-        output_folder: str,
+        output_dir: str = None,
         scale: float = 0.38,
         input_key: str = "setup0/timepoint0/s0",
         interpolation_order: int = 3
@@ -23,7 +23,7 @@ def main(
 
     Args:
         input_path: Input path to tif file or n5 folder.
-        output_folder: Output folder for rescaled data in n5 format.
+        output_dir: Output folder for rescaled data in n5 format.
         scale: Scale of output data.
         input_key: The key / internal path of the image data.
         interpolation_order: Interpolation order for resizing function.
@@ -36,8 +36,13 @@ def main(
         input_chunks = input_.chunks
 
     abs_path = os.path.abspath(input_path)
-    basename = "".join(os.path.basename(abs_path).split(".")[:-1])
-    output_path = os.path.join(output_folder, basename + "_resized.n5")
+    basename = ".".join(os.path.basename(abs_path).split(".")[:-1])
+    input_dir = os.path.abspath(input_path).split(basename)[0]
+
+    if output_dir is None:
+        output_path = os.path.join(input_dir, basename + "_resized.n5")
+    else:
+        output_path = os.path.abspath(output_dir)
 
     shape = input_.shape
     ndim = len(shape)
@@ -78,15 +83,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Script for resizing microscoopy data in n5 format.")
 
-    parser.add_argument("input_file", type=str, required=True, help="Input tif file or n5 folder.")
-    parser.add_argument(
-        "output_folder", type=str, help="Output folder. Default resized output is '<basename>_resized.n5'."
-    )
+    parser.add_argument("-i", "--input", required=True, type=str, help="Input tif file or n5 folder.")
+    parser.add_argument("-o", "--output", type=str,
+                        help="Output n5 folder. Default resized output is '<basename>_resized.n5'.")
 
     parser.add_argument("-s", "--scale", type=float, default=0.38, help="Scale of input. Re-scaled to 1.")
     parser.add_argument("-k", "--input_key", type=str, default="setup0/timepoint0/s0", help="Input key for n5 file.")
-    parser.add_argument("-i", "--interpolation_order", type=float, default=3, help="Interpolation order.")
+    parser.add_argument("--interpolation_order", type=float, default=3, help="Interpolation order.")
 
     args = parser.parse_args()
 
-    main(args.input_file, args.output_folder, args.scale, args.input_key, args.interpolation_order)
+    main(args.input, args.output, args.scale, args.input_key, args.interpolation_order)

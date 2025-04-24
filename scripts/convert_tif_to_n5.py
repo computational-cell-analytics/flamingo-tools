@@ -19,9 +19,8 @@ def main(input_path: str, output_path: str = None) -> None:
     if input_path.split(".")[-1] not in ["TIFF", "TIF", "tiff", "tif"]:
         sys.exit("Input file must be in tif format.")
 
-    basename = "".join(input_path.split("/")[-1].split(".")[:-1])
-    input_dir = input_path.split(basename)[0]
-    input_dir = os.path.abspath(input_dir)
+    basename = ".".join(input_path.split("/")[-1].split(".")[:-1])
+    input_dir = os.path.abspath(input_path).split(basename)[0]
 
     if output_path is None:
         output_path = os.path.join(input_dir, basename + ".n5")

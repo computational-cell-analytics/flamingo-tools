@@ -295,7 +295,7 @@ def calc_mean_and_std(input_path: str, input_key: str, output_folder: str) -> No
     mean, std = parallel.mean_and_std(
         input_, block_shape=tuple([2 * i for i in chunks]), n_threads=n_threads, verbose=True, mask=image_mask
     )
-    ddict = {"mean": mean, "std": std}
+    ddict = {"mean": float(mean), "std": float(std)}
     with open(json_file, "w") as f:
         json.dump(ddict, f)
 
@@ -369,9 +369,9 @@ def run_unet_prediction_preprocess_slurm(
         )
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
-        find_mask(input_path, input_key, output_folder, s3=s3)
+        find_mask(input_path, input_key, output_folder)
 
-    calc_mean_and_std(input_path, input_key, output_folder, s3=s3)
+    calc_mean_and_std(input_path, input_key, output_folder)
 
 
 def run_unet_prediction_slurm(
@@ -420,7 +420,7 @@ def run_unet_prediction_slurm(
         raise ValueError("The SLURM_ARRAY_TASK_ID is not set. Ensure that you are using the '-a' option with SBATCH.")
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
-        find_mask(input_path, input_key, output_folder, s3=s3)
+        find_mask(input_path, input_key, output_folder)
 
     # get pre-computed mean and standard deviation of full volume from JSON file
     if os.path.isfile(os.path.join(output_folder, "mean_std.json")):
