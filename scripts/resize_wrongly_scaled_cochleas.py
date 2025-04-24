@@ -4,17 +4,32 @@ import os
 import multiprocessing as mp
 from concurrent import futures
 
-import imageio.v3 as imageio
 import nifty.tools as nt
 from tqdm import tqdm
 
 from elf.wrapper.resized_volume import ResizedVolume
 from elf.io import open_file
+from flamingo_tools.file_utils import read_tif
 
 
-def main(input_path, output_folder, scale, input_key, interpolation_order):
+def main(
+        input_path: str,
+        output_folder: str,
+        scale: float = 0.38,
+        input_key: str = "setup0/timepoint0/s0",
+        interpolation_order: int = 3
+):
+    """Resize wrongly scaled cochleas.
+
+    Args:
+        input_path: Input path to tif file or n5 folder.
+        output_folder: Output folder for rescaled data in n5 format.
+        scale: Scale of output data.
+        input_key: The key / internal path of the image data.
+        interpolation_order: Interpolation order for resizing function.
+    """
     if input_path.endswith(".tif"):
-        input_ = imageio.imread(input_path)
+        input_ = read_tif(input_path)
         input_chunks = (128,) * 3
     else:
         input_ = open_file(input_path, "r")[input_key]
@@ -51,7 +66,11 @@ def main(input_path, output_folder, scale, input_key, interpolation_order):
         output_dataset[volume_index] = data
 
     with futures.ThreadPoolExecutor(n_threads) as resize_pool:
-        list(tqdm(resize_pool.map(copy_chunk, range(blocking.numberOfBlocks)), total=blocking.numberOfBlocks))
+        list(tqdm(
+            resize_pool.map(copy_chunk, range(blocking.numberOfBlocks)),
+            total=blocking.numberOfBlocks,
+            desc=f"Resizing volume from shape {shape} to {new_shape}"
+        ))
 
 
 if __name__ == "__main__":
@@ -59,14 +78,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Script for resizing microscoopy data in n5 format.")
 
-    parser.add_argument('input_file', type=str, help="Input file")
+    parser.add_argument("input_file", type=str, required=True, help="Input tif file or n5 folder.")
     parser.add_argument(
-        'output_folder', type=str, help="Output folder. Default resized output is <basename>_resized.n5"
+        "output_folder", type=str, help="Output folder. Default resized output is '<basename>_resized.n5'."
     )
 
-    parser.add_argument('-s', "--scale", type=float, default=0.38, help="Scale of input. Re-scaled to 1.")
-    parser.add_argument('-k', "--input_key", type=str, default="setup0/timepoint0/s0", help="Input key for n5 file.")
-    parser.add_argument('-i', "--interpolation_order", type=float, default=3, help="Interpolation order.")
+    parser.add_argument("-s", "--scale", type=float, default=0.38, help="Scale of input. Re-scaled to 1.")
+    parser.add_argument("-k", "--input_key", type=str, default="setup0/timepoint0/s0", help="Input key for n5 file.")
+    parser.add_argument("-i", "--interpolation_order", type=float, default=3, help="Interpolation order.")
 
     args = parser.parse_args()
 

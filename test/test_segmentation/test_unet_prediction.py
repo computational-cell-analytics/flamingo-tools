@@ -1,5 +1,4 @@
 import os
-import sys
 import tempfile
 import unittest
 
@@ -8,8 +7,6 @@ import numpy as np
 import torch
 import z5py
 from torch_em.model import UNet3d
-
-sys.path.append("../..")
 
 
 class TestUnetPrediction(unittest.TestCase):

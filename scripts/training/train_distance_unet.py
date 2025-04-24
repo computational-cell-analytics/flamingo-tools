@@ -116,7 +116,7 @@ def main():
     run_name = datetime.now().strftime("%Y%m%d") if args.name is None else args.name
 
     # Parameters for training on A100.
-    n_iterations = 1e5
+    n_iterations = int(1e5)
     patch_shape = (64, 128, 128)
 
     # The U-Net.
