@@ -435,7 +435,7 @@ def run_unet_prediction_slurm(
     prediction_impl(
         input_path, input_key, output_folder, model_path, scale, block_shape, halo,
         prediction_instances=prediction_instances, slurm_task_id=slurm_task_id,
-        mean=mean, std=std, s3=s3,
+        mean=mean, std=std,
     )
 
 
