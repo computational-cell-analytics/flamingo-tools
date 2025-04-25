@@ -60,6 +60,8 @@ def prediction_impl(
     scale,
     block_shape,
     halo,
+    output_channels=3,
+    apply_postprocessing=True,
     prediction_instances=1,
     slurm_task_id=0,
     mean=None,
@@ -75,7 +77,10 @@ def prediction_impl(
             model = torch.load(model_path, weights_only=False)
 
     mask_path = os.path.join(output_folder, "mask.zarr")
-    image_mask = z5py.File(mask_path, "r")["mask"]
+    if os.path.exists(mask_path):
+        image_mask = z5py.File(mask_path, "r")["mask"]
+    else:
+        image_mask = None
 
     input_ = read_image_data(input_path, input_key)
     chunks = getattr(input_, "chunks", (64, 64, 64))
@@ -122,10 +127,20 @@ def prediction_impl(
         raw /= std
         return raw
 
-    # Smooth the distance prediction channel.
-    def postprocess(x):
-        x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
-        return x
+    if apply_postprocessing:
+        # Smooth the distance prediction channel.
+        def postprocess(x):
+            x[1] = vigra.filters.gaussianSmoothing(x[1], sigma=2.0)
+            return x
+    else:
+        postprocess = None if output_channels > 1 else lambda x: x.squeeze()
+
+    if output_channels > 1:
+        output_shape = (output_channels,) + input_.shape
+        output_chunks = (1,) + block_shape
+    else:
+        output_shape = input_.shape
+        output_chunks = block_shape
 
     shape = input_.shape
     ndim = len(shape)
@@ -142,8 +157,8 @@ def prediction_impl(
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
             "prediction",
-            shape=(3,) + input_.shape,
-            chunks=(1,) + block_shape,
+            shape=output_shape,
+            chunks=output_chunks,
             compression="gzip",
             dtype="float32",
         )
