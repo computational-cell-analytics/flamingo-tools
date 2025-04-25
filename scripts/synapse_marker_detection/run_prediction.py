@@ -1,18 +1,15 @@
 import argparse
 import os
-import sys
 
 import pandas as pd
 import numpy as np
 import zarr
 
 from elf.parallel.local_maxima import find_local_maxima
-
-sys.path.append("../..")
+from flamingo_tools.segmentation.unet_prediction import prediction_impl
 
 
 def main():
-    from flamingo_tools.segmentation.unet_prediction import prediction_impl
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", required=True)

@@ -1,14 +1,19 @@
+"""Prediction using distance U-Net.
+Parallelization using multiple GPUs is currently only possible by calling functions directly.
+Functions for the parallelization end with '_slurm'
+and divide the process into preprocessing, prediction, and segmentation.
+"""
+import json
 import multiprocessing as mp
 import os
 import warnings
 from concurrent import futures
+from typing import Optional, Tuple
 
-import imageio.v3 as imageio
 import elf.parallel as parallel
 import numpy as np
 import nifty.tools as nt
 import vigra
-import tifffile
 import torch
 import z5py
 
@@ -19,9 +24,18 @@ from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
 
+import flamingo_tools.s3_utils as s3_utils
+from flamingo_tools.file_utils import read_image_data
+
 
 class SelectChannel(SimpleTransformationWrapper):
-    def __init__(self, volume, channel):
+    """Wrapper to select a chanel from an array-like dataset object.
+
+    Args:
+        volume: The array-like input dataset.
+        channel: The channel that will be selected.
+    """
+    def __init__(self, volume: np.typing.ArrayLike, channel: int):
         self.channel = channel
         super().__init__(volume, lambda x: x[self.channel], with_channels=True)
 
@@ -39,15 +53,28 @@ class SelectChannel(SimpleTransformationWrapper):
 
 
 def prediction_impl(
-    input_path, input_key, output_folder, model_path, scale, block_shape, halo,
-    output_channels=3, apply_postprocessing=True,
+    input_path,
+    input_key,
+    output_folder,
+    model_path,
+    scale,
+    block_shape,
+    halo,
+    output_channels=3,
+    apply_postprocessing=True,
+    prediction_instances=1,
+    slurm_task_id=0,
+    mean=None,
+    std=None,
 ):
+    """@private
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if os.path.isdir(model_path):
             model = load_model(model_path)
         else:
-            model = torch.load(model_path)
+            model = torch.load(model_path, weights_only=False)
 
     mask_path = os.path.join(output_folder, "mask.zarr")
     if os.path.exists(mask_path):
@@ -55,15 +82,10 @@ def prediction_impl(
     else:
         image_mask = None
 
-    if input_key is None:
-        try:
-            input_ = tifffile.memmap(input_path)
-        except Exception:
-            input_ = imageio.imread(input_path)
-    else:
-        input_ = open_file(input_path, "r")[input_key]
+    input_ = read_image_data(input_path, input_key)
+    chunks = getattr(input_, "chunks", (64, 64, 64))
 
-    if scale is None or scale == 1:
+    if scale is None or np.isclose(scale, 1):
         original_shape = None
     else:
         original_shape = input_.shape
@@ -76,10 +98,11 @@ def prediction_impl(
         image_mask = ResizedVolume(image_mask, new_shape, order=0)
 
     have_cuda = torch.cuda.is_available()
+
     if block_shape is None:
-        block_shape = tuple([2 * ch for ch in input_.chunks]) if have_cuda else input_.chunks
+        block_shape = (128, 128, 128) if have_cuda else input_.chunks
     if halo is None:
-        halo = (16, 64, 64) if have_cuda else (16, 32, 32)
+        halo = (16, 32, 32)
     if have_cuda:
         print("Predict with GPU")
         gpu_ids = [0]
@@ -87,12 +110,13 @@ def prediction_impl(
         print("Predict with CPU")
         gpu_ids = ["cpu"]
 
-    # Compute the global mean and standard deviation.
-    n_threads = min(16, mp.cpu_count())
-    mean, std = parallel.mean_and_std(
-        input_, block_shape=block_shape, n_threads=n_threads, verbose=True,
-        mask=image_mask
-    )
+    if mean is None or std is None:
+        # Compute the global mean and standard deviation.
+        n_threads = min(16, mp.cpu_count())
+        mean, std = parallel.mean_and_std(
+            input_, block_shape=tuple([2 * i for i in chunks]), n_threads=n_threads, verbose=True,
+            mask=image_mask
+        )
     print("Mean and standard deviation computed for the full volume:")
     print(mean, std)
 
@@ -118,6 +142,17 @@ def prediction_impl(
         output_shape = input_.shape
         output_chunks = block_shape
 
+    shape = input_.shape
+    ndim = len(shape)
+
+    blocking = nt.blocking([0] * ndim, shape, block_shape)
+    n_blocks = blocking.numberOfBlocks
+    if prediction_instances != 1:
+        iteration_ids = [x.tolist() for x in np.array_split(list(range(n_blocks)), prediction_instances)]
+        slurm_iteration = iteration_ids[slurm_task_id]
+    else:
+        slurm_iteration = list(range(n_blocks))
+
     output_path = os.path.join(output_folder, "predictions.zarr")
     with open_file(output_path, "a") as f:
         output = f.require_dataset(
@@ -133,12 +168,25 @@ def prediction_impl(
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
             output=output, preprocess=preprocess, postprocess=postprocess,
             mask=image_mask,
+            iter_list=slurm_iteration,
         )
 
     return original_shape
 
 
-def find_mask(input_path, input_key, output_folder):
+def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> None:
+    """Determine the mask for running prediction.
+
+    The mask corresponds to data that contains actual signal and not just noise.
+    This is determined by checking if the 95th percentile of the intensity
+    of a local block has a value larger than 200. It may be necesary to choose a
+    different criterion if the data acquisition changes.
+
+    Args:
+        input_path: The file path to the image data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the mask data.
+    """
     mask_path = os.path.join(output_folder, "mask.zarr")
     f = z5py.File(mask_path, "a")
 
@@ -146,13 +194,8 @@ def find_mask(input_path, input_key, output_folder):
     if mask_key in f:
         return
 
-    if input_key is None:
-        raw = imageio.imread(input_path)
-        chunks = (64, 64, 64)
-    else:
-        fin = open_file(input_path, "r")
-        raw = fin[input_key]
-        chunks = raw.chunks
+    raw = read_image_data(input_path, input_key)
+    chunks = getattr(raw, "chunks", (64, 64, 64))
 
     block_shape = tuple(2 * ch for ch in chunks)
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
@@ -175,6 +218,8 @@ def find_mask(input_path, input_key, output_folder):
 
 
 def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
+    """@private
+    """
     input_ = open_file(input_path, "r")["prediction"]
 
     # Limit the number of cores for parallelization.
@@ -243,12 +288,56 @@ def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
                 tp.map(write_block, range(blocking.numberOfBlocks))
 
 
+def calc_mean_and_std(input_path: str, input_key: str, output_folder: str) -> None:
+    """Calculate mean and standard deviation of the input volume.
+
+    The parameters are saved in 'mean_std.json' in the output folder.
+
+    Args:
+        input_path: The file path to the image data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the segmentation related data.
+    """
+    json_file = os.path.join(output_folder, "mean_std.json")
+    mask_path = os.path.join(output_folder, "mask.zarr")
+    image_mask = z5py.File(mask_path, "r")["mask"]
+
+    input_ = read_image_data(input_path, input_key)
+    chunks = getattr(input_, "chunks", (64, 64, 64))
+
+    # Compute the global mean and standard deviation.
+    n_threads = min(16, mp.cpu_count())
+    mean, std = parallel.mean_and_std(
+        input_, block_shape=tuple([2 * i for i in chunks]), n_threads=n_threads, verbose=True, mask=image_mask
+    )
+    ddict = {"mean": float(mean), "std": float(std)}
+    with open(json_file, "w") as f:
+        json.dump(ddict, f)
+
+
 def run_unet_prediction(
-    input_path, input_key,
-    output_folder, model_path,
-    min_size, scale=None,
-    block_shape=None, halo=None,
-):
+    input_path: str,
+    input_key: Optional[str],
+    output_folder: str,
+    model_path: str,
+    min_size: int,
+    scale: Optional[float] = None,
+    block_shape: Optional[Tuple[int, int, int]] = None,
+    halo: Optional[Tuple[int, int, int]] = None,
+) -> None:
+    """Run prediction and segmentation with a distance U-Net.
+
+    Args:
+        input_path: The path to the input data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the segmentation related data.
+        model_path: The path to the model to use for segmentation.
+        min_size: The minimal size of segmented objects in the output.
+        scale: A factor to rescale the data before prediction.
+            By default the data will not be rescaled.
+        block_shape: The block-shape for running the prediction.
+        halo: The halo (= block overlap) to use for prediction.
+    """
     os.makedirs(output_folder, exist_ok=True)
 
     find_mask(input_path, input_key, output_folder)
@@ -259,3 +348,120 @@ def run_unet_prediction(
 
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+
+
+#
+# ---Workflow for parallel prediction using slurm---
+#
+
+
+def run_unet_prediction_preprocess_slurm(
+    input_path: str,
+    input_key: Optional[str],
+    output_folder: str,
+    s3: Optional[str] = None,
+    s3_bucket_name: Optional[str] = None,
+    s3_service_endpoint: Optional[str] = None,
+    s3_credentials: Optional[str] = None,
+) -> None:
+    """Pre-processing for the parallel prediction with U-Net models.
+    Masks are stored in mask.zarr in the output folder.
+    The mean and standard deviation are precomputed for later usage during prediction
+    and stored in a JSON file within the output folder as mean_std.json.
+
+    Args:
+        input_path: The path to the input data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the segmentation related data.
+        s3: Flag for considering input_path fo S3 bucket.
+        s3_bucket_name: S3 bucket name.
+        s3_service_endpoint: S3 service endpoint.
+        s3_credentials: File path to credentials for S3 bucket.
+    """
+    if s3 is not None:
+        input_path, fs = s3_utils.get_s3_path(
+            input_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials
+        )
+
+    if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
+        find_mask(input_path, input_key, output_folder)
+
+    calc_mean_and_std(input_path, input_key, output_folder)
+
+
+def run_unet_prediction_slurm(
+    input_path: str,
+    input_key: Optional[str],
+    output_folder: str,
+    model_path: str,
+    scale: Optional[float] = None,
+    block_shape: Optional[Tuple[int, int, int]] = None,
+    halo: Optional[Tuple[int, int, int]] = None,
+    prediction_instances: Optional[int] = 1,
+    s3: Optional[str] = None,
+    s3_bucket_name: Optional[str] = None,
+    s3_service_endpoint: Optional[str] = None,
+    s3_credentials: Optional[str] = None,
+) -> None:
+    """Run prediction of distance U-Net for data stored locally or on an S3 bucket.
+
+    Args:
+        input_path: The path to the input data.
+        input_key: The key / internal path of the image data.
+        output_folder: The output folder for storing the segmentation related data.
+        model_path: The path to the model to use for segmentation.
+        scale: A factor to rescale the data before prediction.
+            By default the data will not be rescaled.
+        block_shape: The block-shape for running the prediction.
+        halo: The halo (= block overlap) to use for prediction.
+        prediction_instances: Number of instances for parallel prediction.
+        s3: Flag for considering input_path fo S3 bucket.
+        s3_bucket_name: S3 bucket name.
+        s3_service_endpoint: S3 service endpoint.
+        s3_credentials: File path to credentials for S3 bucket.
+    """
+    os.makedirs(output_folder, exist_ok=True)
+    prediction_instances = int(prediction_instances)
+    slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
+
+    if s3 is not None:
+        input_path, fs = s3_utils.get_s3_path(
+            input_path, bucket_name=s3_bucket_name, service_endpoint=s3_service_endpoint, credential_file=s3_credentials
+        )
+
+    if slurm_task_id is not None:
+        slurm_task_id = int(slurm_task_id)
+    else:
+        raise ValueError("The SLURM_ARRAY_TASK_ID is not set. Ensure that you are using the '-a' option with SBATCH.")
+
+    if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
+        find_mask(input_path, input_key, output_folder)
+
+    # get pre-computed mean and standard deviation of full volume from JSON file
+    if os.path.isfile(os.path.join(output_folder, "mean_std.json")):
+        with open(os.path.join(output_folder, "mean_std.json")) as f:
+            d = json.load(f)
+            mean = float(d["mean"])
+            std = float(d["std"])
+    else:
+        mean = None
+        std = None
+
+    prediction_impl(
+        input_path, input_key, output_folder, model_path, scale, block_shape, halo,
+        prediction_instances=prediction_instances, slurm_task_id=slurm_task_id,
+        mean=mean, std=std, s3=s3,
+    )
+
+
+# does NOT need GPU, FIXME: only run on CPU
+def run_unet_segmentation_slurm(output_folder: str, min_size: int) -> None:
+    """Create segmentation from prediction.
+
+    Args:
+        output_folder: The output folder for storing the segmentation related data.
+        min_size: The minimal size of segmented objects in the output.
+    """
+    min_size = int(min_size)
+    pmap_out = os.path.join(output_folder, "predictions.zarr")
+    segmentation_impl(pmap_out, output_folder, min_size=min_size)

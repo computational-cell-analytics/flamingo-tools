@@ -10,5 +10,7 @@ dependencies:
   - scikit-image
   - pybdv
   - pytorch
+  - s3fs
   - torch_em
   - z5py
+  - zarr
