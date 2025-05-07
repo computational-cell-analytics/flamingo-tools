@@ -413,15 +413,21 @@ def get_components(table: pd.DataFrame,
         List of component labels.
     """
     unique_labels = list(np.unique(labeled))
+
+    # sort non-background labels according to size, descending
+    unique_labels = [i for i in unique_labels if i != 0]
+    sizes = [(labeled == i).sum() for i in unique_labels]
+    sizes, unique_labels = zip(*sorted(zip(sizes, unique_labels), reverse=True))
+
     component_labels = [0 for _ in range(len(table))]
     for label_index, l in enumerate(unique_labels):
-        if l != 0:
-            label_arr = (labeled == l).astype(np.uint8)
-            centroids_binary = coordinates_in_downscaled_blocks(table, label_arr,
-                                                                scale_factor, distance_component = distance_component)
-            for num, c in enumerate(centroids_binary):
-                if c != 0:
-                    component_labels[num] = label_index
+        label_arr = (labeled == l).astype(np.uint8)
+        centroids_binary = coordinates_in_downscaled_blocks(table, label_arr,
+                                                            scale_factor, distance_component = distance_component)
+        for num, c in enumerate(centroids_binary):
+            if c != 0:
+                component_labels[num] = label_index + 1
+
     return component_labels
 
 
