@@ -290,8 +290,8 @@ def downscaled_centroids(
             new_array[int(c[0]), int(c[1]), int(c[2])] += 1
 
     elif downsample_mode == "capped":
-        new_array = np.round(new_array).astype(int)
-        new_array[new_array >= 1] = 1
+        for c in centroids_scaled:
+            new_array[int(c[0]), int(c[1]), int(c[2])] = 1
 
     elif downsample_mode == "components":
         if "component_labels" not in table.columns:
@@ -300,10 +300,11 @@ def downscaled_centroids(
         for comp, centr in zip(component_labels, centroids_scaled):
             if comp != 0:
                 new_array[int(centr[0]), int(centr[1]), int(centr[2])] = comp
-        new_array = np.round(new_array).astype(int)
 
     else:
         raise ValueError("Choose one of the downsampling modes 'accumulated', 'capped', or 'components'.")
+
+    new_array = np.round(new_array).astype(int)
 
     return new_array
 
@@ -531,7 +532,7 @@ def component_labels_graph(table: pd.DataFrame) -> List[int]:
     component_labels = [0 for _ in range(len(table))]
     for lab, comp in enumerate(components):
         for comp_index in comp:
-            component_labels[comp_index] = lab + 1
+            component_labels[comp_index - 1] = lab + 1
 
     return component_labels
 
