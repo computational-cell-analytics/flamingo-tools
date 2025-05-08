@@ -1,0 +1,42 @@
+import os
+import unittest
+from shutil import rmtree
+
+import pandas as pd
+
+
+class TestDataConversion(unittest.TestCase):
+    folder = "./tmp"
+
+    def setUp(self):
+        from flamingo_tools.test_data import create_image_data_and_segmentation
+
+        self.image_path, self.seg_path, self.table_path =\
+            create_image_data_and_segmentation(self.folder)
+
+    def tearDown(self):
+        try:
+            rmtree(self.folder)
+        except Exception:
+            pass
+
+    def test_compute_object_measures(self):
+        from flamingo_tools.measurements import compute_object_measures
+
+        output_path = os.path.join(self.folder, "measurements.tsv")
+        compute_object_measures(
+            self.image_path, self.seg_path, self.table_path, output_path, n_threads=1
+        )
+        self.assertTrue(os.path.exists(output_path))
+
+        table = pd.read_csv(output_path, sep="\t")
+        self.assertTrue(len(table) >= 1)
+        expected_columns = ["label_id", "mean", "stdev", "min", "max", "median"]
+        expected_columns.extend([f"percentile-{p}" for p in (5, 10, 25, 75, 90, 95)])
+        expected_columns.extend(["volume", "surface"])
+        for col in expected_columns:
+            self.assertIn(col, table.columns)
+
+
+if __name__ == "__main__":
+    unittest.main()
