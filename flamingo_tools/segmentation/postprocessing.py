@@ -10,9 +10,6 @@ import networkx as nx
 import pandas as pd
 
 from elf.io import open_file
-from scipy.ndimage import binary_fill_holes
-from scipy.ndimage import distance_transform_edt
-from scipy.ndimage import label
 from scipy.sparse import csr_matrix
 from scipy.spatial import distance
 from scipy.spatial import cKDTree, ConvexHull
@@ -212,11 +209,6 @@ def filter_segmentation(
     return n_ids, n_ids_filtered
 
 
-# Postprocess segmentation by erosion using the above spatial statistics.
-# Currently implemented using downscaling and looking for connected components
-# TODO: Change implementation to graph connected components.
-
-
 def erode_subset(
     table: pd.DataFrame,
     iterations: Optional[int] = 1,
@@ -242,7 +234,6 @@ def erode_subset(
     for i in range(iterations):
         table = table[table[keyword] < threshold]
 
-        # TODO: support other spatial statistics
         distance_avg = nearest_neighbor_distance(table, n_neighbors=n_neighbors)
 
         if min_cells is not None and len(distance_avg) < min_cells:
@@ -309,50 +300,14 @@ def downscaled_centroids(
     return new_array
 
 
-def coordinates_in_downscaled_blocks(
-    table: pd.DataFrame,
-    down_array: np.typing.NDArray,
-    scale_factor: float,
-    distance_component: Optional[int] = 0,
-) -> List[int]:
-    """Checking if coordinates are within the downscaled array.
-
-    Args:
-        table: Dataframe of segmentation table.
-        down_array: Downscaled array.
-        scale_factor: Factor which was used for downscaling.
-        distance_component: Distance in downscaled units to which centroids next to downscaled blocks are included.
-
-    Returns:
-        A binary list representing whether the dataframe coordinates are within the array.
-    """
-    # fill holes in down-sampled array
-    down_array[down_array > 0] = 1
-    down_array = binary_fill_holes(down_array).astype(np.uint8)
-
-    # check if input coordinates are within down-sampled blocks
-    centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
-    centroids = [np.floor(np.array([c[0]/scale_factor, c[1]/scale_factor, c[2]/scale_factor])) for c in centroids]
-
-    distance_map = distance_transform_edt(down_array == 0)
-
-    centroids_binary = []
-    for c in centroids:
-        coord = (int(c[0]), int(c[1]), int(c[2]))
-        if down_array[coord] != 0:
-            centroids_binary.append(1)
-        elif distance_map[coord] <= distance_component:
-            centroids_binary.append(1)
-        else:
-            centroids_binary.append(0)
-
-    return centroids_binary
-
-
-def erode_sgn_seg_graph(
+def components_sgn(
     table: pd.DataFrame,
     keyword: Optional[str] = "distance_nn100",
     threshold_erode: Optional[float] = None,
+    postprocess_graph: Optional[bool] = False,
+    min_component_length: Optional[int] = 50,
+    min_edge_distance: Optional[float] = 30,
+    iterations_erode: Optional[int] = None,
 ) -> List[List[int]]:
     """Eroding the SGN segmentation.
 
@@ -360,21 +315,28 @@ def erode_sgn_seg_graph(
         table: Dataframe of segmentation table.
         keyword: Keyword of the dataframe column for erosion.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
+        postprocess_graph: Post-process graph connected components by searching for near points.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        iterations_erode: Number of iterations for erosion, normally determined automatically.
 
     Returns:
         Subgraph components as lists of label_ids of dataframe.
     """
+    centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
+    labels = [int(i) for i in list(table["label_id"])]
+
     print("initial length", len(table))
     distance_nn = list(table[keyword])
     distance_nn.sort()
 
     if len(table) < 20000:
-        iterations = 1
+        iterations = iterations_erode if iterations_erode is not None else 0
         min_cells = None
         average_dist = int(distance_nn[int(len(table) * 0.8)])
         threshold = threshold_erode if threshold_erode is not None else average_dist
     else:
-        iterations = 15
+        iterations = iterations_erode if iterations_erode is not None else 15
         min_cells = 20000
         threshold = threshold_erode if threshold_erode is not None else 40
 
@@ -394,142 +356,69 @@ def erode_sgn_seg_graph(
     for num, pos in coords.items():
         graph.add_node(num, pos=pos)
 
-    # create edges between points whose distance is less than threshold
-    threshold = 30
+    # create edges between points whose distance is less than threshold min_edge_distance
     for i in coords:
         for j in coords:
             if i < j:
                 dist = math.dist(coords[i], coords[j])
-                if dist <= threshold:
+                if dist <= min_edge_distance:
                     graph.add_edge(i, j, weight=dist)
 
     components = list(nx.connected_components(graph))
 
-    # remove connected components with less nodes than threshold
-    min_length = 100
+    # remove connected components with less nodes than threshold min_component_length
     for component in components:
-        if len(component) < min_length:
+        if len(component) < min_component_length:
             for c in component:
                 graph.remove_node(c)
 
-    components = list(nx.connected_components(graph))
+    components = [list(s) for s in nx.connected_components(graph)]
+
+    # add original coordinates closer to eroded component than threshold
+    if postprocess_graph:
+        threshold = 15
+        for label_id, centr in zip(labels, centroids):
+            if label_id not in labels_subset:
+                add_coord = []
+                for comp_index, component in enumerate(components):
+                    for comp_label in component:
+                        dist = math.dist(centr, centroids[comp_label - 1])
+                        if dist <= threshold:
+                            add_coord.append([comp_index, label_id])
+                            break
+                if len(add_coord) != 0:
+                    components[add_coord[0][0]].append(add_coord[0][1])
 
     return components
 
 
-def erode_sgn_seg_downscaling(
+def label_components(
     table: pd.DataFrame,
-    keyword: Optional[str] = "distance_nn100",
-    filter_small_components: Optional[int] = None,
-    scale_factor: Optional[float] = 20,
     threshold_erode: Optional[float] = None,
-) -> Tuple[np.typing.NDArray, np.typing.NDArray]:
-    """Eroding the SGN segmentation.
-
-    Args:
-        table: Dataframe of segmentation table.
-        keyword: Keyword of the dataframe column for erosion.
-        filter_small_components: Filter components smaller after n blocks after labeling.
-        scale_factor: Scaling for downsampling.
-        threshold_erode: Threshold of column value after erosion step with spatial statistics.
-
-    Returns:
-        The labeled components of the downscaled, eroded coordinates.
-        The larget connected component of the labeled components.
-    """
-    ref_dimensions = (max(table["anchor_x"]), max(table["anchor_y"]), max(table["anchor_z"]))
-    print("initial length", len(table))
-    distance_nn = list(table[keyword])
-    distance_nn.sort()
-
-    if len(table) < 20000:
-        iterations = 1
-        min_cells = None
-        average_dist = int(distance_nn[int(len(table) * 0.8)])
-        threshold = threshold_erode if threshold_erode is not None else average_dist
-    else:
-        iterations = 15
-        min_cells = 20000
-        threshold = threshold_erode if threshold_erode is not None else 40
-
-    print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
-
-    new_subset = erode_subset(table.copy(), iterations=iterations,
-                              threshold=threshold, min_cells=min_cells, keyword=keyword)
-
-    eroded_arr = downscaled_centroids(new_subset, scale_factor=scale_factor, ref_dimensions=ref_dimensions)
-
-    # Label connected components
-    labeled, num_features = label(eroded_arr)
-
-    # Find the largest component
-    sizes = [(labeled == i).sum() for i in range(1, num_features + 1)]
-    largest_label = np.argmax(sizes) + 1
-
-    # Extract only the largest component
-    largest_component = (labeled == largest_label).astype(np.uint8)
-    largest_component_filtered = binary_fill_holes(largest_component).astype(np.uint8)
-
-    # filter small sizes
-    if filter_small_components is not None:
-        for (size, feature) in zip(sizes, range(1, num_features + 1)):
-            if size < filter_small_components:
-                labeled[labeled == feature] = 0
-
-    return labeled, largest_component_filtered
-
-
-def get_components(
-    table: pd.DataFrame,
-    labeled: np.typing.NDArray,
-    scale_factor: float,
-    distance_component: Optional[int] = 0,
+    min_component_length: Optional[int] = 50,
+    min_edge_distance: Optional[float] = 30,
+    iterations_erode: Optional[int] = None,
 ) -> List[int]:
-    """Indexing coordinates according to labeled array.
-
-    Args:
-        table: Dataframe of segmentation table.
-        labeled: Array containing differently labeled components.
-        scale_factor: Scaling for downsampling.
-        distance_component: Distance in downscaled units to which centroids next to downscaled blocks are included.
-
-    Returns:
-        List of component labels.
-    """
-    unique_labels = list(np.unique(labeled))
-
-    # sort non-background labels according to size, descending
-    unique_labels = [i for i in unique_labels if i != 0]
-    sizes = [(labeled == i).sum() for i in unique_labels]
-    sizes, unique_labels = zip(*sorted(zip(sizes, unique_labels), reverse=True))
-
-    component_labels = [0 for _ in range(len(table))]
-    for label_index, l in enumerate(unique_labels):
-        label_arr = (labeled == l).astype(np.uint8)
-        centroids_binary = coordinates_in_downscaled_blocks(table, label_arr,
-                                                            scale_factor, distance_component=distance_component)
-        for num, c in enumerate(centroids_binary):
-            if c != 0:
-                component_labels[num] = label_index + 1
-
-    return component_labels
-
-
-def component_labels_graph(table: pd.DataFrame) -> List[int]:
     """Label components using graph connected components.
 
     Args:
         table: Dataframe of segmentation table.
+        threshold_erode: Threshold of column value after erosion step with spatial statistics.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        iterations_erode: Number of iterations for erosion, normally determined automatically.
 
     Returns:
-        List of component label for each point in dataframe.
+        List of component label for each point in dataframe. 0 - background, then in descending order of size
     """
-    components = erode_sgn_seg_graph(table)
+    components = components_sgn(table, threshold_erode=threshold_erode, min_component_length=min_component_length,
+                                min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
 
     length_components = [len(c) for c in components]
     length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
 
     component_labels = [0 for _ in range(len(table))]
+    # be aware of 'label_id' of dataframe starting at 1
     for lab, comp in enumerate(components):
         for comp_index in comp:
             component_labels[comp_index - 1] = lab + 1
@@ -537,40 +426,18 @@ def component_labels_graph(table: pd.DataFrame) -> List[int]:
     return component_labels
 
 
-def component_labels_downscaling(table: pd.DataFrame, scale_factor: float = 20) -> List[int]:
-    """Label components using downscaling and connected components.
-
-    Args:
-        table: Dataframe of segmentation table.
-        scale_factor: Factor for downscaling.
-
-    Returns:
-        List of component label for each point in dataframe.
-    """
-    labeled, largest_component = erode_sgn_seg_downscaling(table, filter_small_components=10,
-                                                           scale_factor=scale_factor, threshold_erode=None)
-    component_labels = get_components(table, labeled, scale_factor, distance_component=1)
-
-    return component_labels
-
-
 def postprocess_sgn_seg(
     table: pd.DataFrame,
-    postprocess_type: Optional[str] = "downsampling",
 ) -> pd.DataFrame:
     """Postprocessing SGN segmentation of cochlea.
 
     Args:
         table: Dataframe of segmentation table.
-        postprocess_type: Postprocessing method, either 'downsampling' or 'graph'.
 
     Returns:
         Dataframe with component labels.
     """
-    if postprocess_type == "downsampling":
-        component_labels = component_labels_downscaling(table)
-    elif postprocess_type == "graph":
-        component_labels = component_labels_graph(table)
+    component_labels = label_components(table)
 
     table.loc[:, "component_labels"] = component_labels
 
