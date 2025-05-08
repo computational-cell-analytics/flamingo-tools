@@ -222,7 +222,7 @@ def erode_subset(
     Args:
         table: Dataframe of segmentation table.
         iterations: Number of steps for erosion process.
-        min_cells: Minimal number of rows. The erosion is stopped before reaching this number.
+        min_cells: Minimal number of rows. The erosion is stopped after falling below this limit.
         threshold: Upper threshold for removing elements according to the given keyword.
         keyword: Keyword of dataframe for erosion.
 
@@ -259,7 +259,7 @@ def downscaled_centroids(
         table: Dataframe of segmentation table.
         scale_factor: Factor for downscaling coordinates.
         ref_dimensions: Reference dimensions for downscaling. Taken from centroids if not supplied.
-        downsample_mode: Flag for downsampling, either 'accumulated', 'capped', or 'components'
+        downsample_mode: Flag for downsampling, either 'accumulated', 'capped', or 'components'.
 
     Returns:
         The downscaled array
@@ -326,7 +326,6 @@ def components_sgn(
     centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
     labels = [int(i) for i in list(table["label_id"])]
 
-    print("initial length", len(table))
     distance_nn = list(table[keyword])
     distance_nn.sort()
 
@@ -394,6 +393,7 @@ def components_sgn(
 
 def label_components(
     table: pd.DataFrame,
+    min_size: Optional[int] = 1000,
     threshold_erode: Optional[float] = None,
     min_component_length: Optional[int] = 50,
     min_edge_distance: Optional[float] = 30,
@@ -403,6 +403,7 @@ def label_components(
 
     Args:
         table: Dataframe of segmentation table.
+        min_size: Minimal number of pixels for filtering small instances.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
         min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
@@ -411,8 +412,17 @@ def label_components(
     Returns:
         List of component label for each point in dataframe. 0 - background, then in descending order of size
     """
+
+    # First, apply the size filter.
+    entries_filtered = table[table.n_pixels < min_size]
+    table = table[table.n_pixels >= min_size]
+
     components = components_sgn(table, threshold_erode=threshold_erode, min_component_length=min_component_length,
                                 min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
+
+    # add size-filtered objects to have same initial length
+    table = pd.concat([table, entries_filtered], ignore_index=True)
+    table.sort_values("label_id")
 
     length_components = [len(c) for c in components]
     length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
@@ -428,17 +438,30 @@ def label_components(
 
 def postprocess_sgn_seg(
     table: pd.DataFrame,
+    min_size: Optional[int] = 1000,
+    threshold_erode: Optional[float] = None,
+    min_component_length: Optional[int] = 50,
+    min_edge_distance: Optional[float] = 30,
+    iterations_erode: Optional[int] = None,
 ) -> pd.DataFrame:
     """Postprocessing SGN segmentation of cochlea.
 
     Args:
         table: Dataframe of segmentation table.
+        min_size: Minimal number of pixels for filtering small instances.
+        threshold_erode: Threshold of column value after erosion step with spatial statistics.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        iterations_erode: Number of iterations for erosion, normally determined automatically.
 
     Returns:
         Dataframe with component labels.
     """
-    component_labels = label_components(table)
 
-    table.loc[:, "component_labels"] = component_labels
+    comp_labels = label_components(table, min_size=min_size, threshold_erode=threshold_erode,
+                                   min_component_length=min_component_length,
+                                   min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
+
+    table.loc[:, "component_labels"] = comp_labels
 
     return table
