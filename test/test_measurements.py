@@ -2,6 +2,7 @@ import os
 import unittest
 from shutil import rmtree
 
+import imageio.v3 as imageio
 import pandas as pd
 
 
@@ -36,6 +37,10 @@ class TestDataConversion(unittest.TestCase):
         expected_columns.extend(["volume", "surface"])
         for col in expected_columns:
             self.assertIn(col, table.columns)
+
+        n_objects = int(imageio.imread(self.seg_path).max())
+        expected_shape = (n_objects, len(expected_columns))
+        self.assertEqual(table.shape, expected_shape)
 
 
 if __name__ == "__main__":
