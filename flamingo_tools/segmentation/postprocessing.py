@@ -119,6 +119,8 @@ def _compute_table(segmentation, resolution):
     coordinates = np.array([prop.centroid for prop in props])
     # transform pixel distance to physical units
     coordinates = coordinates * resolution
+    bb_min = np.array([prop.bbox[:3] for prop in props]) * resolution
+    bb_max = np.array([prop.bbox[3:] for prop in props]) * resolution
     sizes = np.array([prop.area for prop in props])
     table = pd.DataFrame({
         "label_id": label_ids,
@@ -126,6 +128,12 @@ def _compute_table(segmentation, resolution):
         "anchor_x": coordinates[:, 2],
         "anchor_y": coordinates[:, 1],
         "anchor_z": coordinates[:, 0],
+        "bb_min_x": bb_min[:, 2],
+        "bb_min_y": bb_min[:, 1],
+        "bb_min_z": bb_min[:, 0],
+        "bb_max_x": bb_max[:, 2],
+        "bb_max_y": bb_max[:, 1],
+        "bb_max_z": bb_max[:, 0],
     })
     return table
 

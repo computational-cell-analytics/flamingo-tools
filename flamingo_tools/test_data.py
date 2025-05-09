@@ -1,7 +1,35 @@
 import os
+from typing import Tuple
 
 import imageio.v3 as imageio
 from skimage.data import binary_blobs
+from skimage.measure import label
+
+from .segmentation.postprocessing import _compute_table
+
+
+def create_image_data_and_segmentation(
+    folder: str, size: int = 256
+) -> Tuple[str, str, str]:
+    """Create test data containing an image, a corresponding segmentation and segmentation table.
+
+    Args:
+        folder: The test data folder.
+    """
+    os.makedirs(folder, exist_ok=True)
+    data = binary_blobs(size, n_dim=3).astype("uint8") * 255
+    seg = label(data)
+
+    image_path = os.path.join(folder, "image.tif")
+    segmentation_path = os.path.join(folder, "segmentation.tif")
+    imageio.imwrite(image_path, data)
+    imageio.imwrite(segmentation_path, seg)
+
+    table_path = os.path.join(folder, "default.tsv")
+    table = _compute_table(seg, resolution=0.38)
+    table.to_csv(table_path, sep="\t", index=False)
+
+    return image_path, segmentation_path, table_path
 
 
 # TODO add metadata

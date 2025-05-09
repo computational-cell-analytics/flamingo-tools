@@ -12,5 +12,6 @@ dependencies:
   - pytorch
   - s3fs
   - torch_em
+  - trimesh
   - z5py
   - zarr
