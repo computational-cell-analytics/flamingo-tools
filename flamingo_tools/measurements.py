@@ -89,11 +89,11 @@ def compute_object_measures_impl(
         return measures
 
     seg_ids = table.label_id.values
+    assert len(seg_ids) > 0, "The segmentation table is empty."
     n_threads = mp.cpu_count() if n_threads is None else n_threads
     with futures.ThreadPoolExecutor(n_threads) as pool:
         measures = list(tqdm(
-            pool.map(intensity_measures, seg_ids),
-            total=len(seg_ids), desc="Compute intensity measures"
+            pool.map(intensity_measures, seg_ids), total=len(seg_ids), desc="Compute intensity measures"
         ))
 
     # Create the result table and save it.

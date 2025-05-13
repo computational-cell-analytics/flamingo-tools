@@ -4,6 +4,8 @@ from shutil import rmtree
 
 import imageio.v3 as imageio
 import pandas as pd
+import numpy as np
+from skimage.measure import regionprops_table
 
 
 class TestMeasurements(unittest.TestCase):
@@ -40,6 +42,18 @@ class TestMeasurements(unittest.TestCase):
         n_objects = int(imageio.imread(self.seg_path).max())
         expected_shape = (n_objects, len(expected_columns))
         self.assertEqual(table.shape, expected_shape)
+
+        image = imageio.imread(self.image_path)
+        segmentation = imageio.imread(self.seg_path)
+        properties = ("label", "intensity_mean", "intensity_std", "intensity_min", "intensity_max")
+        expected_measures = regionprops_table(segmentation, intensity_image=image, properties=properties)
+        expected_measures = pd.DataFrame(expected_measures)
+
+        for (col, col_exp) in [
+            ("label_id", "label"), ("mean", "intensity_mean"), ("stdev", "intensity_std"),
+            ("min", "intensity_min"), ("max", "intensity_max"),
+        ]:
+            self.assertTrue(np.allclose(table[col].values, expected_measures[col_exp].values))
 
 
 if __name__ == "__main__":
