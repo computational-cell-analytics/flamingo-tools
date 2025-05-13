@@ -75,8 +75,8 @@ def compute_object_measures_impl(
             "label_id": seg_id,
             "mean": np.mean(masked_intensity),
             "stdev": np.std(masked_intensity),
-            "min": np.min(masked_intensity),
-            "max": np.max(masked_intensity),
+            "min": np.nanmin(masked_intensity),
+            "max": np.nanmax(masked_intensity),
             "median": np.median(masked_intensity),
         }
         for percentile in (5, 10, 25, 75, 90, 95):
