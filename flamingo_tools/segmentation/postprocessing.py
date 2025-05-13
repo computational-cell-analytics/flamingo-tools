@@ -118,11 +118,11 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 def _compute_table(segmentation, resolution):
     props = measure.regionprops(segmentation)
     label_ids = np.array([prop.label for prop in props])
-    coordinates = np.array([prop.centroid for prop in props])
+    coordinates = np.array([prop.centroid for prop in props]).astype("float32")
     # transform pixel distance to physical units
     coordinates = coordinates * resolution
-    bb_min = np.array([prop.bbox[:3] for prop in props]) * resolution
-    bb_max = np.array([prop.bbox[3:] for prop in props]) * resolution
+    bb_min = np.array([prop.bbox[:3] for prop in props]).astype("float32") * resolution
+    bb_max = np.array([prop.bbox[3:] for prop in props]).astype("float32") * resolution
     sizes = np.array([prop.area for prop in props])
     table = pd.DataFrame({
         "label_id": label_ids,

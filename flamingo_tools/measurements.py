@@ -53,12 +53,12 @@ def compute_object_measures_impl(
 
         bb_min = np.array([
             row.bb_min_z.item(), row.bb_min_y.item(), row.bb_min_x.item()
-        ]) / resolution
+        ]).astype("float32") / resolution
         bb_min = np.round(bb_min, 0).astype("uint32")
 
         bb_max = np.array([
             row.bb_max_z.item(), row.bb_max_y.item(), row.bb_max_x.item()
-        ]) / resolution
+        ]).astype("float32") / resolution
         bb_max = np.round(bb_max, 0).astype("uint32")
 
         bb = tuple(
@@ -68,6 +68,7 @@ def compute_object_measures_impl(
 
         local_image = image[bb]
         mask = segmentation[bb] == seg_id
+        assert mask.sum() > 0, f"Segmentation ID {seg_id} is empty."
         masked_intensity = local_image[mask]
 
         # Do the base intensity measurements.
@@ -75,8 +76,8 @@ def compute_object_measures_impl(
             "label_id": seg_id,
             "mean": np.mean(masked_intensity),
             "stdev": np.std(masked_intensity),
-            "min": np.nanmin(masked_intensity),
-            "max": np.nanmax(masked_intensity),
+            "min": np.min(masked_intensity),
+            "max": np.max(masked_intensity),
             "median": np.median(masked_intensity),
         }
         for percentile in (5, 10, 25, 75, 90, 95):
