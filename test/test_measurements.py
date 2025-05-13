@@ -6,14 +6,13 @@ import imageio.v3 as imageio
 import pandas as pd
 
 
-class TestDataConversion(unittest.TestCase):
+class TestMeasurements(unittest.TestCase):
     folder = "./tmp"
 
     def setUp(self):
-        from flamingo_tools.test_data import create_image_data_and_segmentation
+        from flamingo_tools.test_data import get_test_volume_and_segmentation
 
-        self.image_path, self.seg_path, self.table_path =\
-            create_image_data_and_segmentation(self.folder)
+        self.image_path, self.seg_path, self.table_path = get_test_volume_and_segmentation(self.folder)
 
     def tearDown(self):
         try:
