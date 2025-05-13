@@ -7,6 +7,11 @@ from typing import Optional, Tuple
 import s3fs
 import zarr
 
+try:
+    from zarr.abc.store import Store
+except ImportError:
+    from zarr._storage.store import BaseStore as Store
+
 
 # Dedicated bucket for cochlea lightsheet project
 MOBIE_FOLDER = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet"
@@ -93,7 +98,7 @@ def get_s3_path(
     bucket_name: Optional[str] = None,
     service_endpoint: Optional[str] = None,
     credential_file: Optional[str] = None,
-) -> Tuple[zarr.storage.FSStore, s3fs.core.S3FileSystem]:
+) -> Tuple[Store, s3fs.core.S3FileSystem]:
     """Get S3 path for a file or folder and file system based on S3 parameters and credentials.
 
     Args:
