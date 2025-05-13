@@ -211,10 +211,10 @@ def filter_segmentation(
 
 def erode_subset(
     table: pd.DataFrame,
-    iterations: Optional[int] = 1,
+    iterations: int = 1,
     min_cells: Optional[int] = None,
-    threshold: Optional[int] = 35,
-    keyword: Optional[str] = "distance_nn100",
+    threshold: int = 35,
+    keyword: str = "distance_nn100",
 ) -> pd.DataFrame:
     """Erode coordinates of dataframe according to a keyword and a threshold.
     Use a copy of the dataframe as an input, if it should not be edited.
@@ -251,7 +251,7 @@ def downscaled_centroids(
     table: pd.DataFrame,
     scale_factor: int,
     ref_dimensions: Optional[Tuple[float, float, float]] = None,
-    downsample_mode: Optional[str] = "accumulated",
+    downsample_mode: str = "accumulated",
 ) -> np.typing.NDArray:
     """Downscale centroids in dataframe.
 
@@ -302,11 +302,11 @@ def downscaled_centroids(
 
 def components_sgn(
     table: pd.DataFrame,
-    keyword: Optional[str] = "distance_nn100",
+    keyword: str = "distance_nn100",
     threshold_erode: Optional[float] = None,
-    postprocess_graph: Optional[bool] = False,
-    min_component_length: Optional[int] = 50,
-    min_edge_distance: Optional[float] = 30,
+    postprocess_graph: bool = False,
+    min_component_length: int = 50,
+    min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
 ) -> List[List[int]]:
     """Eroding the SGN segmentation.
@@ -393,10 +393,10 @@ def components_sgn(
 
 def label_components(
     table: pd.DataFrame,
-    min_size: Optional[int] = 1000,
+    min_size: int = 1000,
     threshold_erode: Optional[float] = None,
-    min_component_length: Optional[int] = 50,
-    min_edge_distance: Optional[float] = 30,
+    min_component_length: int = 50,
+    min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
 ) -> List[int]:
     """Label components using graph connected components.
@@ -438,10 +438,10 @@ def label_components(
 
 def postprocess_sgn_seg(
     table: pd.DataFrame,
-    min_size: Optional[int] = 1000,
+    min_size: int = 1000,
     threshold_erode: Optional[float] = None,
-    min_component_length: Optional[int] = 50,
-    min_edge_distance: Optional[float] = 30,
+    min_component_length: int = 50,
+    min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
 ) -> pd.DataFrame:
     """Postprocessing SGN segmentation of cochlea.
