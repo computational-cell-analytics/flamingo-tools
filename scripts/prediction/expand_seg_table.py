@@ -61,7 +61,7 @@ def main(
             neighbor_counts = [n[0] for n in neighbor_counts]
             tsv_table['neighbors_in_radius'+str(r_neighbor)] = neighbor_counts
 
-    tsv_table.to_csv(out_path, sep="\t")
+    tsv_table.to_csv(out_path, sep="\t", index=False)
 
 
 if __name__ == "__main__":
