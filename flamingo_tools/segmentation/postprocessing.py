@@ -115,19 +115,39 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 #
 
 
-def _compute_table(segmentation, resolution):
+def compute_table_on_the_fly(segmentation: np.typing.ArrayLike, resolution: float) -> pd.DataFrame:
+    """Compute a segmentation table compatible with MoBIE.
+
+    The table contains information about the number of pixels per object,
+    the anchor (= centroid) and the bounding box. Anchor and bounding box are given in physical coordinates.
+
+    Args:
+        segmentation: The segmentation for which to compute the table.
+        resolution: The physical voxel spacing of the data.
+
+    Returns:
+        The segmentation table.
+    """
     props = measure.regionprops(segmentation)
     label_ids = np.array([prop.label for prop in props])
-    coordinates = np.array([prop.centroid for prop in props])
+    coordinates = np.array([prop.centroid for prop in props]).astype("float32")
     # transform pixel distance to physical units
     coordinates = coordinates * resolution
+    bb_min = np.array([prop.bbox[:3] for prop in props]).astype("float32") * resolution
+    bb_max = np.array([prop.bbox[3:] for prop in props]).astype("float32") * resolution
     sizes = np.array([prop.area for prop in props])
     table = pd.DataFrame({
         "label_id": label_ids,
-        "n_pixels": sizes,
         "anchor_x": coordinates[:, 2],
         "anchor_y": coordinates[:, 1],
         "anchor_z": coordinates[:, 0],
+        "bb_min_x": bb_min[:, 2],
+        "bb_min_y": bb_min[:, 1],
+        "bb_min_z": bb_min[:, 0],
+        "bb_max_x": bb_max[:, 2],
+        "bb_max_y": bb_max[:, 1],
+        "bb_max_z": bb_max[:, 0],
+        "n_pixels": sizes,
     })
     return table
 
@@ -160,13 +180,12 @@ def filter_segmentation(
         spatial_statistics_kwargs: Arguments for spatial statistics function
 
     Returns:
-        n_ids
-        n_ids_filtered
+        The number of objects before filtering.
+        The number of objects after filtering.
     """
-    # Compute the table on the fly.
-    # NOTE: this currently doesn't work for large segmentations.
+    # Compute the table on the fly. This doesn't work for large segmentations.
     if table is None:
-        table = _compute_table(segmentation, resolution=resolution)
+        table = compute_table_on_the_fly(segmentation, resolution=resolution)
     n_ids = len(table)
 
     # First apply the size filter.

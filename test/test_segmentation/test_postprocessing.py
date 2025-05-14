@@ -2,9 +2,12 @@ import os
 import tempfile
 import unittest
 
+import imageio.v3 as imageio
+import numpy as np
+import pandas as pd
 from elf.io import open_file
 from skimage.data import binary_blobs
-from skimage.measure import label
+from skimage.measure import label, regionprops_table
 
 
 class TestPostprocessing(unittest.TestCase):
@@ -43,6 +46,32 @@ class TestPostprocessing(unittest.TestCase):
         from flamingo_tools.segmentation.postprocessing import neighbors_in_radius
 
         self._test_postprocessing(neighbors_in_radius, threshold=5)
+
+    def test_compute_table_on_the_fly(self):
+        from flamingo_tools.segmentation.postprocessing import compute_table_on_the_fly
+        from flamingo_tools.test_data import get_test_volume_and_segmentation
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _, seg_path, _ = get_test_volume_and_segmentation(tmp_dir)
+            segmentation = imageio.imread(seg_path)
+
+        resolution = 0.38
+        table = compute_table_on_the_fly(segmentation, resolution=resolution)
+
+        properties = ("label", "bbox", "centroid")
+        expected_table = regionprops_table(segmentation, properties=properties)
+        expected_table = pd.DataFrame(expected_table)
+
+        for (col, col_exp) in [
+            ("label_id", "label"),
+            ("anchor_x", "centroid-2"), ("anchor_y", "centroid-1"), ("anchor_z", "centroid-0"),
+            ("bb_min_x", "bbox-2"), ("bb_min_y", "bbox-1"), ("bb_min_z", "bbox-0"),
+            ("bb_max_x", "bbox-5"), ("bb_max_y", "bbox-4"), ("bb_max_z", "bbox-3"),
+        ]:
+            values = table[col].values
+            if col != "label_id":
+                values /= resolution
+            self.assertTrue(np.allclose(values, expected_table[col_exp].values))
 
 
 if __name__ == "__main__":
