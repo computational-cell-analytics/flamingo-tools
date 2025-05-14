@@ -18,9 +18,9 @@ def main(
     output_dir: str = None,
     input_key: str = "setup0/timepoint0/s0",
     output_key: Optional[str] = None,
-    resolution: Optional[float] = 0.38,
+    resolution: float = 0.38,
     roi_halo: List[int] = [128, 128, 64],
-    tif: Optional[bool] = False,
+    tif: bool = False,
     s3: Optional[bool] = False,
     s3_credentials: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
@@ -52,7 +52,14 @@ def main(
     input_content = list(filter(None, input_path.split("/")))
 
     if s3:
-        basename = input_content[0] + "_" + input_content[-1].split(".")[0]
+        image_name = input_content[-1].split(".")[0]
+        if len(image_name.split("_")) > 1:
+            resized_suffix = "_resized"
+            image_prefix = image_name.split("_")[0]
+        else:
+            resized_suffix = ""
+            image_prefix = image_name
+        basename = input_content[0] + resized_suffix
     else:
         basename = "".join(input_content[-1].split(".")[:-1])
 
@@ -64,9 +71,11 @@ def main(
 
     if tif:
         if output_key is None:
-            output_file = os.path.join(output_dir, basename + "_crop_" + coord_string + ".tif")
+            output_name = basename + "_crop_" + coord_string + "_" + image_prefix + ".tif"
         else:
-            output_file = os.path.join(output_dir, basename + "_crop_" + coord_string + "_" + output_key + ".tif")
+            output_name = basename + "_" + image_prefix + "_crop_" + coord_string + "_" + output_key + ".tif"
+
+        output_file = os.path.join(output_dir, output_name)
     else:
         output_key = "raw" if output_key is None else output_key
         output_file = os.path.join(output_dir, basename + "_crop_" + coord_string + ".n5")
@@ -89,7 +98,7 @@ def main(
             raw = f[input_key][roi]
 
     if tif:
-        imageio.imwrite(output_file, raw)
+        imageio.imwrite(output_file, raw, compression="zlib")
     else:
         with zarr.open(output_file, mode="w") as f_out:
             f_out.create_dataset(output_key, data=raw, compression="gzip")
