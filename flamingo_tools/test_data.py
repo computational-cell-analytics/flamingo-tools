@@ -15,9 +15,12 @@ def get_test_volume_and_segmentation(folder: str) -> Tuple[str, str, str]:
     """Download a small volume with nuclei and corresponding segmentation.
 
     Args:
-        folder:
+        folder: The test data folder. The data will be downloaded to this folder.
 
     Returns:
+        The path to the image, stored as tif.
+        The path to the segmentation, stored as tif.
+        The path to the segmentation table, stored as tsv.
     """
     os.makedirs(folder, exist_ok=True)
 
@@ -46,7 +49,12 @@ def create_image_data_and_segmentation(folder: str, size: int = 256) -> Tuple[st
     """Create test data containing an image, a corresponding segmentation and segmentation table.
 
     Args:
-        folder: The test data folder.
+        folder: The test data folder. The data will be written to this folder.
+
+    Returns:
+        The path to the image, stored as tif.
+        The path to the segmentation, stored as tif.
+        The path to the segmentation table, stored as tsv.
     """
     os.makedirs(folder, exist_ok=True)
     data = binary_blobs(size, n_dim=3).astype("uint8") * 255

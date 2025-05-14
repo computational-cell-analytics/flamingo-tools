@@ -54,12 +54,12 @@ def compute_object_measures_impl(
         bb_min = np.array([
             row.bb_min_z.item(), row.bb_min_y.item(), row.bb_min_x.item()
         ]).astype("float32") / resolution
-        bb_min = np.round(bb_min, 0).astype("uint32")
+        bb_min = np.round(bb_min, 0).astype("int32")
 
         bb_max = np.array([
             row.bb_max_z.item(), row.bb_max_y.item(), row.bb_max_x.item()
         ]).astype("float32") / resolution
-        bb_max = np.round(bb_max, 0).astype("uint32")
+        bb_max = np.round(bb_max, 0).astype("int32")
 
         bb = tuple(
             slice(max(bmin - 1, 0), min(bmax + 1, sh))
