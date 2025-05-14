@@ -13,4 +13,4 @@ dependencies:
   - s3fs
   - torch_em
   - z5py
-  - zarr
+  - zarr <3
