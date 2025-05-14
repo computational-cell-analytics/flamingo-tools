@@ -6,12 +6,19 @@ import requests
 from skimage.data import binary_blobs, cells3d
 from skimage.measure import label
 
-from .segmentation.postprocessing import _compute_table
+from .segmentation.postprocessing import compute_table_on_the_fly
 
 SEGMENTATION_URL = "https://owncloud.gwdg.de/index.php/s/kwoGRYiJRRrswgw/download"
 
 
 def get_test_volume_and_segmentation(folder: str) -> Tuple[str, str, str]:
+    """Download a small volume with nuclei and corresponding segmentation.
+
+    Args:
+        folder:
+
+    Returns:
+    """
     os.makedirs(folder, exist_ok=True)
 
     segmentation_path = os.path.join(folder, "segmentation.tif")
@@ -29,7 +36,7 @@ def get_test_volume_and_segmentation(folder: str) -> Tuple[str, str, str]:
     imageio.imwrite(image_path, nuclei)
 
     table_path = os.path.join(folder, "default.tsv")
-    table = _compute_table(segmentation, resolution=0.38)
+    table = compute_table_on_the_fly(segmentation, resolution=0.38)
     table.to_csv(table_path, sep="\t", index=False)
 
     return image_path, segmentation_path, table_path
@@ -51,7 +58,7 @@ def create_image_data_and_segmentation(folder: str, size: int = 256) -> Tuple[st
     imageio.imwrite(segmentation_path, seg)
 
     table_path = os.path.join(folder, "default.tsv")
-    table = _compute_table(seg, resolution=0.38)
+    table = compute_table_on_the_fly(seg, resolution=0.38)
     table.to_csv(table_path, sep="\t", index=False)
 
     return image_path, segmentation_path, table_path

@@ -115,7 +115,9 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 #
 
 
-def _compute_table(segmentation, resolution):
+def compute_table_on_the_fly(segmentation: np.typing.ArrayLike, resolution: float) -> pd.DataFrame:
+    """
+    """
     props = measure.regionprops(segmentation)
     label_ids = np.array([prop.label for prop in props])
     coordinates = np.array([prop.centroid for prop in props]).astype("float32")
@@ -171,10 +173,9 @@ def filter_segmentation(
         n_ids
         n_ids_filtered
     """
-    # Compute the table on the fly.
-    # NOTE: this currently doesn't work for large segmentations.
+    # Compute the table on the fly. This doesn't work for large segmentations.
     if table is None:
-        table = _compute_table(segmentation, resolution=resolution)
+        table = compute_table_on_the_fly(segmentation, resolution=resolution)
     n_ids = len(table)
 
     # First apply the size filter.

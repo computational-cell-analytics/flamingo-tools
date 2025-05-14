@@ -9,7 +9,7 @@ from skimage.measure import marching_cubes
 from tqdm import tqdm
 
 from .file_utils import read_image_data
-from .segmentation.postprocessing import _compute_table
+from .segmentation.postprocessing import compute_table_on_the_fly
 
 
 def _measure_volume_and_surface(mask, resolution):
@@ -45,7 +45,7 @@ def compute_object_measures_impl(
         table: The segmentation table. Will be computed on the fly if it is not given.
     """
     if table is None:
-        table = _compute_table(segmentation, resolution)
+        table = compute_table_on_the_fly(segmentation, resolution=resolution)
 
     def intensity_measures(seg_id):
         # Get the bounding box.
