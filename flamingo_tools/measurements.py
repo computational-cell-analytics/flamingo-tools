@@ -43,6 +43,9 @@ def compute_object_measures_impl(
         n_threads: The number of threads to use for computation.
         resolution: The resolution / voxel size of the data.
         table: The segmentation table. Will be computed on the fly if it is not given.
+
+    Returns:
+        The table with per object measurements.
     """
     if table is None:
         table = compute_table_on_the_fly(segmentation, resolution=resolution)

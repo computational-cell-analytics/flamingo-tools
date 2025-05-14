@@ -116,7 +116,17 @@ def neighbors_in_radius(table: pd.DataFrame, radius: float = 15) -> np.ndarray:
 
 
 def compute_table_on_the_fly(segmentation: np.typing.ArrayLike, resolution: float) -> pd.DataFrame:
-    """
+    """Compute a segmentation table compatible with MoBIE.
+
+    The table contains information about the number of pixels per object,
+    the anchor (= centroid) and the bounding box. Anchor and bounding box are given in physical coordinates.
+
+    Args:
+        segmentation: The segmentation for which to compute the table.
+        resolution: The physical voxel spacing of the data.
+
+    Returns:
+        The segmentation table.
     """
     props = measure.regionprops(segmentation)
     label_ids = np.array([prop.label for prop in props])
@@ -128,7 +138,6 @@ def compute_table_on_the_fly(segmentation: np.typing.ArrayLike, resolution: floa
     sizes = np.array([prop.area for prop in props])
     table = pd.DataFrame({
         "label_id": label_ids,
-        "n_pixels": sizes,
         "anchor_x": coordinates[:, 2],
         "anchor_y": coordinates[:, 1],
         "anchor_z": coordinates[:, 0],
@@ -138,6 +147,7 @@ def compute_table_on_the_fly(segmentation: np.typing.ArrayLike, resolution: floa
         "bb_max_x": bb_max[:, 2],
         "bb_max_y": bb_max[:, 1],
         "bb_max_z": bb_max[:, 0],
+        "n_pixels": sizes,
     })
     return table
 
@@ -170,8 +180,8 @@ def filter_segmentation(
         spatial_statistics_kwargs: Arguments for spatial statistics function
 
     Returns:
-        n_ids
-        n_ids_filtered
+        The number of objects before filtering.
+        The number of objects after filtering.
     """
     # Compute the table on the fly. This doesn't work for large segmentations.
     if table is None:
