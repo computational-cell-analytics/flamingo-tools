@@ -74,9 +74,19 @@ def fetch_data_for_evaluation(
     with zarr.open(s3_store, mode="r") as f:
         segmentation = f[input_key][roi]
 
-    # ...
     if components_for_postprocessing is not None:
-        pass
+        # Filter the IDs so that only the ones part of 'components_for_postprocessing_remain'.
+
+        # First, we download the MoBIE table for this segmentation.
+        internal_path = os.path.join(BUCKET_NAME, cochlea, "tables",  seg_name, "default.tsv")
+        with fs.open(internal_path, "r") as f:
+            table = pd.read_csv(f, sep="\t")
+
+        # Then we get the ids for the components and us them to filter the segmentation.
+        component_mask = np.isin(table.component_labels.values, components_for_postprocessing)
+        keep_label_ids = table.label_id.values[component_mask].astype("int64")
+        filter_mask = ~np.isin(segmentation, keep_label_ids)
+        segmentation[filter_mask] = 0
 
     segmentation, _, _ = relabel_sequential(segmentation)
 
