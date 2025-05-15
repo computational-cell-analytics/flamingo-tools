@@ -27,6 +27,14 @@ def _normalize_cochlea_name(name):
     return f"{prefix}_{number:06d}_{postfix}"
 
 
+def parse_annotation_path(annotation_path):
+    fname = os.path.basename(annotation_path)
+    name_parts = fname.split("_")
+    cochlea = _normalize_cochlea_name(name_parts[0])
+    slice_id = int(name_parts[2][1:])
+    return cochlea, slice_id
+
+
 # TODO enable table component filtering with MoBIE table
 # NOTE: the main component is always #1
 def fetch_data_for_evaluation(
@@ -54,10 +62,7 @@ def fetch_data_for_evaluation(
         return segmentation, annotations
 
     # Parse which ID and which cochlea from the name.
-    fname = os.path.basename(annotation_path)
-    name_parts = fname.split("_")
-    cochlea = _normalize_cochlea_name(name_parts[0])
-    slice_id = int(name_parts[2][1:])
+    cochlea, slice_id = parse_annotation_path(annotation_path)
 
     # Open the S3 connection, get the path to the SGN segmentation in S3.
     internal_path = os.path.join(cochlea, "images",  "ome-zarr", f"{seg_name}.ome.zarr")
