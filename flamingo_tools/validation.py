@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import imageio.v3 as imageio
 import numpy as np
@@ -28,11 +28,13 @@ def _normalize_cochlea_name(name):
 
 
 # TODO enable table component filtering with MoBIE table
+# NOTE: the main component is always #1
 def fetch_data_for_evaluation(
     annotation_path: str,
     cache_path: Optional[str] = None,
     seg_name: str = "SGN",
     z_extent: int = 0,
+    components_for_postprocessing: Optional[List[int]] = None,
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """
     """
@@ -71,6 +73,11 @@ def fetch_data_for_evaluation(
     input_key = "s0"
     with zarr.open(s3_store, mode="r") as f:
         segmentation = f[input_key][roi]
+
+    # ...
+    if components_for_postprocessing is not None:
+        pass
+
     segmentation, _, _ = relabel_sequential(segmentation)
 
     # Cache it if required.
@@ -80,6 +87,7 @@ def fetch_data_for_evaluation(
     return segmentation, annotations
 
 
+# TODO crop to the bounding box around the union of points and segmentation masks to be more efficient.
 def compute_matches_for_annotated_slice(
     segmentation: np.typing.ArrayLike,
     annotations: pd.DataFrame,
