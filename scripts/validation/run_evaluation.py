@@ -11,7 +11,6 @@ ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):
-    # TODO load existing result file and initialize
     results = {
         "annotator": [],
         "cochlea": [],
@@ -33,21 +32,21 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder):
             if cochlea == "M_LR_000169_R":
                 continue
 
-            # TODO skip if this is already in the results
             print("Run evaluation for", annotator, cochlea, slice_id)
             segmentation, annotations = fetch_data_for_evaluation(
                 annotation_path, components_for_postprocessing=[1],
                 cache_path=None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif")
             )
-            scores = compute_scores_for_annotated_slice(segmentation, annotations)
+            scores = compute_scores_for_annotated_slice(segmentation, annotations, matching_tolerance=5)
             results["annotator"].append(annotator)
             results["cochlea"].append(cochlea)
             results["slice"].append(slice_id)
             results["tps"].append(scores["tp"])
             results["fps"].append(scores["fp"])
             results["fns"].append(scores["fn"])
-            table = pd.DataFrame(results)
-            table.to_csv(result_file, index=False)
+
+    table = pd.DataFrame(results)
+    table.to_csv(result_file, index=False)
     print(table)
 
 
