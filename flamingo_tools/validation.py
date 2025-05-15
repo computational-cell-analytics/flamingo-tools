@@ -245,13 +245,17 @@ def for_visualization(segmentation, annotations, matches):
 
     point_vis = annotations.copy()
     tps = matches["tp_annotations"]
+    match_properties = ["tp" if aid in tps else "fn" for aid in range(len(annotations))]
+    # The color cycle assigns the first color to the first property etc.
+    # So we need to set the first color to red if the first id is a false negative and vice versa.
+    color_cycle = green_red[::-1] if match_properties[0] == "fn" else green_red
     point_props = dict(
         properties={
             "id": list(range(len(annotations))),
-            "match": ["tp" if aid in tps else "fn" for aid in range(len(annotations))]
+            "match": match_properties,
         },
         face_color="match",
-        face_color_cycle=green_red[::-1],
+        face_color_cycle=color_cycle,
         border_width=0.25,
         size=10,
     )
