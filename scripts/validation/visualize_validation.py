@@ -12,7 +12,9 @@ TEST_ANNOTATION = os.path.join(ROOT, "AnnotationsEK/MAMD58L_PV_z771_base_full_an
 
 def main():
     image = imageio.imread(os.path.join(ROOT, "MAMD58L_PV_z771_base_full.tif"))
-    segmentation, annotations = fetch_data_for_evaluation(TEST_ANNOTATION, cache_path="./seg.tif")
+    segmentation, annotations = fetch_data_for_evaluation(
+        TEST_ANNOTATION, cache_path="./seg.tif", components_for_postprocessing=[1],
+    )
 
     # v = napari.Viewer()
     # v.add_image(image)
