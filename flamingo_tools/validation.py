@@ -97,7 +97,59 @@ def fetch_data_for_evaluation(
     return segmentation, annotations
 
 
-# TODO crop to the bounding box around the union of points and segmentation masks to be more efficient.
+# We should use the hungarian based matching, but I can't find the bug in it right now.
+def _naive_matching(annotations, segmentation, segmentation_ids, matching_tolerance, coordinates):
+    distances, indices = distance_transform_edt(segmentation == 0, return_indices=True)
+
+    matched_ids = {}
+    matched_distances = {}
+    annotation_id = 0
+    for _, row in annotations.iterrows():
+        coordinate = tuple(int(np.round(row[coord])) for coord in coordinates)
+        object_distance = distances[coordinate]
+        if object_distance <= matching_tolerance:
+            closest_object_coord = tuple(idx[coordinate] for idx in indices)
+            object_id = segmentation[closest_object_coord]
+            if object_id not in matched_ids or matched_distances[object_id] > object_distance:
+                matched_ids[object_id] = annotation_id
+                matched_distances[object_id] = object_distance
+        annotation_id += 1
+
+    tp_ids_objects = np.array(list(matched_ids.keys()))
+    tp_ids_annotations = np.array(list(matched_ids.values()))
+    return tp_ids_objects, tp_ids_annotations
+
+
+# There is a bug in here that neither I nor o3 can figure out ...
+def _assignment_based_matching(annotations, segmentation, segmentation_ids, matching_tolerance, coordinates):
+    n_objects, n_annotations = len(segmentation_ids), len(annotations)
+
+    # In order to get the full distance matrix, we compute the distance to all objects for each annotation.
+    # This is not very efficient, but it's the most straight-forward and most rigorous approach.
+    scores = np.zeros((n_objects, n_annotations), dtype="float")
+    i = 0
+    for _, row in tqdm(annotations.iterrows(), total=n_annotations, desc="Compute pairwise distances"):
+        coordinate = tuple(int(np.round(row[coord])) for coord in coordinates)
+        distance_input = np.ones(segmentation.shape, dtype="bool")
+        distance_input[coordinate] = False
+        distances = distance_transform_edt(distance_input)
+
+        props = regionprops_table(segmentation, intensity_image=distances, properties=("label", "min_intensity"))
+        distances = props["min_intensity"]
+        assert len(distances) == scores.shape[0]
+        scores[:, i] = distances
+        i += 1
+
+    # Find the assignment of points to objects.
+    # These correspond to the TP ids in the point / object annotations.
+    tp_ids_objects, tp_ids_annotations = linear_sum_assignment(scores)
+    match_ok = scores[tp_ids_objects, tp_ids_annotations] <= matching_tolerance
+    tp_ids_objects, tp_ids_annotations = tp_ids_objects[match_ok], tp_ids_annotations[match_ok]
+    tp_ids_objects = segmentation_ids[tp_ids_objects]
+
+    return tp_ids_objects, tp_ids_annotations
+
+
 def compute_matches_for_annotated_slice(
     segmentation: np.typing.ArrayLike,
     annotations: pd.DataFrame,
@@ -117,37 +169,35 @@ def compute_matches_for_annotated_slice(
         A dictionary with keys 'tp_objects', 'tp_annotations' 'fp' and 'fn', mapping to the respective ids.
     """
     assert segmentation.ndim in (2, 3)
-    segmentation_ids = np.unique(segmentation)[1:]
-    n_objects, n_annotations = len(segmentation_ids), len(annotations)
-
-    # In order to get the full distance matrix, we compute the distance to all objects for each annotation.
-    # This is not very efficient, but it's the most straight-forward and most rigorous approach.
-    scores = np.zeros((n_objects, n_annotations), dtype="float")
     coordinates = ["axis-0", "axis-1"] if segmentation.ndim == 2 else ["axis-0", "axis-1", "axis-2"]
-    for i, row in tqdm(annotations.iterrows(), total=n_annotations, desc="Compute pairwise distances"):
-        coordinate = tuple(int(np.round(row[coord])) for coord in coordinates)
-        distance_input = np.ones(segmentation.shape, dtype="bool")
-        distance_input[coordinate] = False
-        distances, indices = distance_transform_edt(distance_input, return_indices=True)
+    segmentation_ids = np.unique(segmentation)[1:]
 
-        props = regionprops_table(segmentation, intensity_image=distances, properties=("label", "min_intensity"))
-        distances = props["min_intensity"]
-        assert len(distances) == scores.shape[0]
-        scores[:, i] = distances
+    # Crop to the minimal enclosing bounding box of points and segmented objects.
+    bb_seg = np.where(segmentation != 0)
+    bb_seg = tuple(slice(int(bb.min()), int(bb.max())) for bb in bb_seg)
+    bb_points = tuple(
+        slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
+        for coords in coordinates
+    )
+    bbox = tuple(slice(min(bbs.start, bbp.start), max(bbs.stop, bbp.stop)) for bbs, bbp in zip(bb_seg, bb_points))
+    segmentation = segmentation[bbox]
 
-    # Find the assignment of points to objects.
-    # These correspond to the TP ids in the point / object annotations.
-    tp_ids_objects, tp_ids_annotations = linear_sum_assignment(scores)
-    match_ok = scores[tp_ids_objects, tp_ids_annotations] <= matching_tolerance
-    tp_ids_objects, tp_ids_annotations = tp_ids_objects[match_ok], tp_ids_annotations[match_ok]
-    tp_ids_objects = segmentation_ids[tp_ids_objects]
+    annotations = annotations.copy()
+    for coord, bb in zip(coordinates, bbox):
+        annotations[coord] -= bb.start
+        assert (annotations[coord] <= bb.stop).all()
+
+    # tp_ids_objects, tp_ids_annotations =\
+    #     _assignment_based_matching(annotations, segmentation, segmentation_ids, matching_tolerance, coordinates)
+    tp_ids_objects, tp_ids_annotations =\
+        _naive_matching(annotations, segmentation, segmentation_ids, matching_tolerance, coordinates)
     assert len(tp_ids_objects) == len(tp_ids_annotations)
 
     # Find the false positives: objects that are not part of the matches.
     fp_ids = np.setdiff1d(segmentation_ids, tp_ids_objects)
 
     # Find the false negatives: annotations that are not part of the matches.
-    fn_ids = np.setdiff1d(np.arange(n_annotations), tp_ids_annotations)
+    fn_ids = np.setdiff1d(np.arange(len(annotations)), tp_ids_annotations)
 
     return {"tp_objects": tp_ids_objects, "tp_annotations": tp_ids_annotations, "fp": fp_ids, "fn": fn_ids}
 
@@ -186,15 +236,19 @@ def for_visualization(segmentation, annotations, matches):
     seg_vis[np.isin(segmentation, tps)] = 1
     seg_vis[np.isin(segmentation, fps)] = 2
 
-    # TODO red / green colormap
-    seg_props = dict(color={1: green_red[0], 2: green_red[1]})
+    seg_props = dict(colormap={1: green_red[0], 2: green_red[1]})
 
     point_vis = annotations.copy()
     tps = matches["tp_annotations"]
     point_props = dict(
-        properties={"match": [0 if aid in tps else 1 for aid in range(len(annotations))]},
-        border_color="match",
-        border_color_cycle=green_red,
+        properties={
+            "id": list(range(len(annotations))),
+            "match": ["tp" if aid in tps else "fn" for aid in range(len(annotations))]
+        },
+        face_color="match",
+        face_color_cycle=green_red[::-1],
+        border_width=0.25,
+        size=10,
     )
 
     return seg_vis, point_vis, seg_props, point_props

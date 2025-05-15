@@ -11,11 +11,23 @@ TEST_ANNOTATION = os.path.join(ROOT, "AnnotationsEK/MAMD58L_PV_z771_base_full_an
 
 
 def main():
+    image = imageio.imread(os.path.join(ROOT, "MAMD58L_PV_z771_base_full.tif"))
     segmentation, annotations = fetch_data_for_evaluation(TEST_ANNOTATION, cache_path="./seg.tif")
+
+    # v = napari.Viewer()
+    # v.add_image(image)
+    # v.add_labels(segmentation)
+    # v.add_points(annotations)
+    # napari.run()
+
     matches = compute_matches_for_annotated_slice(segmentation, annotations)
+    tps, fns = matches["tp_annotations"], matches["fn"]
     vis_segmentation, vis_points, seg_props, point_props = for_visualization(segmentation, annotations, matches)
 
-    image = imageio.imread(os.path.join(ROOT, "MAMD58L_PV_z771_base_full.tif"))
+    print("True positive annotations:")
+    print(tps)
+    print("False negative annotations:")
+    print(fns)
 
     v = napari.Viewer()
     v.add_image(image)
