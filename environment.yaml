@@ -12,5 +12,7 @@ dependencies:
   - pytorch
   - s3fs
   - torch_em
+  - trimesh
   - z5py
+  # Don't install zarr v3, as we are not sure that it is compatible with MoBIE etc. yet
   - zarr <3

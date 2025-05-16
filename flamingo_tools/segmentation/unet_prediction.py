@@ -324,6 +324,7 @@ def run_unet_prediction(
     scale: Optional[float] = None,
     block_shape: Optional[Tuple[int, int, int]] = None,
     halo: Optional[Tuple[int, int, int]] = None,
+    use_mask: bool = True,
 ) -> None:
     """Run prediction and segmentation with a distance U-Net.
 
@@ -337,10 +338,12 @@ def run_unet_prediction(
             By default the data will not be rescaled.
         block_shape: The block-shape for running the prediction.
         halo: The halo (= block overlap) to use for prediction.
+        use_mask: Whether to use the masking heuristics to not run inference on empty blocks.
     """
     os.makedirs(output_folder, exist_ok=True)
 
-    find_mask(input_path, input_key, output_folder)
+    if use_mask:
+        find_mask(input_path, input_key, output_folder)
 
     original_shape = prediction_impl(
         input_path, input_key, output_folder, model_path, scale, block_shape, halo

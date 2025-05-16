@@ -7,6 +7,11 @@ import tifffile
 import zarr
 from elf.io import open_file
 
+try:
+    from zarr.abc.store import Store
+except ImportError:
+    from zarr._storage.store import BaseStore as Store
+
 
 def _parse_shape(metadata_file):
     depth, height, width = None, None, None
@@ -62,7 +67,7 @@ def read_tif(file_path: str) -> Union[np.ndarray, np.memmap]:
     return x
 
 
-def read_image_data(input_path: Union[str, zarr.storage.FSStore], input_key: Optional[str]) -> np.typing.ArrayLike:
+def read_image_data(input_path: Union[str, Store], input_key: Optional[str]) -> np.typing.ArrayLike:
     """Read flamingo image data, stored in various formats.
 
     Args:
