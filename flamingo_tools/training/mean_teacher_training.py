@@ -6,13 +6,7 @@ import torch_em
 import torch_em.self_training as self_training
 from torchvision import transforms
 
-
-def get_3d_model(out_channels):
-    raise NotImplementedError
-
-
-def get_supervised_loader():
-    raise NotImplementedError
+from .util import get_supervised_loader, get_3d_model
 
 
 def weak_augmentations(p: float = 0.75) -> callable:
@@ -79,15 +73,17 @@ def get_unsupervised_loader(
     return loader
 
 
-def mean_teacher_adaptation(
+def mean_teacher_training(
     name: str,
     unsupervised_train_paths: Tuple[str],
     unsupervised_val_paths: Tuple[str],
     patch_shape: Tuple[int, int, int],
     save_root: Optional[str] = None,
     source_checkpoint: Optional[str] = None,
-    supervised_train_paths: Optional[Tuple[str]] = None,
-    supervised_val_paths: Optional[Tuple[str]] = None,
+    supervised_train_image_paths: Optional[Tuple[str]] = None,
+    supervised_val_image_paths: Optional[Tuple[str]] = None,
+    supervised_train_label_paths: Optional[Tuple[str]] = None,
+    supervised_val_label_paths: Optional[Tuple[str]] = None,
     confidence_threshold: float = 0.9,
     raw_key: Optional[str] = None,
     raw_key_supervised: Optional[str] = None,
@@ -99,14 +95,13 @@ def mean_teacher_adaptation(
     n_samples_val: Optional[int] = None,
     sampler: Optional[callable] = None,
 ) -> None:
-    """Run domain adapation to transfer a network trained on a source domain for a supervised
-    segmentation task to perform this task on a different target domain.
+    """This function implements network training with a mean teacher approach.
 
-    We support different domain adaptation settings:
-    - unsupervised domain adaptation: the default mode when 'supervised_train_paths' and
-     'supervised_val_paths' are not given.
-    - semi-supervised domain adaptation: domain adaptation on unlabeled and labeled data,
-      when 'supervised_train_paths' and 'supervised_val_paths' are given.
+    It can be used for semi-supervised learning, unsupervised domain adaptation and supervised domain adaptation.
+    These different training modes can be used as this:
+    - semi-supervised learning: pass 'unsupervised_train/val_paths' and 'supervised_train/val_paths'.
+    - unsupervised domain adaptation: pass 'unsupervised_train/val_paths' and 'source_checkpoint'.
+    - supervised domain adaptation: pass 'unsupervised_train/val_paths', 'supervised_train/val_paths', 'source_checkpoint'.
 
     Args:
         name: The name for the checkpoint to be trained.
@@ -125,16 +120,24 @@ def mean_teacher_adaptation(
             If the checkpoint is not given, then both student and teacher model are initialized
             from scratch. In this case `supervised_train_paths` and `supervised_val_paths` have to
             be given in order to provide training data from the source domain.
-        supervised_train_paths: Filepaths to the hdf5 files for the training data in the source domain.
-            This training data is optional. If given, it is used for unsupervised learnig and requires labels.
-        supervised_val_paths: Filepaths to the df5 files for the validation data in the source domain.
-            This validation data is optional. If given, it is used for unsupervised learnig and requires labels.
+        supervised_train_image_paths: Paths to the files for the supervised image data; training split.
+            This training data is optional. If given, it also requires labels.
+        supervised_val_image_paths: Ppaths to the files for the supervised image data; validation split.
+            This validation data is optional. If given, it also requires labels.
+        supervised_train_label_paths: Filepaths to the files for the supervised label masks; training split.
+            This training data is optional.
+        supervised_val_label_paths: Filepaths to the files for the supervised label masks; validation split.
+            This tvalidation data is optional.
         confidence_threshold: The threshold for filtering data in the unsupervised loss.
             The label filtering is done based on the uncertainty of network predictions, and only
             the data with higher certainty than this threshold is used for training.
-        raw_key: The key that holds the raw data inside of the hdf5 or similar files.
+        raw_key: The key that holds the raw data inside of the hdf5 or similar files;
+            for the unsupervised training data. Set to None for tifs.
+        raw_key_supervised: The key that holds the raw data inside of the hdf5 or similar files;
+            for the supervised training data. Set to None for tifs.
         label_key: The key that holds the labels inside of the hdf5 files for supervised learning.
-            This is only required if `supervised_train_paths` and `supervised_val_paths` are given.
+            This is only required if `supervised_train_label_paths` and `supervised_val_label_paths` are given.
+            Set to None for tifs.
         batch_size: The batch size for training.
         lr: The initial learning rate.
         n_iterations: The number of iterations to train for.
@@ -142,13 +145,13 @@ def mean_teacher_adaptation(
             based on the patch_shape and size of the volumes used for training.
         n_samples_val: The number of val samples per epoch. By default this will be estimated
             based on the patch_shape and size of the volumes used for validation.
-    """
-    assert (supervised_train_paths is None) == (supervised_val_paths is None)
+    """  # noqa
+    assert (supervised_train_image_paths is None) == (supervised_val_image_paths is None)
 
     if source_checkpoint is None:
-        # training from scratch only makes sense if we have supervised training data
+        # Training from scratch only makes sense if we have supervised training data
         # that's why we have the assertion here.
-        assert supervised_train_paths is not None
+        assert supervised_train_image_paths is not None
         model = get_3d_model(out_channels=3)
         reinit_teacher = True
     else:
@@ -174,15 +177,16 @@ def mean_teacher_adaptation(
         unsupervised_val_paths, raw_key, patch_shape, batch_size, n_samples=n_samples_val
     )
 
-    if supervised_train_paths is not None:
-        assert label_key is not None
+    if supervised_train_image_paths is not None:
         supervised_train_loader = get_supervised_loader(
-            supervised_train_paths, raw_key_supervised, label_key,
-            patch_shape, batch_size, n_samples=n_samples_train,
+            supervised_train_image_paths, supervised_train_label_paths,
+            patch_shape=patch_shape, batch_size=batch_size, n_samples=n_samples_train,
+            image_key=raw_key_supervised, label_key=label_key,
         )
         supervised_val_loader = get_supervised_loader(
-            supervised_val_paths, raw_key_supervised, label_key,
-            patch_shape, batch_size, n_samples=n_samples_val,
+            supervised_val_image_paths, supervised_val_label_paths,
+            patch_shape=patch_shape, batch_size=batch_size, n_samples=n_samples_val,
+            image_key=raw_key_supervised, label_key=label_key,
         )
     else:
         supervised_train_loader = None

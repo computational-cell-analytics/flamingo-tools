@@ -3,7 +3,7 @@ from glob import glob
 
 import torch
 from torch_em.util import load_model
-from flamingo_tools.training.domain_adaptation import mean_teacher_adaptation
+from flamingo_tools.training import mean_teacher_training
 
 
 def get_paths():
@@ -21,7 +21,7 @@ def run_training(name):
     source_checkpoint = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/cochlea_distance_unet_SGN_March2025Model"  # noqa
 
     train_paths, val_paths = get_paths()
-    mean_teacher_adaptation(
+    mean_teacher_training(
         name=name,
         unsupervised_train_paths=train_paths,
         unsupervised_val_paths=val_paths,
