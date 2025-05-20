@@ -8,6 +8,7 @@ import multiprocessing as mp
 import os
 import warnings
 from concurrent import futures
+from functools import partial
 from typing import Optional, Tuple
 
 import elf.parallel as parallel
@@ -17,7 +18,7 @@ import vigra
 import torch
 import z5py
 
-from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
+from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper, MultiTransformationWrapper
 from elf.wrapper.resized_volume import ResizedVolume
 from elf.io import open_file
 from torch_em.util import load_model
@@ -26,6 +27,11 @@ from tqdm import tqdm
 
 import flamingo_tools.s3_utils as s3_utils
 from flamingo_tools.file_utils import read_image_data
+
+try:
+    import fastfilters as ff
+except ImportError:
+    import vigra.filters as ff
 
 
 class SelectChannel(SimpleTransformationWrapper):
@@ -217,61 +223,91 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> 
         list(tqdm(tp.map(find_mask_block, range(n_blocks)), total=n_blocks))
 
 
-def segmentation_impl(input_path, output_folder, min_size, original_shape=None):
-    """@private
+def distance_watershed_implementation(
+    input_path: str,
+    output_folder: str,
+    min_size: int,
+    center_distance_threshold: float = 0.4,
+    boundary_distance_threshold: Optional[float] = None,
+    fg_threshold: float = 0.5,
+    distance_smoothing: float = 1.6,
+    original_shape: Optional[Tuple[int, int, int]] = None,
+) -> None:
+    """
+
+    Args:
+        input_path:
+        output_folder:
+        min_size:
+        center_distance_threshold:
+        boundary_distance_threshold:
+        fg_threshold:
+        distance_smoothing:
+        original_shape:
     """
     input_ = open_file(input_path, "r")["prediction"]
 
     # Limit the number of cores for parallelization.
     n_threads = min(16, mp.cpu_count())
 
-    # The center distances as input for computing the seeds.
-    center_distances = SelectChannel(input_, 1)
-    block_shape = center_distances.chunks
+    # Get the foreground mask.
+    mask = ThresholdWrapper(SelectChannel(input_, 0), threshold=fg_threshold)
 
-    # Compute the seeds based on smoothed center distances < 0.5.
+    # Get the the center and boundary distances.
+    center_distances = SelectChannel(input_, 1)
+    boundary_distances = SelectChannel(input_, 2)
+
+    # Apply (lazy) smoothing to both.
+    smoothing = partial(ff.gaussianSmoothing, sigma=distance_smoothing)
+    center_distances = SimpleTransformationWrapper(center_distances, transformation=smoothing)
+    boundary_distances = SimpleTransformationWrapper(boundary_distances, transformation=smoothing)
+
+    # Allocate an zarr array for the seeds.
+    block_shape = center_distances.chunks
     seed_path = os.path.join(output_folder, "seeds.zarr")
     seed_file = open_file(os.path.join(seed_path), "a")
     seeds = seed_file.require_dataset(
         "seeds", shape=center_distances.shape, chunks=block_shape, compression="gzip", dtype="uint64"
     )
 
-    fg_threshold = 0.5
-    mask = ThresholdWrapper(SelectChannel(input_, 0), threshold=fg_threshold)
+    # Compute the seed inputs:
+    # First, threshold the center distances.
+    seed_inputs = ThresholdWrapper(center_distances, threshold=center_distance_threshold, operator=np.less)
+    # Then, if a boundary distance threshold was passed threshold the boundary distances and combine both.
+    if boundary_distance_threshold is not None:
+        seed_inputs2 = ThresholdWrapper(boundary_distances, threshold=boundary_distance_threshold, operator=np.less)
+        seed_inputs = MultiTransformationWrapper(np.logical_and, seed_inputs, seed_inputs2)
 
+    # Compute the seeds via connected components on the seed inputs.
     parallel.label(
-        data=ThresholdWrapper(center_distances, threshold=0.4, operator=np.less),
-        out=seeds, block_shape=block_shape, mask=mask, verbose=True, n_threads=n_threads
+        data=seed_inputs, out=seeds, block_shape=block_shape, mask=mask, verbose=True, n_threads=n_threads
     )
 
-    # Run the watershed.
-    if original_shape is None:
-        seg_path = os.path.join(output_folder, "segmentation.zarr")
-    else:
-        seg_path = os.path.join(output_folder, "seg_downscaled.zarr")
-
+    # Allocate the zarr array for the segmentation.
+    seg_path = os.path.join(output_folder, "segmentation.zarr" if original_shape is None else "seg_downscaled.zarr")
     seg_file = open_file(seg_path, "a")
     seg = seg_file.create_dataset(
         "segmentation", shape=seeds.shape, chunks=block_shape, compression="gzip", dtype="uint64"
     )
 
-    hmap = SelectChannel(input_, 2)
+    # Compute the segmentation with a seeded watershed
     halo = (2, 8, 8)
     parallel.seeded_watershed(
-        hmap, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True,
+        boundary_distances, seeds, out=seg, block_shape=block_shape, halo=halo, mask=mask, verbose=True,
         n_threads=n_threads,
     )
 
+    # Apply size filter.
     if min_size > 0:
         parallel.size_filter(
             seg, seg, min_size=min_size, block_shape=block_shape, mask=mask,
             verbose=True, n_threads=n_threads, relabel=True,
         )
 
+    # Reshape to original shape if given.
     if original_shape is not None:
         out_path = os.path.join(output_folder, "segmentation.zarr")
 
-        # This logic should be refactored.
         output_seg = ResizedVolume(seg, shape=original_shape, order=0)
         with open_file(out_path, "a") as f:
             out_seg_volume = f.create_dataset(
@@ -350,7 +386,7 @@ def run_unet_prediction(
     )
 
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    segmentation_impl(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+    distance_watershed_implementation(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
 
 
 #
@@ -467,4 +503,4 @@ def run_unet_segmentation_slurm(output_folder: str, min_size: int) -> None:
     """
     min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    segmentation_impl(pmap_out, output_folder, min_size=min_size)
+    distance_watershed_implementation(pmap_out, output_folder, min_size=min_size)
