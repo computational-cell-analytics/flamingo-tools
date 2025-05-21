@@ -8,7 +8,6 @@ import multiprocessing as mp
 import os
 import warnings
 from concurrent import futures
-from functools import partial
 from typing import Optional, Tuple
 
 import elf.parallel as parallel
@@ -28,11 +27,6 @@ from tqdm import tqdm
 
 import flamingo_tools.s3_utils as s3_utils
 from flamingo_tools.file_utils import read_image_data
-
-try:
-    import fastfilters as ff
-except ImportError:
-    import vigra.filters as ff
 
 
 class SelectChannel(SimpleTransformationWrapper):
@@ -231,7 +225,6 @@ def distance_watershed_implementation(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
-    distance_smoothing: float = 1.6,
     original_shape: Optional[Tuple[int, int, int]] = None,
 ) -> None:
     """Parallel implementation of the distance-prediction based watershed.
@@ -244,7 +237,6 @@ def distance_watershed_implementation(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
-        distance_smoothing: The smoothing factor applied to the distance predictions.
         original_shape: The original shape to resize the segmentation to.
     """
     input_ = open_file(input_path, "r")["prediction"]
@@ -260,9 +252,10 @@ def distance_watershed_implementation(
     boundary_distances = SelectChannel(input_, 2)
 
     # Apply (lazy) smoothing to both.
-    smoothing = partial(ff.gaussianSmoothing, sigma=distance_smoothing)
-    center_distances = SimpleTransformationWrapper(center_distances, transformation=smoothing)
-    boundary_distances = SimpleTransformationWrapper(boundary_distances, transformation=smoothing)
+    # NOTE: this leads to issues with the parallelization, so we don't implement distance smoothing for now.
+    # smoothing = partial(ff.gaussianSmoothing, sigma=distance_smoothing)
+    # center_distances = SimpleTransformationWrapper(center_distances, transformation=smoothing)
+    # boundary_distances = SimpleTransformationWrapper(boundary_distances, transformation=smoothing)
 
     # Allocate an zarr array for the seeds.
     block_shape = center_distances.chunks
@@ -366,7 +359,6 @@ def run_unet_prediction(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
-    distance_smoothing: float = 1.6,
 ) -> None:
     """Run prediction and segmentation with a distance U-Net.
 
@@ -385,7 +377,6 @@ def run_unet_prediction(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
-        distance_smoothing: The smoothing factor applied to the distance predictions.
     """
     os.makedirs(output_folder, exist_ok=True)
 
@@ -399,8 +390,9 @@ def run_unet_prediction(
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     distance_watershed_implementation(
         pmap_out, output_folder, min_size=min_size, original_shape=original_shape,
-        center_distance_threshold=center_distance_threshold, boundary_distance_threshold=boundary_distance_threshold,
-        fg_threshold=fg_threshold, distance_smoothing=distance_smoothing,
+        center_distance_threshold=center_distance_threshold,
+        boundary_distance_threshold=boundary_distance_threshold,
+        fg_threshold=fg_threshold,
     )
 
 
