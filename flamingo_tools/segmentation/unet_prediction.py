@@ -18,7 +18,8 @@ import vigra
 import torch
 import z5py
 
-from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper, MultiTransformationWrapper
+from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
+from elf.wrapper.base import MultiTransformationWrapper
 from elf.wrapper.resized_volume import ResizedVolume
 from elf.io import open_file
 from torch_em.util import load_model
@@ -233,17 +234,18 @@ def distance_watershed_implementation(
     distance_smoothing: float = 1.6,
     original_shape: Optional[Tuple[int, int, int]] = None,
 ) -> None:
-    """
+    """Parallel implementation of the distance-prediction based watershed.
 
     Args:
-        input_path:
-        output_folder:
-        min_size:
-        center_distance_threshold:
-        boundary_distance_threshold:
-        fg_threshold:
-        distance_smoothing:
-        original_shape:
+        input_path: The path to the zarr file with the network predictions.
+        output_folder: The folder for storing the segmentation and intermediate results.
+        min_size: The minimal size of objects in the segmentation.
+        center_distance_threshold: The threshold applied to the distance center predictions to derive seeds.
+        boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
+            By default this is set to 'None', in which case the boundary distances are not used for the seeds.
+        fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        distance_smoothing: The smoothing factor applied to the distance predictions.
+        original_shape: The original shape to resize the segmentation to.
     """
     input_ = open_file(input_path, "r")["prediction"]
 
@@ -361,6 +363,10 @@ def run_unet_prediction(
     block_shape: Optional[Tuple[int, int, int]] = None,
     halo: Optional[Tuple[int, int, int]] = None,
     use_mask: bool = True,
+    center_distance_threshold: float = 0.4,
+    boundary_distance_threshold: Optional[float] = None,
+    fg_threshold: float = 0.5,
+    distance_smoothing: float = 1.6,
 ) -> None:
     """Run prediction and segmentation with a distance U-Net.
 
@@ -375,6 +381,11 @@ def run_unet_prediction(
         block_shape: The block-shape for running the prediction.
         halo: The halo (= block overlap) to use for prediction.
         use_mask: Whether to use the masking heuristics to not run inference on empty blocks.
+        center_distance_threshold: The threshold applied to the distance center predictions to derive seeds.
+        boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
+            By default this is set to 'None', in which case the boundary distances are not used for the seeds.
+        fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        distance_smoothing: The smoothing factor applied to the distance predictions.
     """
     os.makedirs(output_folder, exist_ok=True)
 
@@ -386,7 +397,11 @@ def run_unet_prediction(
     )
 
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    distance_watershed_implementation(pmap_out, output_folder, min_size=min_size, original_shape=original_shape)
+    distance_watershed_implementation(
+        pmap_out, output_folder, min_size=min_size, original_shape=original_shape,
+        center_distance_threshold=center_distance_threshold, boundary_distance_threshold=boundary_distance_threshold,
+        fg_threshold=fg_threshold, distance_smoothing=distance_smoothing,
+    )
 
 
 #
