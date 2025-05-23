@@ -4,7 +4,7 @@ from datetime import datetime
 from glob import glob
 
 import torch_em
-from torch_em.model import UNet3d
+from flamingo_tools.training import get_supervised_loader, get_3d_model
 
 ROOT_CLUSTER = "/scratch-grete/usr/nimcpape/data/moser/lightsheet/training"
 
@@ -67,23 +67,12 @@ def get_loader(root, split, patch_shape, batch_size, filter_empty):
     assert len(this_image_paths) == len(this_label_paths)
     assert len(this_image_paths) > 0
 
-    label_transform = torch_em.transform.label.PerObjectDistanceTransform(
-            distances=True, boundary_distances=True, foreground=True,
-        )
-
     if split == "train":
         n_samples = 250 * batch_size
     elif split == "val":
-        n_samples = 20 * batch_size
+        n_samples = 16 * batch_size
 
-    sampler = torch_em.data.sampler.MinInstanceSampler(p_reject=0.8)
-    loader = torch_em.default_segmentation_loader(
-        raw_paths=image_paths, raw_key=None, label_paths=label_paths, label_key=None,
-        batch_size=batch_size, patch_shape=patch_shape, label_transform=label_transform,
-        n_samples=n_samples, num_workers=4, shuffle=True,
-        sampler=sampler
-    )
-    return loader
+    return get_supervised_loader(this_image_paths, this_label_paths, patch_shape, batch_size, n_samples=n_samples)
 
 
 def main():
@@ -120,7 +109,7 @@ def main():
     patch_shape = (64, 128, 128)
 
     # The U-Net.
-    model = UNet3d(in_channels=1, out_channels=3, initial_features=32, final_activation="Sigmoid")
+    model = get_3d_model()
 
     # Create the training loader with train and val set.
     train_loader = get_loader(root, "train", patch_shape, batch_size, filter_empty=filter_empty)
