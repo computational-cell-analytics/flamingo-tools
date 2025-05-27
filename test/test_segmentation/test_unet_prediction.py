@@ -31,7 +31,7 @@ class TestUnetPrediction(unittest.TestCase):
                 f.create_dataset(key, data=data, chunks=(32, 32, 32))
         return path, key
 
-    def _test_run_unet_prediction(self, use_tif, use_mask):
+    def _test_run_unet_prediction(self, use_tif, use_mask, **extra_kwargs):
         from flamingo_tools.segmentation import run_unet_prediction
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -42,6 +42,7 @@ class TestUnetPrediction(unittest.TestCase):
                 input_path, input_key, output_folder, model_path,
                 scale=None, min_size=100,
                 block_shape=(64, 64, 64), halo=(16, 16, 16),
+                **extra_kwargs
             )
 
             expected_path = os.path.join(output_folder, "segmentation.zarr")
@@ -63,6 +64,11 @@ class TestUnetPrediction(unittest.TestCase):
 
     def test_run_unet_prediction_tif_mask(self):
         self._test_run_unet_prediction(use_tif=True, use_mask=True)
+
+    def test_run_unet_prediction_complex_watershed(self):
+        self._test_run_unet_prediction(
+            use_tif=False, use_mask=True, center_distance_threshold=0.5, boundary_distance_threshold=0.5,
+        )
 
 
 if __name__ == "__main__":
