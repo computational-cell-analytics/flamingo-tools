@@ -62,6 +62,7 @@ def main(
         basename = input_content[0] + resized_suffix
     else:
         basename = "".join(input_content[-1].split(".")[:-1])
+        image_prefix = basename.split("_")[-1]
 
     input_dir = input_path.split(basename)[0]
     input_dir = os.path.abspath(input_dir)
@@ -92,6 +93,9 @@ def main(
 
         with zarr.open(s3_path, mode="r") as f:
             raw = f[input_key][roi]
+
+    elif ".tif" in input_path:
+        raw = read_tif(input_path)[roi]
 
     else:
         with zarr.open(input_path, mode="r") as f:
