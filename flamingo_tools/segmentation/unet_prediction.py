@@ -403,8 +403,8 @@ def run_unet_prediction(
 
 def run_unet_prediction_preprocess_slurm(
     input_path: str,
-    input_key: Optional[str],
     output_folder: str,
+    input_key: Optional[str] = None,
     s3: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
     s3_service_endpoint: Optional[str] = None,
@@ -417,8 +417,8 @@ def run_unet_prediction_preprocess_slurm(
 
     Args:
         input_path: The path to the input data.
-        input_key: The key / internal path of the image data.
         output_folder: The output folder for storing the segmentation related data.
+        input_key: The key / internal path of the image data.
         s3: Flag for considering input_path fo S3 bucket.
         s3_bucket_name: S3 bucket name.
         s3_service_endpoint: S3 service endpoint.
@@ -437,9 +437,9 @@ def run_unet_prediction_preprocess_slurm(
 
 def run_unet_prediction_slurm(
     input_path: str,
-    input_key: Optional[str],
     output_folder: str,
     model_path: str,
+    input_key: Optional[str] = None,
     scale: Optional[float] = None,
     block_shape: Optional[Tuple[int, int, int]] = None,
     halo: Optional[Tuple[int, int, int]] = None,
@@ -453,9 +453,9 @@ def run_unet_prediction_slurm(
 
     Args:
         input_path: The path to the input data.
-        input_key: The key / internal path of the image data.
         output_folder: The output folder for storing the segmentation related data.
         model_path: The path to the model to use for segmentation.
+        input_key: The key / internal path of the image data.
         scale: A factor to rescale the data before prediction.
             By default the data will not be rescaled.
         block_shape: The block-shape for running the prediction.
@@ -501,7 +501,11 @@ def run_unet_prediction_slurm(
 
 
 # does NOT need GPU, FIXME: only run on CPU
-def run_unet_segmentation_slurm(output_folder: str, min_size: int) -> None:
+def run_unet_segmentation_slurm(
+    output_folder: str,
+    min_size: int,
+    boundary_distance_threshold: float = 0.5,
+) -> None:
     """Create segmentation from prediction.
 
     Args:
@@ -510,4 +514,5 @@ def run_unet_segmentation_slurm(output_folder: str, min_size: int) -> None:
     """
     min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    distance_watershed_implementation(pmap_out, output_folder, min_size=min_size)
+    distance_watershed_implementation(pmap_out, output_folder, boundary_distance_threshold=boundary_distance_threshold,
+                                      min_size=min_size)
