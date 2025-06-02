@@ -325,12 +325,12 @@ def graph_connected_components(coords, min_edge_distance, min_component_length):
         graph.add_node(num, pos=pos)
 
     # create edges between points whose distance is less than threshold min_edge_distance
-    for i in coords:
-        for j in coords:
-            if i < j:
-                dist = math.dist(coords[i], coords[j])
+    for num_i, pos_i in coords.items():
+        for num_j, pos_j in coords.items():
+            if num_i < num_j:
+                dist = math.dist(pos_i, pos_j)
                 if dist <= min_edge_distance:
-                    graph.add_edge(i, j, weight=dist)
+                    graph.add_edge(num_i, num_j, weight=dist)
 
     components = list(nx.connected_components(graph))
 

@@ -432,7 +432,8 @@ def run_unet_prediction_preprocess_slurm(
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
         find_mask(input_path, input_key, output_folder)
 
-    calc_mean_and_std(input_path, input_key, output_folder)
+    if not os.path.isfile(os.path.join(output_folder, "mean_std.json")):
+        calc_mean_and_std(input_path, input_key, output_folder)
 
 
 def run_unet_prediction_slurm(
@@ -504,15 +505,23 @@ def run_unet_prediction_slurm(
 def run_unet_segmentation_slurm(
     output_folder: str,
     min_size: int,
+    center_distance_threshold: float = 0.4,
     boundary_distance_threshold: float = 0.5,
+    fg_threshold: float = 0.5,
 ) -> None:
     """Create segmentation from prediction.
 
     Args:
         output_folder: The output folder for storing the segmentation related data.
         min_size: The minimal size of segmented objects in the output.
+        center_distance_threshold: The threshold applied to the distance center predictions to derive seeds.
+        boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
+            By default this is set to 'None', in which case the boundary distances are not used for the seeds.
+        fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
     """
     min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    distance_watershed_implementation(pmap_out, output_folder, boundary_distance_threshold=boundary_distance_threshold,
+    distance_watershed_implementation(pmap_out, output_folder, center_distance_threshold=center_distance_threshold,
+                                      boundary_distance_threshold=boundary_distance_threshold,
+                                      fg_threshold=fg_threshold,
                                       min_size=min_size)

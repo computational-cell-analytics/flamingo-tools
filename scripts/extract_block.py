@@ -10,13 +10,14 @@ import numpy as np
 import zarr
 
 import flamingo_tools.s3_utils as s3_utils
+from flamingo_tools.file_utils import read_image_data
 
 
 def main(
     input_path: str,
     coords: List[int],
-    output_dir: str = None,
-    input_key: str = "setup0/timepoint0/s0",
+    output_dir: Optional[str] = None,
+    input_key: Optional[str] = None,
     output_key: Optional[str] = None,
     resolution: float = 0.38,
     roi_halo: List[int] = [128, 128, 64],
@@ -88,24 +89,17 @@ def main(
     roi = tuple(slice(co - rh, co + rh) for co, rh in zip(coords, roi_halo))
 
     if s3:
-        s3_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name,
-                                           service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
+        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name,
+                                              service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
 
-        with zarr.open(s3_path, mode="r") as f:
-            raw = f[input_key][roi]
-
-    elif ".tif" in input_path:
-        raw = read_tif(input_path)[roi]
-
-    else:
-        with zarr.open(input_path, mode="r") as f:
-            raw = f[input_key][roi]
+    data_ = read_image_data(input_path, input_key)
+    data_roi = data_[roi]
 
     if tif:
-        imageio.imwrite(output_file, raw, compression="zlib")
+        imageio.imwrite(output_file, data_roi, compression="zlib")
     else:
         with zarr.open(output_file, mode="w") as f_out:
-            f_out.create_dataset(output_key, data=raw, compression="gzip")
+            f_out.create_dataset(output_key, data=data_roi, compression="gzip")
 
 
 if __name__ == "__main__":
@@ -118,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument('-c', "--coord", type=str, required=True,
                         help="3D coordinate as center of extracted block, json-encoded.")
 
-    parser.add_argument('-k', "--input_key", type=str, default="setup0/timepoint0/s0",
+    parser.add_argument('-k', "--input_key", type=str, default=None,
                         help="Input key for data in input file.")
     parser.add_argument("--output_key", type=str, default=None,
                         help="Output key for data in output file.")
