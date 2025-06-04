@@ -319,7 +319,17 @@ def downscaled_centroids(
     return new_array
 
 
-def graph_connected_components(coords, min_edge_distance, min_component_length):
+def graph_connected_components(coords: dict, min_edge_distance: float, min_component_length: int):
+    """Create a list of IDs for each connected component of a graph.
+
+    Args:
+        coords: Dictionary containing label IDs as keys and their position as value.
+        min_edge_distance: Minimal edge distance between graph nodes to create an edge between nodes.
+        min_component_length: Minimal length of nodes of connected component. Filtered out if lower.
+
+    Returns:
+        List of dictionary keys of connected components.
+    """
     graph = nx.Graph()
     for num, pos in coords.items():
         graph.add_node(num, pos=pos)
@@ -423,7 +433,7 @@ def label_components_sgn(
     min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
 ) -> List[int]:
-    """Label components using graph connected components.
+    """Label SGN components using graph connected components.
 
     Args:
         table: Dataframe of segmentation table.
@@ -496,6 +506,16 @@ def components_ihc(
     min_component_length: int = 50,
     min_edge_distance: float = 30,
 ):
+    """Create connected components for IHC segmentation.
+
+    Args:
+        table: Dataframe of segmentation table.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+
+    Returns:
+        Subgraph components as lists of label_ids of dataframe.
+    """
     centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
     labels = [int(i) for i in list(table["label_id"])]
     coords = {}
@@ -517,10 +537,8 @@ def label_components_ihc(
     Args:
         table: Dataframe of segmentation table.
         min_size: Minimal number of pixels for filtering small instances.
-        threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
         min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
-        iterations_erode: Number of iterations for erosion, normally determined automatically.
 
     Returns:
         List of component label for each point in dataframe. 0 - background, then in descending order of size
@@ -555,15 +573,13 @@ def postprocess_ihc_seg(
     min_component_length: int = 50,
     min_edge_distance: float = 30,
 ) -> pd.DataFrame:
-    """Postprocessing SGN segmentation of cochlea.
+    """Postprocessing IHC segmentation of cochlea.
 
     Args:
         table: Dataframe of segmentation table.
         min_size: Minimal number of pixels for filtering small instances.
-        threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
         min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
-        iterations_erode: Number of iterations for erosion, normally determined automatically.
 
     Returns:
         Dataframe with component labels.
