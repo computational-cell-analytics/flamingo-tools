@@ -26,6 +26,9 @@ def _measure_volume_and_surface(mask, resolution):
     return volume, surface
 
 
+# TODO extend this to also support regionprops featurs,
+# maybe spherical harmonics, line profiles, and nucleus (in SGNs, based on thresholding).
+# For this, refactor the feature function.
 def compute_object_measures_impl(
     image: np.typing.ArrayLike,
     segmentation: np.typing.ArrayLike,
