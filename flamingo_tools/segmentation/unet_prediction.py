@@ -149,7 +149,9 @@ def prediction_impl(
     blocking = nt.blocking([0] * ndim, shape, block_shape)
     n_blocks = blocking.numberOfBlocks
     if prediction_instances != 1:
-        iteration_ids = [x.tolist() for x in np.array_split(list(range(n_blocks)), prediction_instances)]
+        # shuffle indexes with fixed seed to balance out segmentation blocks for slurm workers
+        rng = np.random.default_rng(seed=1234)
+        iteration_ids = [x.tolist() for x in np.array_split(list(rng.permutation(n_blocks)), prediction_instances)]
         slurm_iteration = iteration_ids[slurm_task_id]
     else:
         slurm_iteration = list(range(n_blocks))
@@ -175,7 +177,7 @@ def prediction_impl(
     return original_shape
 
 
-def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> None:
+def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg_class: Optional[str] = "sgn") -> None:
     """Determine the mask for running prediction.
 
     The mask corresponds to data that contains actual signal and not just noise.
@@ -187,9 +189,21 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> 
         input_path: The file path to the image data.
         input_key: The key / internal path of the image data.
         output_folder: The output folder for storing the mask data.
+        seg_class: Specifier for exclusion criterias for mask generation.
     """
     mask_path = os.path.join(output_folder, "mask.zarr")
     f = z5py.File(mask_path, "a")
+
+    # set parameters for the exclusion of chunks within mask generation
+    if seg_class == "sgn":
+        upper_percentile = 95
+        min_intensity = 200
+    elif seg_class == "ihc":
+        upper_percentile = 98
+        min_intensity = 150
+    else:
+        upper_percentile = 95
+        min_intensity = 200
 
     mask_key = "mask"
     if mask_key in f:
@@ -209,8 +223,8 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> 
         block = blocking.getBlock(block_id)
         bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
         data = raw[bb]
-        max_ = np.percentile(data, 95)
-        if max_ > 200:
+        max_ = np.percentile(data, upper_percentile)
+        if max_ > min_intensity:
             ds_mask[bb] = 1
 
     n_threads = min(16, mp.cpu_count())
@@ -409,6 +423,7 @@ def run_unet_prediction_preprocess_slurm(
     s3_bucket_name: Optional[str] = None,
     s3_service_endpoint: Optional[str] = None,
     s3_credentials: Optional[str] = None,
+    seg_class: Optional[str] = None,
 ) -> None:
     """Pre-processing for the parallel prediction with U-Net models.
     Masks are stored in mask.zarr in the output folder.
@@ -423,6 +438,7 @@ def run_unet_prediction_preprocess_slurm(
         s3_bucket_name: S3 bucket name.
         s3_service_endpoint: S3 service endpoint.
         s3_credentials: File path to credentials for S3 bucket.
+        seg_class: Specifier for exclusion criterias for mask generation.
     """
     if s3 is not None:
         input_path, fs = s3_utils.get_s3_path(
@@ -430,7 +446,7 @@ def run_unet_prediction_preprocess_slurm(
         )
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
-        find_mask(input_path, input_key, output_folder)
+        find_mask(input_path, input_key, output_folder, seg_class=seg_class)
 
     if not os.path.isfile(os.path.join(output_folder, "mean_std.json")):
         calc_mean_and_std(input_path, input_key, output_folder)

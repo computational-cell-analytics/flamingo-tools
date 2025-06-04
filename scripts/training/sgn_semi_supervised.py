@@ -48,15 +48,6 @@ def run_training(name):
 
     super_train_img, super_train_label, super_val_img, super_val_label, unsuper_train, unsuper_val = get_paths()
 
-    print("super_train", len(super_train_img))
-    print("super_train", len(super_train_label))
-
-    print("super_val", len(super_val_img))
-    print("super_val", len(super_val_label))
-
-    print("unsuper",len(unsuper_train))
-    print("unsuper",len(unsuper_train))
-
     mean_teacher_training(
         name=name,
         unsupervised_train_paths=unsuper_train,
