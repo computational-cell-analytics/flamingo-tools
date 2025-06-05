@@ -198,12 +198,15 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg
     if seg_class == "sgn":
         upper_percentile = 95
         min_intensity = 200
+        print(f"Calculating mask for segmentation class {seg_class}.")
     elif seg_class == "ihc":
-        upper_percentile = 98
+        upper_percentile = 99
         min_intensity = 150
+        print(f"Calculating mask for segmentation class {seg_class}.")
     else:
         upper_percentile = 95
         min_intensity = 200
+        print("Calculating mask with default values.")
 
     mask_key = "mask"
     if mask_key in f:
@@ -373,6 +376,7 @@ def run_unet_prediction(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
+    seg_class: Optional[str] = None,
 ) -> None:
     """Run prediction and segmentation with a distance U-Net.
 
@@ -391,12 +395,12 @@ def run_unet_prediction(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        seg_class: Specifier for exclusion criterias for mask generation.
     """
     os.makedirs(output_folder, exist_ok=True)
 
     if use_mask:
-        find_mask(input_path, input_key, output_folder)
-
+        find_mask(input_path, input_key, output_folder, seg_class=seg_class)
     original_shape = prediction_impl(
         input_path, input_key, output_folder, model_path, scale, block_shape, halo
     )
