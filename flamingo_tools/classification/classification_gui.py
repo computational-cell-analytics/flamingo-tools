@@ -7,15 +7,15 @@ import h5py
 import imageio.v3 as imageio
 import napari
 import numpy as np
-import pandas as pd
 
 from joblib import dump
 from magicgui import magic_factory
-from skimage.measure import regionprops_table
 
 import micro_sam.sam_annotator.object_classifier as classifier_util
 from micro_sam.object_classification import project_prediction_to_segmentation
 from micro_sam.sam_annotator._widgets import _generate_message
+
+from ..measurements import compute_object_measures_impl
 
 IMAGE_LAYER_NAME = None
 SEGMENTATION_LAYER_NAME = None
@@ -23,22 +23,13 @@ FEATURES = None
 SEG_IDS = None
 CLASSIFIER = None
 LABELS = None
+FEATURE_SET = None
 
 
-# TODO refactor
 def _compute_features(segmentation, image):
-    features = pd.DataFrame(regionprops_table(
-        segmentation, image, properties=[
-            "label", "area", "axis_major_length", "axis_minor_length",
-            "equivalent_diameter_area", "euler_number", "extent",
-            "feret_diameter_max", "inertia_tensor_eigvals",
-            "intensity_max", "intensity_mean", "intensity_min",
-            "intensity_std", "moments_central",
-            "moments_weighted", "solidity",
-        ]
-    ))
-    seg_ids = features.label.values.astype(int)
-    features = features.drop(columns="label").values
+    features = compute_object_measures_impl(image, segmentation, feature_set=FEATURE_SET)
+    seg_ids = features.label_id.values.astype(int)
+    features = features.drop(columns="label_id").values
     return features, seg_ids
 
 
@@ -92,12 +83,29 @@ def _create_export_feature_widget(export_path: Optional[Path] = None) -> None:
     export_path = Path(export_path).with_suffix(".h5")
     with h5py.File(export_path, "a") as f:
         g = f.create_group(IMAGE_LAYER_NAME)
+        g.attrs["feature_set"] = FEATURE_SET
         g.create_dataset("features", data=features, compression="lzf")
         g.create_dataset("labels", data=labels, compression="lzf")
 
 
-def run_classification_gui(image_path, segmentation_path, image_name=None, segmentation_name=None):
-    global IMAGE_LAYER_NAME, SEGMENTATION_LAYER_NAME
+def run_classification_gui(
+    image_path: str,
+    segmentation_path: str,
+    image_name: Optional[str] = None,
+    segmentation_name: Optional[str] = None,
+    feature_set: str = "default",
+) -> None:
+    """Start the classification GUI.
+
+    Args:
+        image_path: The path to the image data.
+        segmentation_path: The path to the segmentation.
+        image_name: The name for the image layer. Will use the filename if not given.
+        segmentation_name: The name of the label layer with the segmentation.
+            Will use the filename if not given.
+        feature_set: The feature set to use. Refer to `flamingo_tools.measurements.FEATURE_FUNCTIONS` for details.
+    """
+    global IMAGE_LAYER_NAME, SEGMENTATION_LAYER_NAME, FEATURE_SET
 
     image = imageio.imread(image_path)
     segmentation = imageio.imread(segmentation_path)
@@ -107,6 +115,7 @@ def run_classification_gui(image_path, segmentation_path, image_name=None, segme
 
     IMAGE_LAYER_NAME = image_name
     SEGMENTATION_LAYER_NAME = segmentation_name
+    FEATURE_SET = feature_set
 
     viewer = napari.Viewer()
     viewer.add_image(image, name=image_name)
