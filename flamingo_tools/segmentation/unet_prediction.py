@@ -149,7 +149,9 @@ def prediction_impl(
     blocking = nt.blocking([0] * ndim, shape, block_shape)
     n_blocks = blocking.numberOfBlocks
     if prediction_instances != 1:
-        iteration_ids = [x.tolist() for x in np.array_split(list(range(n_blocks)), prediction_instances)]
+        # shuffle indexes with fixed seed to balance out segmentation blocks for slurm workers
+        rng = np.random.default_rng(seed=1234)
+        iteration_ids = [x.tolist() for x in np.array_split(list(rng.permutation(n_blocks)), prediction_instances)]
         slurm_iteration = iteration_ids[slurm_task_id]
     else:
         slurm_iteration = list(range(n_blocks))
@@ -175,7 +177,7 @@ def prediction_impl(
     return original_shape
 
 
-def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> None:
+def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg_class: Optional[str] = "sgn") -> None:
     """Determine the mask for running prediction.
 
     The mask corresponds to data that contains actual signal and not just noise.
@@ -187,9 +189,24 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> 
         input_path: The file path to the image data.
         input_key: The key / internal path of the image data.
         output_folder: The output folder for storing the mask data.
+        seg_class: Specifier for exclusion criterias for mask generation.
     """
     mask_path = os.path.join(output_folder, "mask.zarr")
     f = z5py.File(mask_path, "a")
+
+    # set parameters for the exclusion of chunks within mask generation
+    if seg_class == "sgn":
+        upper_percentile = 95
+        min_intensity = 200
+        print(f"Calculating mask for segmentation class {seg_class}.")
+    elif seg_class == "ihc":
+        upper_percentile = 99
+        min_intensity = 150
+        print(f"Calculating mask for segmentation class {seg_class}.")
+    else:
+        upper_percentile = 95
+        min_intensity = 200
+        print("Calculating mask with default values.")
 
     mask_key = "mask"
     if mask_key in f:
@@ -209,8 +226,8 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str) -> 
         block = blocking.getBlock(block_id)
         bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
         data = raw[bb]
-        max_ = np.percentile(data, 95)
-        if max_ > 200:
+        max_ = np.percentile(data, upper_percentile)
+        if max_ > min_intensity:
             ds_mask[bb] = 1
 
     n_threads = min(16, mp.cpu_count())
@@ -359,6 +376,7 @@ def run_unet_prediction(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
+    seg_class: Optional[str] = None,
 ) -> None:
     """Run prediction and segmentation with a distance U-Net.
 
@@ -377,12 +395,12 @@ def run_unet_prediction(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        seg_class: Specifier for exclusion criterias for mask generation.
     """
     os.makedirs(output_folder, exist_ok=True)
 
     if use_mask:
-        find_mask(input_path, input_key, output_folder)
-
+        find_mask(input_path, input_key, output_folder, seg_class=seg_class)
     original_shape = prediction_impl(
         input_path, input_key, output_folder, model_path, scale, block_shape, halo
     )
@@ -403,12 +421,13 @@ def run_unet_prediction(
 
 def run_unet_prediction_preprocess_slurm(
     input_path: str,
-    input_key: Optional[str],
     output_folder: str,
+    input_key: Optional[str] = None,
     s3: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
     s3_service_endpoint: Optional[str] = None,
     s3_credentials: Optional[str] = None,
+    seg_class: Optional[str] = None,
 ) -> None:
     """Pre-processing for the parallel prediction with U-Net models.
     Masks are stored in mask.zarr in the output folder.
@@ -417,12 +436,13 @@ def run_unet_prediction_preprocess_slurm(
 
     Args:
         input_path: The path to the input data.
-        input_key: The key / internal path of the image data.
         output_folder: The output folder for storing the segmentation related data.
+        input_key: The key / internal path of the image data.
         s3: Flag for considering input_path fo S3 bucket.
         s3_bucket_name: S3 bucket name.
         s3_service_endpoint: S3 service endpoint.
         s3_credentials: File path to credentials for S3 bucket.
+        seg_class: Specifier for exclusion criterias for mask generation.
     """
     if s3 is not None:
         input_path, fs = s3_utils.get_s3_path(
@@ -430,16 +450,17 @@ def run_unet_prediction_preprocess_slurm(
         )
 
     if not os.path.isdir(os.path.join(output_folder, "mask.zarr")):
-        find_mask(input_path, input_key, output_folder)
+        find_mask(input_path, input_key, output_folder, seg_class=seg_class)
 
-    calc_mean_and_std(input_path, input_key, output_folder)
+    if not os.path.isfile(os.path.join(output_folder, "mean_std.json")):
+        calc_mean_and_std(input_path, input_key, output_folder)
 
 
 def run_unet_prediction_slurm(
     input_path: str,
-    input_key: Optional[str],
     output_folder: str,
     model_path: str,
+    input_key: Optional[str] = None,
     scale: Optional[float] = None,
     block_shape: Optional[Tuple[int, int, int]] = None,
     halo: Optional[Tuple[int, int, int]] = None,
@@ -453,9 +474,9 @@ def run_unet_prediction_slurm(
 
     Args:
         input_path: The path to the input data.
-        input_key: The key / internal path of the image data.
         output_folder: The output folder for storing the segmentation related data.
         model_path: The path to the model to use for segmentation.
+        input_key: The key / internal path of the image data.
         scale: A factor to rescale the data before prediction.
             By default the data will not be rescaled.
         block_shape: The block-shape for running the prediction.
@@ -501,13 +522,26 @@ def run_unet_prediction_slurm(
 
 
 # does NOT need GPU, FIXME: only run on CPU
-def run_unet_segmentation_slurm(output_folder: str, min_size: int) -> None:
+def run_unet_segmentation_slurm(
+    output_folder: str,
+    min_size: int,
+    center_distance_threshold: float = 0.4,
+    boundary_distance_threshold: float = 0.5,
+    fg_threshold: float = 0.5,
+) -> None:
     """Create segmentation from prediction.
 
     Args:
         output_folder: The output folder for storing the segmentation related data.
         min_size: The minimal size of segmented objects in the output.
+        center_distance_threshold: The threshold applied to the distance center predictions to derive seeds.
+        boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
+            By default this is set to 'None', in which case the boundary distances are not used for the seeds.
+        fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
     """
     min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
-    distance_watershed_implementation(pmap_out, output_folder, min_size=min_size)
+    distance_watershed_implementation(pmap_out, output_folder, center_distance_threshold=center_distance_threshold,
+                                      boundary_distance_threshold=boundary_distance_threshold,
+                                      fg_threshold=fg_threshold,
+                                      min_size=min_size)

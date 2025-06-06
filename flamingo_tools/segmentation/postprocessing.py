@@ -319,6 +319,41 @@ def downscaled_centroids(
     return new_array
 
 
+def graph_connected_components(coords: dict, min_edge_distance: float, min_component_length: int):
+    """Create a list of IDs for each connected component of a graph.
+
+    Args:
+        coords: Dictionary containing label IDs as keys and their position as value.
+        min_edge_distance: Minimal edge distance between graph nodes to create an edge between nodes.
+        min_component_length: Minimal length of nodes of connected component. Filtered out if lower.
+
+    Returns:
+        List of dictionary keys of connected components.
+    """
+    graph = nx.Graph()
+    for num, pos in coords.items():
+        graph.add_node(num, pos=pos)
+
+    # create edges between points whose distance is less than threshold min_edge_distance
+    for num_i, pos_i in coords.items():
+        for num_j, pos_j in coords.items():
+            if num_i < num_j:
+                dist = math.dist(pos_i, pos_j)
+                if dist <= min_edge_distance:
+                    graph.add_edge(num_i, num_j, weight=dist)
+
+    components = list(nx.connected_components(graph))
+
+    # remove connected components with less nodes than threshold min_component_length
+    for component in components:
+        if len(component) < min_component_length:
+            for c in component:
+                graph.remove_node(c)
+
+    components = [list(s) for s in nx.connected_components(graph)]
+    return components
+
+
 def components_sgn(
     table: pd.DataFrame,
     keyword: str = "distance_nn100",
@@ -370,27 +405,7 @@ def components_sgn(
     for index, element in zip(labels_subset, centroids_subset):
         coords[index] = element
 
-    graph = nx.Graph()
-    for num, pos in coords.items():
-        graph.add_node(num, pos=pos)
-
-    # create edges between points whose distance is less than threshold min_edge_distance
-    for i in coords:
-        for j in coords:
-            if i < j:
-                dist = math.dist(coords[i], coords[j])
-                if dist <= min_edge_distance:
-                    graph.add_edge(i, j, weight=dist)
-
-    components = list(nx.connected_components(graph))
-
-    # remove connected components with less nodes than threshold min_component_length
-    for component in components:
-        if len(component) < min_component_length:
-            for c in component:
-                graph.remove_node(c)
-
-    components = [list(s) for s in nx.connected_components(graph)]
+    components = graph_connected_components(coords, min_edge_distance, min_component_length)
 
     # add original coordinates closer to eroded component than threshold
     if postprocess_graph:
@@ -410,7 +425,7 @@ def components_sgn(
     return components
 
 
-def label_components(
+def label_components_sgn(
     table: pd.DataFrame,
     min_size: int = 1000,
     threshold_erode: Optional[float] = None,
@@ -418,7 +433,7 @@ def label_components(
     min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
 ) -> List[int]:
-    """Label components using graph connected components.
+    """Label SGN components using graph connected components.
 
     Args:
         table: Dataframe of segmentation table.
@@ -477,9 +492,102 @@ def postprocess_sgn_seg(
         Dataframe with component labels.
     """
 
-    comp_labels = label_components(table, min_size=min_size, threshold_erode=threshold_erode,
-                                   min_component_length=min_component_length,
-                                   min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
+    comp_labels = label_components_sgn(table, min_size=min_size, threshold_erode=threshold_erode,
+                                       min_component_length=min_component_length,
+                                       min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
+
+    table.loc[:, "component_labels"] = comp_labels
+
+    return table
+
+
+def components_ihc(
+    table: pd.DataFrame,
+    min_component_length: int = 50,
+    min_edge_distance: float = 30,
+):
+    """Create connected components for IHC segmentation.
+
+    Args:
+        table: Dataframe of segmentation table.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+
+    Returns:
+        Subgraph components as lists of label_ids of dataframe.
+    """
+    centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
+    labels = [int(i) for i in list(table["label_id"])]
+    coords = {}
+    for index, element in zip(labels, centroids):
+        coords[index] = element
+
+    components = graph_connected_components(coords, min_edge_distance, min_component_length)
+    return components
+
+
+def label_components_ihc(
+    table: pd.DataFrame,
+    min_size: int = 1000,
+    min_component_length: int = 50,
+    min_edge_distance: float = 30,
+) -> List[int]:
+    """Label components using graph connected components.
+
+    Args:
+        table: Dataframe of segmentation table.
+        min_size: Minimal number of pixels for filtering small instances.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+
+    Returns:
+        List of component label for each point in dataframe. 0 - background, then in descending order of size
+    """
+
+    # First, apply the size filter.
+    entries_filtered = table[table.n_pixels < min_size]
+    table = table[table.n_pixels >= min_size]
+
+    components = components_ihc(table, min_component_length=min_component_length,
+                                min_edge_distance=min_edge_distance)
+
+    # add size-filtered objects to have same initial length
+    table = pd.concat([table, entries_filtered], ignore_index=True)
+    table.sort_values("label_id")
+
+    length_components = [len(c) for c in components]
+    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
+
+    component_labels = [0 for _ in range(len(table))]
+    # be aware of 'label_id' of dataframe starting at 1
+    for lab, comp in enumerate(components):
+        for comp_index in comp:
+            component_labels[comp_index - 1] = lab + 1
+
+    return component_labels
+
+
+def postprocess_ihc_seg(
+    table: pd.DataFrame,
+    min_size: int = 1000,
+    min_component_length: int = 50,
+    min_edge_distance: float = 30,
+) -> pd.DataFrame:
+    """Postprocessing IHC segmentation of cochlea.
+
+    Args:
+        table: Dataframe of segmentation table.
+        min_size: Minimal number of pixels for filtering small instances.
+        min_component_length: Minimal length for filtering out connected components.
+        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+
+    Returns:
+        Dataframe with component labels.
+    """
+
+    comp_labels = label_components_ihc(table, min_size=min_size,
+                                       min_component_length=min_component_length,
+                                       min_edge_distance=min_edge_distance)
 
     table.loc[:, "component_labels"] = comp_labels
 
