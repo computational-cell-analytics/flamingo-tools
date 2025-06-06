@@ -6,8 +6,8 @@ from flamingo_tools.validation import (
     fetch_data_for_evaluation, parse_annotation_path, compute_scores_for_annotated_slice
 )
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1Validation"
-ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD"]
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
+ANNOTATION_FOLDERS = ["Annotations_LR"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):
@@ -27,14 +27,15 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder):
         annotator = folder[len("Annotations"):]
         annotations = sorted(glob(os.path.join(root, folder, "*.csv")))
         for annotation_path in annotations:
+            print(annotation_path)
             cochlea, slice_id = parse_annotation_path(annotation_path)
-            # We don't have this cochlea in MoBIE yet
-            if cochlea == "M_LR_000169_R":
-                continue
 
-            print("Run evaluation for", annotator, cochlea, slice_id)
+            # For the cochlea M_LR_000226_R the actual component is 2, not 1
+            component = 2 if "226_R" in cochlea else 1
+            print("Run evaluation for", annotator, cochlea, "z=", slice_id)
             segmentation, annotations = fetch_data_for_evaluation(
-                annotation_path, components_for_postprocessing=[1],
+                annotation_path, components_for_postprocessing=[component],
+                seg_name="IHC_v2",
                 cache_path=None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif")
             )
             scores = compute_scores_for_annotated_slice(segmentation, annotations, matching_tolerance=5)

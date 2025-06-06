@@ -6,12 +6,12 @@ from flamingo_tools.measurements import compute_object_measures_impl
 
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/LS_sampleprepcomparison_crops"
-SAVE_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/LS_sampleprepcomparison_crops/segmentations"
+SAVE_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/LS_sampleprepcomparison_crops/segmentations_v2"  # noqa
 
 
 def measure_intensities(ff):
     rel_path = os.path.relpath(ff, ROOT)
-    out_path = os.path.join("./measurements", rel_path.replace(".tif", ".xlsx"))
+    out_path = os.path.join("./measurements_v2", rel_path.replace(".tif", ".xlsx"))
     if os.path.exists(out_path):
         return
 
