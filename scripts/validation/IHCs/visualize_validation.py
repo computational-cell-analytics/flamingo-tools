@@ -9,7 +9,7 @@ from flamingo_tools.validation import (
     fetch_data_for_evaluation, compute_matches_for_annotated_slice, for_visualization, parse_annotation_path
 )
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
 
 
 def _match_image_path(annotation_path):
@@ -30,8 +30,9 @@ def visualize_anotation(annotation_path, cache_folder):
 
     image_path = _match_image_path(annotation_path)
 
+    component = 2 if "226_R" in cochlea else 1
     segmentation, annotations = fetch_data_for_evaluation(
-        annotation_path, cache_path=cache_path, components_for_postprocessing=[1],
+        annotation_path, cache_path=cache_path, components_for_postprocessing=[component], seg_name="IHC_v2",
     )
 
     image = tifffile.memmap(image_path)
