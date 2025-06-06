@@ -37,7 +37,7 @@ def check_segmentation():
 
 def main():
     segment_nuclei()
-    # check_segmentation()
+    check_segmentation()
 
 
 if __name__ == "__main__":
