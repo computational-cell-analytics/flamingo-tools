@@ -6,8 +6,8 @@ from flamingo_tools.validation import (
     fetch_data_for_evaluation, parse_annotation_path, compute_scores_for_annotated_slice
 )
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1Validation"
-ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD"]
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
+ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationLR"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):
@@ -27,12 +27,13 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder):
         annotator = folder[len("Annotations"):]
         annotations = sorted(glob(os.path.join(root, folder, "*.csv")))
         for annotation_path in annotations:
+            print(annotation_path)
             cochlea, slice_id = parse_annotation_path(annotation_path)
             # We don't have this cochlea in MoBIE yet
             if cochlea == "M_LR_000169_R":
                 continue
 
-            print("Run evaluation for", annotator, cochlea, slice_id)
+            print("Run evaluation for", annotator, cochlea, "z=", slice_id)
             segmentation, annotations = fetch_data_for_evaluation(
                 annotation_path, components_for_postprocessing=[1],
                 cache_path=None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif")

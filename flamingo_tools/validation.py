@@ -35,12 +35,10 @@ def parse_annotation_path(annotation_path):
     return cochlea, slice_id
 
 
-# TODO enable table component filtering with MoBIE table
-# NOTE: the main component is always #1
 def fetch_data_for_evaluation(
     annotation_path: str,
     cache_path: Optional[str] = None,
-    seg_name: str = "SGN",
+    seg_name: str = "SGN_v2",
     z_extent: int = 0,
     components_for_postprocessing: Optional[List[int]] = None,
 ) -> Tuple[np.ndarray, pd.DataFrame]:

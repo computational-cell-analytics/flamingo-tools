@@ -7,9 +7,10 @@ from elf.io import open_file
 from flamingo_tools.segmentation import run_unet_prediction
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/LS_sampleprepcomparison_crops"
-MODEL_PATH = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/cochlea_distance_unet_SGN_March2025Model"  # noqa
+# MODEL_PATH = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/cochlea_distance_unet_SGN_March2025Model"  # noqa
+MODEL_PATH = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/training/sgn_model.pt"  # noqa
 
-SAVE_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/LS_sampleprepcomparison_crops/segmentations"
+SAVE_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/LS_sampleprepcomparison_crops/segmentations_v2"  # noqa
 
 
 def check_data():

@@ -1,8 +1,14 @@
+import argparse
 import pandas as pd
 
 # TODO more logic to separate by annotator etc.
 # For now this is just a simple script for global eval
-table = pd.read_csv("./results.csv")
+
+parser = argparse.ArgumentParser()
+parser.add_argument("file")
+args = parser.parse_args()
+
+table = pd.read_csv(args.file)
 print("Table:")
 print(table)
 
