@@ -7,7 +7,8 @@ from flamingo_tools.validation import (
 )
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
-ANNOTATION_FOLDERS = ["Annotations_LR"]
+# ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+ANNOTATION_FOLDERS = ["Annotations_AMD", "Annotations_LR"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):

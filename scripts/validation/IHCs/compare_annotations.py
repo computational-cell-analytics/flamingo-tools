@@ -5,8 +5,9 @@ import napari
 import pandas as pd
 import tifffile
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
-ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
+# ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+ANNOTATION_FOLDERS = ["Annotations_AMD", "Annotations_LR"]
 COLOR = ["green", "yellow", "orange"]
 
 
