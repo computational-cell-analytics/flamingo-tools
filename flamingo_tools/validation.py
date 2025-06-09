@@ -176,13 +176,21 @@ def compute_matches_for_annotated_slice(
     segmentation_ids = np.unique(segmentation)[1:]
 
     # Crop to the minimal enclosing bounding box of points and segmented objects.
-    bb_seg = np.where(segmentation != 0)
-    bb_seg = tuple(slice(int(bb.min()), int(bb.max())) for bb in bb_seg)
-    bb_points = tuple(
-        slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
-        for coords in coordinates
-    )
-    bbox = tuple(slice(min(bbs.start, bbp.start), max(bbs.stop, bbp.stop)) for bbs, bbp in zip(bb_seg, bb_points))
+    seg_mask = segmentation != 0
+    if seg_mask.sum() > 0:
+        bb_seg = np.where(seg_mask)
+        bb_seg = tuple(slice(int(bb.min()), int(bb.max())) for bb in bb_seg)
+        bb_points = tuple(
+            slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
+            for coords in coordinates
+        )
+        bbox = tuple(slice(min(bbs.start, bbp.start), max(bbs.stop, bbp.stop)) for bbs, bbp in zip(bb_seg, bb_points))
+    else:
+        print("The segmentation is empty!!!")
+        bbox = tuple(
+            slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
+            for coords in coordinates
+        )
     segmentation = segmentation[bbox]
 
     annotations = annotations.copy()
@@ -229,6 +237,11 @@ def compute_scores_for_annotated_slice(
     fp = len(result["fp"])
     fn = len(result["fn"])
     return {"tp": tp, "fp": fp, "fn": fn}
+
+
+# TODO
+def create_consensus_annotations():
+    pass
 
 
 def for_visualization(segmentation, annotations, matches):

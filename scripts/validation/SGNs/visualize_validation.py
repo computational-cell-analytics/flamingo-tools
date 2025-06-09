@@ -30,8 +30,11 @@ def visualize_anotation(annotation_path, cache_folder):
 
     image_path = _match_image_path(annotation_path)
 
+    # For debugging.
+    components = [1]
+    # components = None
     segmentation, annotations = fetch_data_for_evaluation(
-        annotation_path, cache_path=cache_path, components_for_postprocessing=[1],
+        annotation_path, cache_path=cache_path, components_for_postprocessing=components,
     )
 
     image = tifffile.memmap(image_path)
