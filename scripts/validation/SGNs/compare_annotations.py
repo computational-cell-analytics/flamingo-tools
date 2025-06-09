@@ -6,8 +6,8 @@ import pandas as pd
 import tifffile
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
-ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
-COLOR = ["green", "yellow", "orange"]
+ANNOTATION_FOLDERS = ["AnnotationsAMD", "AnnotationsEK", "AnnotationsLR"]
+COLOR = ["blue", "yellow", "orange"]
 
 
 def _match_annotations(image_path):

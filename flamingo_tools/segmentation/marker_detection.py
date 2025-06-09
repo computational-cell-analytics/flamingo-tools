@@ -23,6 +23,9 @@ def map_and_filter_detections(
         resolution: The resolution / voxel size of the data in micrometer.
         n_threads: The number of threads for parallelizing the mapping of detections to objects.
         verbose: Whether to print the progress of the mapping procedure.
+
+    Returns:
+        The filtered dataframe with the detections mapped to the segmentation.
     """
     # Get the point coordinates.
     points = detections[["z", "y", "x"]].values.astype("int")
