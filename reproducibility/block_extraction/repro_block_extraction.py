@@ -3,7 +3,7 @@ import json
 import os
 from typing import Optional
 
-from flamingo_tools.extract_block import extract_block
+from flamingo_tools.extract_block_util import extract_block
 
 
 def repro_block_extraction(

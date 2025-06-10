@@ -3,7 +3,7 @@
 import argparse
 import json
 
-from flamingo_tools.extract_block import extract_block
+from flamingo_tools.extract_block_util import extract_block
 
 
 def main():

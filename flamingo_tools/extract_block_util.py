@@ -50,13 +50,8 @@ def extract_block(
 
     if s3:
         image_name = input_content[-1].split(".")[0]
-        if len(image_name.split("_")) > 1:
-            resized_suffix = "_resized"
-            image_prefix = image_name.split("_")[0]
-        else:
-            resized_suffix = ""
-            image_prefix = image_name
-        basename = input_content[0] + resized_suffix
+        image_prefix = image_name
+        basename = input_content[0]
     else:
         basename = "".join(input_content[-1].split(".")[:-1])
         image_prefix = basename.split("_")[-1]
