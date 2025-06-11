@@ -39,7 +39,7 @@ def check_s3_credentials(
     if bucket_name is None:
         bucket_name = os.getenv("BUCKET_NAME")
         if bucket_name is None:
-            if BUCKET_NAME in globals():
+            if "BUCKET_NAME" in globals():
                 bucket_name = BUCKET_NAME
             else:
                 raise ValueError(
@@ -52,7 +52,7 @@ def check_s3_credentials(
     if service_endpoint is None:
         service_endpoint = os.getenv("SERVICE_ENDPOINT")
         if service_endpoint is None:
-            if SERVICE_ENDPOINT in globals():
+            if "SERVICE_ENDPOINT" in globals():
                 service_endpoint = SERVICE_ENDPOINT
             else:
                 raise ValueError(
