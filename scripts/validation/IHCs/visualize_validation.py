@@ -6,7 +6,7 @@ import napari
 import tifffile
 
 from flamingo_tools.validation import (
-    fetch_data_for_evaluation, compute_matches_for_annotated_slice, for_visualization, parse_annotation_path
+    fetch_data_for_evaluation, compute_matches_for_annotated_slice, for_visualization, _parse_annotation_path
 )
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
@@ -17,15 +17,15 @@ def _match_image_path(annotation_path):
     prefix = os.path.basename(annotation_path).split("_")[:-3]
     prefix = "_".join(prefix)
     matches = [path for path in all_files if os.path.basename(path).startswith(prefix)]
-    # if len(matches) != 1:
-    #     breakpoint()
+    if len(matches) != 1:
+        breakpoint()
     assert len(matches) == 1, f"{prefix}: {len(matches)}"
     return matches[0]
 
 
 def visualize_anotation(annotation_path, cache_folder):
     print("Checking", annotation_path)
-    cochlea, slice_id = parse_annotation_path(annotation_path)
+    cochlea, slice_id = _parse_annotation_path(annotation_path)
     cache_path = None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif")
 
     image_path = _match_image_path(annotation_path)
