@@ -77,14 +77,20 @@ def prediction_impl(
         else:
             model = torch.load(model_path, weights_only=False)
 
-    mask_path = os.path.join(output_folder, "mask.zarr")
-    if os.path.exists(mask_path):
-        image_mask = z5py.File(mask_path, "r")["mask"]
-    else:
-        image_mask = None
-
     input_ = read_image_data(input_path, input_key)
     chunks = getattr(input_, "chunks", (64, 64, 64))
+    mask_path = os.path.join(output_folder, "mask.zarr")
+
+    if os.path.exists(mask_path):
+        image_mask = z5py.File(mask_path, "r")["mask"]
+        # resize mask
+        image_shape = input_.shape
+        mask_shape = image_mask.shape
+        if image_shape != mask_shape:
+            image_mask = ResizedVolume(image_mask, image_shape, order=0)
+
+    else:
+        image_mask = None
 
     if scale is None or np.isclose(scale, 1):
         original_shape = None

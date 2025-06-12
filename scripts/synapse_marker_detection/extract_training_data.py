@@ -19,23 +19,30 @@ def get_voxel_size(imaris_file):
     return vsize
 
 
-def extract_training_data(imaris_file, output_folder):
+def extract_training_data(imaris_file, output_folder, crop=True, scale=True):
+    point_key = "/Scene/Content/Points0/CoordsXYZR"
     with h5py.File(imaris_file, "r") as f:
+        if point_key not in f:
+            print("Skipping", imaris_file, "due to missing annotations")
+            return
         data = f["/DataSet/ResolutionLevel 0/TimePoint 0/Channel 0/Data"][:]
-        points = f["/Scene/Content/Points0/CoordsXYZR"][:]
+        points = f[point_key][:]
         points = points[:, :-1]
         points = points[:, ::-1]
 
     # TODO crop the data to the original shape.
     # Can we just crop the zero-padding ?!
-    crop_box = np.where(data != 0)
-    crop_box = tuple(slice(0, int(cb.max() + 1)) for cb in crop_box)
-    data = data[crop_box]
-    print(data.shape)
+    if crop:
+        crop_box = np.where(data != 0)
+        crop_box = tuple(slice(0, int(cb.max() + 1)) for cb in crop_box)
+        data = data[crop_box]
 
     # Scale the points to match the image dimensions.
     voxel_size = get_voxel_size(imaris_file)
-    points /= voxel_size[None]
+    if scale:
+        points /= voxel_size[None]
+
+    print(data.shape, voxel_size)
 
     if output_folder is None:
         v = napari.Viewer()
@@ -69,10 +76,50 @@ def extract_training_data(imaris_file, output_folder):
 # - 4.2R_apex_IHCribboncount_Z.ims
 # - 6.2R_apex_IHCribboncount_Z.ims  (very small crop)
 # - 6.2R_base_IHCribbons_Z.ims
-def main():
+def process_training_data_v1():
     files = sorted(glob("./data/synapse_stains/*.ims"))
     for ff in files:
         extract_training_data(ff, output_folder="./training_data")
+
+
+def process_training_data_v2(visualize=True):
+    input_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ImageCropsIHC_synapses"
+
+    train_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/training_data/v2"  # noqa
+    test_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test/v2"  # noqa
+
+    train_folders = ["M78L_IHC-synapse_crops"]
+    test_folders = ["M226L_IHC-synapse_crops", "M226R_IHC-synapsecrops"]
+
+    valid_files = [
+        "m78l_apexp2718_cr-ctbp2.ims",
+        "m226r_apex_p1268_pv-ctbp2.ims",
+        "m226r_base_p800_vglut3-ctbp2.ims",
+    ]
+
+    for folder in train_folders + test_folders:
+
+        if visualize:
+            output_folder = None
+        elif folder in train_folders:
+            output_folder = train_output
+            os.makedirs(output_folder, exist_ok=True)
+        else:
+            output_folder = test_output
+            os.makedirs(output_folder, exist_ok=True)
+
+        imaris_files = sorted(glob(os.path.join(input_root, folder, "*.ims")))
+        for imaris_file in imaris_files:
+            fname = os.path.basename(imaris_file)
+            if fname not in valid_files:
+                continue
+            print(fname)
+            extract_training_data(imaris_file, output_folder, crop=True, scale=True)
+
+
+def main():
+    # process_training_data_v1()
+    process_training_data_v2(visualize=False)
 
 
 if __name__ == "__main__":
