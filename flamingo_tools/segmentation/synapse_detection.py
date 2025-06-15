@@ -25,7 +25,7 @@ def map_and_filter_detections(
     Args:
         segmentation: The IHC segmentation.
         detections: The synapse marker detections.
-        max_distance: The maximal distance for a valid match of synapse markers to IHCs.
+        max_distance: The maximal distance in micrometer for a valid match of synapse markers to IHCs.
         resolution: The resolution / voxel size of the data in micrometer.
         n_threads: The number of threads for parallelizing the mapping of detections to objects.
         verbose: Whether to print the progress of the mapping procedure.

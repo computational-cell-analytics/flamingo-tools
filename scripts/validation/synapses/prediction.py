@@ -10,7 +10,8 @@ from elf.io import open_file
 from elf.parallel.local_maxima import find_local_maxima
 from flamingo_tools.segmentation.unet_prediction import prediction_impl, run_unet_prediction
 
-INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v2/images"  # noqa
+INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3/images"  # noqa
+GT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3/labels"
 OUTPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/SynapseValidation"
 
 sys.path.append("/user/pape41/u12086/Work/my_projects/czii-protein-challenge")
@@ -18,7 +19,7 @@ sys.path.append("../../synapse_marker_detection")
 
 
 def pred_synapse_impl(input_path, output_folder):
-    model_path = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/synapse_marker_detection/checkpoints/synapse_detection_v2"  # noqa
+    model_path = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/synapse_marker_detection/checkpoints/synapse_detection_v3"  # noqa
     input_key = "raw"
 
     block_shape = (32, 128, 128)
@@ -48,7 +49,7 @@ def pred_synapse_impl(input_path, output_folder):
 
 
 def predict_synapses():
-    files = glob(os.path.join(INPUT_ROOT, "*.zarr"))
+    files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
     for ff in files:
         print("Segmenting", ff)
         output_folder = os.path.join(OUTPUT_ROOT, Path(ff).stem)
@@ -59,34 +60,95 @@ def pred_ihc_impl(input_path, output_folder):
     model_path = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/IHC/v2_cochlea_distance_unet_IHC_supervised_2025-05-21"  # noqa
 
     run_unet_prediction(
-        input_path, input_key=None, output_folder=output_folder, model_path=model_path, min_size=1000,
+        input_path, input_key="raw_ihc", output_folder=output_folder, model_path=model_path, min_size=1000,
         seg_class="ihc", center_distance_threshold=0.5, boundary_distance_threshold=0.5,
     )
 
 
 def predict_ihcs():
-    files = [
-        "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ImageCropsIHC_synapses/M226R_IHC-synapsecrops/M226R_base_p800_Vglut3.tif",  # noqa
-        "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ImageCropsIHC_synapses/M226R_IHC-synapsecrops/M226R_apex_p1268_Vglut3.tif",  # noqa
-    ]
+    files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
     for ff in files:
         print("Segmenting", ff)
-        output_folder = os.path.join(OUTPUT_ROOT, Path(ff).stem)
+        output_folder = os.path.join(OUTPUT_ROOT, f"{Path(ff).stem}_ihc")
         pred_ihc_impl(ff, output_folder)
 
 
-# TODO also filter GT
+def _filter_synapse_impl(detections, ihc_file, output_path):
+    from flamingo_tools.segmentation.synapse_detection import map_and_filter_detections
+
+    with open_file(ihc_file, mode="r") as f:
+        if "segmentation_filtered" in f:
+            print("Using filtered segmentation!")
+            segmentation = open_file(ihc_file)["segmentation_filtered"][:]
+        else:
+            segmentation = open_file(ihc_file)["segmentation"][:]
+
+    max_distance = 5  # 5 micrometer
+    filtered_detections = map_and_filter_detections(segmentation, detections, max_distance=max_distance)
+    filtered_detections.to_csv(output_path, index=False, sep="\t")
+
+
 def filter_synapses():
-    pass
+    input_files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
+    for ff in input_files:
+        ihc = os.path.join(OUTPUT_ROOT, f"{Path(ff).stem}_ihc", "segmentation.zarr")
+        output_folder = os.path.join(OUTPUT_ROOT, Path(ff).stem)
+        synapses = os.path.join(output_folder, "synapse_detection.tsv")
+        synapses = pd.read_csv(synapses, sep="\t")
+        output_path = os.path.join(output_folder, "filtered_synapse_detection.tsv")
+        _filter_synapse_impl(synapses, ihc, output_path)
+
+
+def filter_gt():
+    input_files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
+    gt_files = sorted(glob(os.path.join(GT_ROOT, "*.csv")))
+    for ff, gt in zip(input_files, gt_files):
+        ihc = os.path.join(OUTPUT_ROOT, f"{Path(ff).stem}_ihc", "segmentation.zarr")
+        output_folder, fname = os.path.split(gt)
+        output_path = os.path.join(output_folder, fname.replace(".csv", "_filtered.tsv"))
+
+        gt = pd.read_csv(gt)
+        gt = gt.rename(columns={"axis-0": "z", "axis-1": "y", "axis-2": "x"})
+        gt.insert(0, "spot_id", np.arange(1, len(gt) + 1))
+
+        _filter_synapse_impl(gt, ihc, output_path)
+
+
+def _check_prediction(input_file, ihc_file, detection_file):
+    import napari
+
+    synapses = pd.read_csv(detection_file, sep="\t")[["z", "y", "x"]].values
+
+    vglut = open_file(input_file)["raw_ihc"][:]
+    ctbp2 = open_file(input_file)["raw"][:]
+    ihcs = open_file(ihc_file)["segmentation"][:]
+
+    v = napari.Viewer()
+    v.add_image(vglut)
+    v.add_image(ctbp2)
+    v.add_labels(ihcs)
+    v.add_points(synapses)
+    napari.run()
 
 
 def check_predictions():
-    pass
+    input_files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
+    for ff in input_files:
+        ihc = os.path.join(OUTPUT_ROOT, f"{Path(ff).stem}_ihc", "segmentation.zarr")
+        synapses = os.path.join(OUTPUT_ROOT, Path(ff).stem, "filtered_synapse_detection.tsv")
+        _check_prediction(ff, ihc, synapses)
+
+
+def process_everything():
+    predict_synapses()
+    predict_ihcs()
+    filter_synapses()
+    filter_gt()
 
 
 def main():
-    # predict_synapses()
-    predict_ihcs()
+    process_everything()
+    # check_predictions()
 
 
 if __name__ == "__main__":
