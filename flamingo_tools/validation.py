@@ -1,5 +1,6 @@
 import os
 import re
+from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
 import imageio.v3 as imageio
@@ -9,6 +10,7 @@ import zarr
 
 from scipy.ndimage import distance_transform_edt
 from scipy.optimize import linear_sum_assignment
+from scipy.spatial import cKDTree
 from skimage.measure import regionprops_table
 from skimage.segmentation import relabel_sequential
 from tqdm import tqdm
@@ -27,7 +29,7 @@ def _normalize_cochlea_name(name):
     return f"{prefix}_{number:06d}_{postfix}"
 
 
-def parse_annotation_path(annotation_path):
+def _parse_annotation_path(annotation_path):
     fname = os.path.basename(annotation_path)
     name_parts = fname.split("_")
     cochlea = _normalize_cochlea_name(name_parts[0])
@@ -42,7 +44,19 @@ def fetch_data_for_evaluation(
     z_extent: int = 0,
     components_for_postprocessing: Optional[List[int]] = None,
 ) -> Tuple[np.ndarray, pd.DataFrame]:
-    """
+    """Fetch segmentation from S3 matching the annotation path for evaluation.
+
+    Args:
+        annotation_path: The path to the manual annotations.
+        cache_path: An optional path for caching the downloaded segmentation.
+        seg_name: The name of the segmentation in the bucket.
+        z_extent: Additional z-slices to load from the segmentation.
+        components_for_postprocessing: The component ids for restricting the segmentation to.
+            Choose [1] for the default componentn containing the helix.
+
+    Returns:
+        The segmentation downloaded from the S3 bucket.
+        The annotations loaded from pandas and matching the segmentation.
     """
     # Load the annotations and normalize them for the given z-extent.
     annotations = pd.read_csv(annotation_path)
@@ -60,7 +74,7 @@ def fetch_data_for_evaluation(
         return segmentation, annotations
 
     # Parse which ID and which cochlea from the name.
-    cochlea, slice_id = parse_annotation_path(annotation_path)
+    cochlea, slice_id = _parse_annotation_path(annotation_path)
 
     # Open the S3 connection, get the path to the SGN segmentation in S3.
     internal_path = os.path.join(cochlea, "images",  "ome-zarr", f"{seg_name}.ome.zarr")
@@ -176,13 +190,21 @@ def compute_matches_for_annotated_slice(
     segmentation_ids = np.unique(segmentation)[1:]
 
     # Crop to the minimal enclosing bounding box of points and segmented objects.
-    bb_seg = np.where(segmentation != 0)
-    bb_seg = tuple(slice(int(bb.min()), int(bb.max())) for bb in bb_seg)
-    bb_points = tuple(
-        slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
-        for coords in coordinates
-    )
-    bbox = tuple(slice(min(bbs.start, bbp.start), max(bbs.stop, bbp.stop)) for bbs, bbp in zip(bb_seg, bb_points))
+    seg_mask = segmentation != 0
+    if seg_mask.sum() > 0:
+        bb_seg = np.where(seg_mask)
+        bb_seg = tuple(slice(int(bb.min()), int(bb.max())) for bb in bb_seg)
+        bb_points = tuple(
+            slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
+            for coords in coordinates
+        )
+        bbox = tuple(slice(min(bbs.start, bbp.start), max(bbs.stop, bbp.stop)) for bbs, bbp in zip(bb_seg, bb_points))
+    else:
+        print("The segmentation is empty!!!")
+        bbox = tuple(
+            slice(int(np.floor(annotations[coords].min())), int(np.ceil(annotations[coords].max())) + 1)
+            for coords in coordinates
+        )
     segmentation = segmentation[bbox]
 
     annotations = annotations.copy()
@@ -229,6 +251,100 @@ def compute_scores_for_annotated_slice(
     fp = len(result["fp"])
     fn = len(result["fn"])
     return {"tp": tp, "fp": fp, "fn": fn}
+
+
+def create_consensus_annotations(
+    annotation_paths: Dict[str, str],
+    matching_distance: float = 5.0,
+    min_matches_for_consensus: int = 2,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Create a consensus annotation from multiple manual annotations.
+
+    Args:
+        annotation_paths: A dictionary that maps annotator names to the path to the manual annotations.
+        matching_distance: The maximum distance for matching annotations to a consensus annotation.
+        min_matches_for_consensus: The minimum number of matching annotations to consider an annotation as consensus.
+
+    Returns:
+        A dataframe with the consensus annotations.
+        A dataframe with the unmatched annotations.
+    """
+    dfs, coords, ann_id = [], [], []
+    for name, path in annotation_paths.items():
+        df = pd.read_csv(path, usecols=["axis-0", "axis-1", "axis-2"])
+        df["annotator"] = name
+        dfs.append(df)
+    big = pd.concat(dfs, ignore_index=True)
+    coords = big[["axis-0", "axis-1", "axis-2"]].values
+    ann_id = big["annotator"].values
+
+    trees, idx_by_ann = {}, {}
+    for ann in np.unique(ann_id):
+        idx = np.where(ann_id == ann)[0]
+        idx_by_ann[ann] = idx
+        trees[ann] = cKDTree(coords[idx])
+
+    edges = []
+    for i, annA in enumerate(trees):
+        idxA, treeA = idx_by_ann[annA], trees[annA]
+        for annB in list(trees)[i+1:]:
+            idxB, treeB = idx_by_ann[annB], trees[annB]
+
+            # A -> B
+            dAB, jB = treeB.query(coords[idxA], distance_upper_bound=matching_distance)
+            # B -> A
+            dBA, jA = treeA.query(coords[idxB], distance_upper_bound=matching_distance)
+
+            for k, (d, j) in enumerate(zip(dAB, jB)):
+                if np.isfinite(d):
+                    a_idx = idxA[k]
+                    b_idx = idxB[j]
+                    # check reciprocity
+                    if jA[j] == k and np.isfinite(dBA[j]):
+                        edges.append((a_idx, b_idx))
+
+    # --- union–find to group ---------------------------------
+    parent = np.arange(len(coords))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for a, b in edges:
+        union(a, b)
+
+    # --- collect results -------------------------------------
+    cluster = defaultdict(list)
+    for i in range(len(coords)):
+        cluster[find(i)].append(i)
+
+    consensus_rows, unmatched = [], []
+    for members in cluster.values():
+        if len(members) >= min_matches_for_consensus:
+            anns = {ann_id[m] for m in members}
+            # by construction anns are unique
+            subset = coords[members]
+            rep_pt = subset.mean(0)
+            consensus_rows.append({
+                "axis-0": rep_pt[0],
+                "axis-1": rep_pt[1],
+                "axis-2": rep_pt[2],
+                "annotators": anns,
+                "member_indices": members
+            })
+        else:
+            unmatched.extend(members)
+
+    consensus_df = pd.DataFrame(consensus_rows)
+    unmatched_df = big.iloc[unmatched].reset_index(drop=True)
+    return consensus_df, unmatched_df
 
 
 def for_visualization(segmentation, annotations, matches):
