@@ -122,7 +122,7 @@ def marker_detection(
     mask_path: str,
     output_folder: str,
     model_path: str,
-    mask_key: str = "s4",
+    mask_input_key: str = "s4",
     max_distance: float = 20,
     resolution: float = 0.38,
 ):
@@ -134,7 +134,7 @@ def marker_detection(
         mask_path: Path to IHC segmentation used to mask input.
         output_folder: Output folder for synapse segmentation and marker detection.
         model_path: Path to model for synapse detection.
-        mask_key: Key to undersampled IHC segmentation for masking input for synapse detection.
+        mask_input_key: Key to undersampled IHC segmentation for masking input for synapse detection.
         max_distance: The maximal distance for a valid match of synapse markers to IHCs.
         resolution: The resolution / voxel size of the data in micrometer.
     """
@@ -146,20 +146,20 @@ def marker_detection(
 
     skip_masking = False
 
-    mask_key = "mask"
+    mask_preprocess_key = "mask"
     output_file = os.path.join(output_folder, "mask.zarr")
 
-    if os.path.exists(output_file) and mask_key in zarr.open(output_file, "r"):
+    if os.path.exists(output_file) and mask_preprocess_key in zarr.open(output_file, "r"):
         skip_masking = True
 
     if not skip_masking:
-        mask_ = read_image_data(mask_path, mask_key)
+        mask_ = read_image_data(mask_path, mask_input_key)
         new_mask = np.zeros(mask_.shape)
         new_mask[mask_ != 0] = 1
         arr_bin = binary_dilation(mask_, structure=np.ones((9, 9, 9))).astype(int)
 
         with zarr.open(output_file, mode="w") as f_out:
-            f_out.create_dataset(mask_key, data=arr_bin, compression="gzip")
+            f_out.create_dataset(mask_preprocess_key, data=arr_bin, compression="gzip")
 
     # 2.) Run inference and detection of maxima.
     # This can be taken from 'scripts/synapse_marker_detection/run_prediction.py'
