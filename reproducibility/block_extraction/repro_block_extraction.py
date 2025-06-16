@@ -23,13 +23,15 @@ def repro_block_extraction(
 
     for dic in param_dicts:
         if "image_channel" in dic:
-            input_path = os.path.join(dic["cochlea"], "images", "ome-zarr", dic["image_channel"] + ".ome.zarr")
-            roi_halo = dic["halo_size"]
-            crop_centers = dic["crop_centers"]
-            for coord in crop_centers:
-                extract_block(input_path, coord, output_dir, input_key=input_key, roi_halo=roi_halo, tif=tif_flag,
-                              s3=s3_flag, s3_credentials=s3_credentials, s3_bucket_name=s3_bucket_name,
-                              s3_service_endpoint=s3_service_endpoint)
+            image_channels = dic["image_channel"] if isinstance(dic["image_channel"], list) else [dic["image_channel"]]
+            for image_channel in image_channels:
+                input_path = os.path.join(dic["cochlea"], "images", "ome-zarr", image_channel + ".ome.zarr")
+                roi_halo = dic["halo_size"]
+                crop_centers = dic["crop_centers"]
+                for coord in crop_centers:
+                    extract_block(input_path, coord, output_dir, input_key=input_key, roi_halo=roi_halo, tif=tif_flag,
+                                  s3=s3_flag, s3_credentials=s3_credentials, s3_bucket_name=s3_bucket_name,
+                                  s3_service_endpoint=s3_service_endpoint)
 
 
 def main():
