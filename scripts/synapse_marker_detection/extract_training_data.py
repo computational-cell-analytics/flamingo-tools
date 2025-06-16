@@ -3,6 +3,7 @@ from glob import glob
 from pathlib import Path
 
 import h5py
+import imageio.v3 as imageio
 import napari
 import numpy as np
 import pandas as pd
@@ -19,27 +20,61 @@ def get_voxel_size(imaris_file):
     return vsize
 
 
-def extract_training_data(imaris_file, output_folder):
+def get_transformation(imaris_file):
+    with h5py.File(imaris_file) as f:
+        info = f["DataSetInfo"]["Image"].attrs
+        ext_min = np.array([float(b"".join(info[f"ExtMin{i}"]).decode()) for i in range(3)])
+        ext_max = np.array([float(b"".join(info[f"ExtMax{i}"]).decode()) for i in range(3)])
+        size = [int(b"".join(info[dim]).decode()) for dim in ["X", "Y", "Z"]]
+        spacing = (ext_max - ext_min) / size                              # µm / voxel
+
+    # build 4×4 affine: world → index
+    T = np.eye(4)
+    T[:3, :3] = np.diag(1/spacing)            # scale
+    T[:3, 3] = -ext_min/spacing              # translate
+
+    return T
+
+
+def extract_training_data(imaris_file, output_folder, tif_file=None, crop=True):
+    point_key = "/Scene/Content/Points0/CoordsXYZR"
     with h5py.File(imaris_file, "r") as f:
-        data = f["/DataSet/ResolutionLevel 0/TimePoint 0/Channel 0/Data"][:]
-        points = f["/Scene/Content/Points0/CoordsXYZR"][:]
+        if point_key not in f:
+            print("Skipping", imaris_file, "due to missing annotations")
+            return
+        points = f[point_key][:]
         points = points[:, :-1]
-        points = points[:, ::-1]
 
-    # TODO crop the data to the original shape.
-    # Can we just crop the zero-padding ?!
-    crop_box = np.where(data != 0)
-    crop_box = tuple(slice(0, int(cb.max() + 1)) for cb in crop_box)
-    data = data[crop_box]
-    print(data.shape)
+        g = f["/DataSet/ResolutionLevel 0/TimePoint 0"]
+        # The first channel is ctbp2 / the synapse marker channel.
+        data = g["Channel 0/Data"][:]
+        # The second channel is vglut / the ihc channel.
+        if "Channel 1" in g:
+            ihc_data = g["Channel 1/Data"][:]
+        else:
+            ihc_data = None
 
-    # Scale the points to match the image dimensions.
-    voxel_size = get_voxel_size(imaris_file)
-    points /= voxel_size[None]
+    T = get_transformation(imaris_file)
+    points = (T @ np.c_[points, np.ones(len(points))].T).T[:, :3]
+    points = points[:, ::-1]
+
+    if crop:
+        crop_box = np.where(data != 0)
+        crop_box = tuple(slice(0, int(cb.max() + 1)) for cb in crop_box)
+        data = data[crop_box]
+
+    if tif_file is None:
+        original_data = None
+    else:
+        original_data = imageio.imread(tif_file)
 
     if output_folder is None:
         v = napari.Viewer()
         v.add_image(data)
+        if ihc_data is not None:
+            v.add_image(ihc_data)
+        if original_data is not None:
+            v.add_image(original_data, visible=False)
         v.add_points(points)
         v.title = os.path.basename(imaris_file)
         napari.run()
@@ -59,6 +94,8 @@ def extract_training_data(imaris_file, output_folder):
 
         f = zarr.open(image_file, "a")
         f.create_dataset("raw", data=data)
+        if ihc_data is not None:
+            f.create_dataset("raw_ihc", data=ihc_data)
 
 
 # Files that look good for training:
@@ -69,10 +106,95 @@ def extract_training_data(imaris_file, output_folder):
 # - 4.2R_apex_IHCribboncount_Z.ims
 # - 6.2R_apex_IHCribboncount_Z.ims  (very small crop)
 # - 6.2R_base_IHCribbons_Z.ims
-def main():
+def process_training_data_v1():
     files = sorted(glob("./data/synapse_stains/*.ims"))
     for ff in files:
         extract_training_data(ff, output_folder="./training_data")
+
+
+def _match_tif(imaris_file):
+    folder = os.path.split(imaris_file)[0]
+
+    fname = os.path.basename(imaris_file)
+    parts = fname.split("_")
+    cochlea = parts[0].upper()
+    region = parts[1]
+
+    tif_name = f"{cochlea}_{region}_CTBP2.tif"
+    tif_path = os.path.join(folder, tif_name)
+    assert os.path.exists(tif_path), tif_path
+
+    return tif_path
+
+
+def process_training_data_v2(visualize=True):
+    input_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ImageCropsIHC_synapses"
+
+    train_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/training_data/v2"  # noqa
+    test_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test/v2"  # noqa
+
+    train_folders = ["M78L_IHC-synapse_crops"]
+    test_folders = ["M226L_IHC-synapse_crops", "M226R_IHC-synapsecrops"]
+
+    valid_files = [
+        "m78l_apexp2718_cr-ctbp2.ims",
+        "m226r_apex_p1268_pv-ctbp2.ims",
+        "m226r_base_p800_vglut3-ctbp2.ims",
+    ]
+
+    for folder in train_folders + test_folders:
+
+        if visualize:
+            output_folder = None
+        elif folder in train_folders:
+            output_folder = train_output
+            os.makedirs(output_folder, exist_ok=True)
+        else:
+            output_folder = test_output
+            os.makedirs(output_folder, exist_ok=True)
+
+        imaris_files = sorted(glob(os.path.join(input_root, folder, "*.ims")))
+        for imaris_file in imaris_files:
+            if os.path.basename(imaris_file) not in valid_files:
+                continue
+            extract_training_data(imaris_file, output_folder, tif_file=None, crop=True, scale=True)
+
+
+# We have fixed the imaris data extraction problem and can use all the crops!
+def process_training_data_v3(visualize=True):
+    input_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ImageCropsIHC_synapses"
+
+    train_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/training_data/v3"  # noqa
+    test_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3"  # noqa
+
+    train_folders = ["synapse_stains", "M78L_IHC-synapse_crops", "M226R_IHC-synapsecrops"]
+    test_folders = ["M226L_IHC-synapse_crops"]
+
+    exclude_names = ["220824_Ex3IL_rbCAST1635_mCtBP2580_chCR488_cell1_CtBP2spots.ims"]
+
+    for folder in train_folders + test_folders:
+
+        if visualize:
+            output_folder = None
+        elif folder in train_folders:
+            output_folder = train_output
+            os.makedirs(output_folder, exist_ok=True)
+        else:
+            output_folder = test_output
+            os.makedirs(output_folder, exist_ok=True)
+
+        imaris_files = sorted(glob(os.path.join(input_root, folder, "*.ims")))
+        for imaris_file in imaris_files:
+            if os.path.basename(imaris_file) in exclude_names:
+                print("Skipping", imaris_file)
+                continue
+            extract_training_data(imaris_file, output_folder, tif_file=None, crop=True)
+
+
+def main():
+    # process_training_data_v1()
+    # process_training_data_v2(visualize=True)
+    process_training_data_v3(visualize=False)
 
 
 if __name__ == "__main__":

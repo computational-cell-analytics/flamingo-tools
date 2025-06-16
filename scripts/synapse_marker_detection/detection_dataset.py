@@ -7,22 +7,42 @@ from skimage.filters import gaussian
 from torch_em.util import ensure_tensor_with_channels
 
 
-# Process labels stored in json napari style.
-# I don't actually think that we need the epsilon here, but will leave it for now.
-def process_labels(label_path, shape, sigma, eps, bb=None):
+class MinPointSampler:
+    """A sampler to reject samples with a low fraction of foreground pixels in the labels.
+
+    Args:
+        min_fraction: The minimal fraction of foreground pixels for accepting a sample.
+        background_id: The id of the background label.
+        p_reject: The probability for rejecting a sample that does not meet the criterion.
+    """
+    def __init__(self, min_points: int, p_reject: float = 1.0):
+        self.min_points = min_points
+        self.p_reject = p_reject
+
+    def __call__(self, x: np.ndarray, n_points: int) -> bool:
+        """Check the sample.
+
+        Args:
+            x: The raw data.
+            y: The label data.
+
+        Returns:
+            Whether to accept this sample.
+        """
+
+        if n_points > self.min_points:
+            return True
+        else:
+            return np.random.rand() > self.p_reject
+
+
+def load_labels(label_path, shape, bb):
     points = pd.read_csv(label_path)
-
-    if bb:
-        (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
-        restricted_shape = (z_max - z_min, y_max - y_min, x_max - x_min)
-        labels = np.zeros(restricted_shape, dtype="float32")
-        shape = restricted_shape
-    else:
-        labels = np.zeros(shape, dtype="float32")
-
     assert len(points.columns) == len(shape)
-    z_coords, y_coords, x_coords = points["axis-0"], points["axis-1"], points["axis-2"]
+    z_coords, y_coords, x_coords = points["axis-0"].values, points["axis-1"].values, points["axis-2"].values
+
     if bb is not None:
+        (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
         z_coords -= z_min
         y_coords -= y_min
         x_coords -= x_min
@@ -32,12 +52,30 @@ def process_labels(label_path, shape, sigma, eps, bb=None):
             np.logical_and(x_coords >= 0, x_coords < (x_max - x_min)),
         ])
         z_coords, y_coords, x_coords = z_coords[mask], y_coords[mask], x_coords[mask]
+        restricted_shape = (z_max - z_min, y_max - y_min, x_max - x_min)
+        shape = restricted_shape
 
+    n_points = len(z_coords)
     coords = tuple(
         np.clip(np.round(coord).astype("int"), 0, coord_max - 1) for coord, coord_max in zip(
             (z_coords, y_coords, x_coords), shape
         )
     )
+
+    return coords, n_points
+
+
+# Process labels stored in json napari style.
+# I don't actually think that we need the epsilon here, but will leave it for now.
+def process_labels(coords, shape, sigma, eps, bb=None):
+
+    if bb:
+        (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
+        restricted_shape = (z_max - z_min, y_max - y_min, x_max - x_min)
+        labels = np.zeros(restricted_shape, dtype="float32")
+        shape = restricted_shape
+    else:
+        labels = np.zeros(shape, dtype="float32")
 
     labels[coords] = 1
     labels = gaussian(labels, sigma)
@@ -124,16 +162,10 @@ class DetectionDataset(torch.utils.data.Dataset):
         raw, label_path = self.raw_path, self.label_path
 
         raw = zarr.open(raw)[self.raw_key]
+        have_raw_channels = raw.ndim == 4  # 3D with channels
         shape = raw.shape
 
         bb = self._sample_bounding_box(shape)
-        label = process_labels(label_path, shape, self.sigma, self.eps, bb=bb)
-
-        have_raw_channels = raw.ndim == 4  # 3D with channels
-        have_label_channels = label.ndim == 4
-        if have_label_channels:
-            raise NotImplementedError("Multi-channel labels are not supported.")
-
         prefix_box = tuple()
         if have_raw_channels:
             if shape[-1] < 16:
@@ -143,18 +175,25 @@ class DetectionDataset(torch.utils.data.Dataset):
                 prefix_box = (slice(None), )
 
         raw_patch = np.array(raw[prefix_box + bb])
-        label_patch = np.array(label)
 
+        coords, n_points = load_labels(label_path, shape, bb)
         if self.sampler is not None:
-            assert False, "Sampler not implemented"
-            # sample_id = 0
-            # while not self.sampler(raw_patch, label_patch):
-            #     bb = self._sample_bounding_box(shape)
-            #     raw_patch = np.array(raw[prefix_box + bb])
-            #     label_patch = np.array(label[bb])
-            #     sample_id += 1
-            #     if sample_id > self.max_sampling_attempts:
-            #         raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+            sample_id = 0
+            while not self.sampler(raw_patch, n_points):
+                bb = self._sample_bounding_box(shape)
+                raw_patch = np.array(raw[prefix_box + bb])
+                coords, n_points = load_labels(label_path, shape, bb)
+                sample_id += 1
+                if sample_id > self.max_sampling_attempts:
+                    raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+
+        label = process_labels(coords, shape, self.sigma, self.eps, bb=bb)
+
+        have_label_channels = label.ndim == 4
+        if have_label_channels:
+            raise NotImplementedError("Multi-channel labels are not supported.")
+
+        label_patch = np.array(label)
 
         if have_raw_channels and len(prefix_box) == 0:
             raw_patch = raw_patch.transpose((3, 0, 1, 2))  # Channels, Depth, Height, Width

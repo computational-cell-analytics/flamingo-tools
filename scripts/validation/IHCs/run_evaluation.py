@@ -3,11 +3,12 @@ from glob import glob
 
 import pandas as pd
 from flamingo_tools.validation import (
-    fetch_data_for_evaluation, parse_annotation_path, compute_scores_for_annotated_slice
+    fetch_data_for_evaluation, _parse_annotation_path, compute_scores_for_annotated_slice
 )
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
-ANNOTATION_FOLDERS = ["Annotations_LR"]
+# ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+ANNOTATION_FOLDERS = ["Annotations_AMD", "Annotations_LR"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):
@@ -28,7 +29,7 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder):
         annotations = sorted(glob(os.path.join(root, folder, "*.csv")))
         for annotation_path in annotations:
             print(annotation_path)
-            cochlea, slice_id = parse_annotation_path(annotation_path)
+            cochlea, slice_id = _parse_annotation_path(annotation_path)
 
             # For the cochlea M_LR_000226_R the actual component is 2, not 1
             component = 2 if "226_R" in cochlea else 1

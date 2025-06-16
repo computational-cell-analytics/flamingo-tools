@@ -24,9 +24,15 @@ def compute_scores(table, annotator=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("result_file")
+    parser.add_argument("--all", action="store_true")
     args = parser.parse_args()
 
     table = pd.read_csv(args.result_file)
+    if args.all:
+        print(table)
+        print()
+        print()
+
     annotators = pd.unique(table.annotator)
 
     results = []
