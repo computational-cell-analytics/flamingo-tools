@@ -8,7 +8,8 @@ from flamingo_tools.validation import (
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
 # ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
-ANNOTATION_FOLDERS = ["Annotations_AMD", "Annotations_LR"]
+# ANNOTATION_FOLDERS = ["Annotations_AMD", "Annotations_LR"]
+ANNOTATION_FOLDERS = ["consensus_annotation"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):
@@ -25,7 +26,7 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder):
         os.makedirs(cache_folder, exist_ok=True)
 
     for folder in annotation_folders:
-        annotator = folder[len("Annotations"):]
+        annotator = "consensus" if folder == "consensus_annotation" else folder[len("Annotations"):]
         annotations = sorted(glob(os.path.join(root, folder, "*.csv")))
         for annotation_path in annotations:
             print(annotation_path)
