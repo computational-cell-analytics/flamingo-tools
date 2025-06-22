@@ -377,6 +377,10 @@ def components_sgn(
     Returns:
         Subgraph components as lists of label_ids of dataframe.
     """
+    if keyword not in table:
+        distance_avg = nearest_neighbor_distance(table, n_neighbors=100)
+        table[keyword] = list(distance_avg)
+
     centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
     labels = [int(i) for i in list(table["label_id"])]
 
