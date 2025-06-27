@@ -76,9 +76,9 @@ def main():
             scale=scale, min_size=min_size,
             block_shape=block_shape, halo=halo,
             seg_class=args.seg_class,
-            center_distance_threshold = args.center_distance_threshold,
-            boundary_distance_threshold = args.boundary_distance_threshold,
-            fg_threshold = args.fg_threshold,
+            center_distance_threshold=args.center_distance_threshold,
+            boundary_distance_threshold=args.boundary_distance_threshold,
+            fg_threshold=args.fg_threshold,
         )
 
         abs_path = os.path.abspath(args.input)
@@ -93,9 +93,9 @@ def main():
             scale=scale, min_size=min_size,
             block_shape=block_shape, halo=halo,
             seg_class=args.seg_class,
-            center_distance_threshold = args.center_distance_threshold,
-            boundary_distance_threshold = args.boundary_distance_threshold,
-            fg_threshold = args.fg_threshold,
+            center_distance_threshold=args.center_distance_threshold,
+            boundary_distance_threshold=args.boundary_distance_threshold,
+            fg_threshold=args.fg_threshold,
         )
         timer_output = os.path.join(args.output_folder, "timer.json")
 
