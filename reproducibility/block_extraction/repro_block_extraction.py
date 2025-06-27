@@ -7,7 +7,7 @@ from flamingo_tools.extract_block_util import extract_block
 
 
 def repro_block_extraction(
-    ddict: dict,
+    json_file: str,
     output_dir: str,
     s3_credentials: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
@@ -17,7 +17,7 @@ def repro_block_extraction(
     tif_flag = True
     input_key = "s0"
 
-    with open(ddict, 'r') as myfile:
+    with open(json_file, 'r') as myfile:
         data = myfile.read()
     param_dicts = json.loads(data)
 

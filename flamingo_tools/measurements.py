@@ -2,7 +2,7 @@ import multiprocessing as mp
 import os
 from concurrent import futures
 from functools import partial
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from .file_utils import read_image_data
 from .segmentation.postprocessing import compute_table_on_the_fly
+import flamingo_tools.s3_utils as s3_utils
 
 
 def _measure_volume_and_surface(mask, resolution):
@@ -175,6 +176,8 @@ def compute_object_measures(
     resolution: float = 0.38,
     force: bool = False,
     feature_set: str = "default",
+    s3_flag: bool = False,
+    component_list: List[int] = [],
 ) -> None:
     """Compute simple intensity and morphology measures for each segmented cell in a segmentation.
 
@@ -201,8 +204,16 @@ def compute_object_measures(
     # First, we load the pre-computed segmentation table from MoBIE.
     if segmentation_table_path is None:
         table = None
+    elif s3_flag:
+        seg_table, fs = s3_utils.get_s3_path(segmentation_table_path)
+        with fs.open(seg_table, 'r') as f:
+            table = pd.read_csv(f, sep="\t")
     else:
         table = pd.read_csv(segmentation_table_path, sep="\t")
+
+    # filter table with largest component
+    if len(component_list) != 0 and "component_labels" in table.columns:
+        table = table[table['component_labels'].isin(component_list)]
 
     # Then, open the volumes.
     image = read_image_data(image_path, image_key)
