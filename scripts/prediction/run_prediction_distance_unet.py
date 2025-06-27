@@ -29,6 +29,14 @@ def main():
     parser.add_argument("--time", action="store_true", help="Time prediction process.")
     parser.add_argument("--seg_class", default=None, type=str,
                         help="Segmentation class to load parameters for masking input.")
+    parser.add_argument("--center_distance_threshold", default=0.4, type=float,
+                        help="The threshold applied to the distance center predictions to derive seeds.")
+    parser.add_argument("--boundary_distance_threshold", default=None, type=float,
+                        help="The threshold applied to the boundary predictions to derive seeds. \
+                        By default this is set to 'None', \
+                        in which case the boundary distances are not used for the seeds.")
+    parser.add_argument("--fg_threshold", default=0.5, type=float,
+                        help="The threshold applied to the foreground prediction for deriving the watershed mask.")
 
     args = parser.parse_args()
 
@@ -68,6 +76,9 @@ def main():
             scale=scale, min_size=min_size,
             block_shape=block_shape, halo=halo,
             seg_class=args.seg_class,
+            center_distance_threshold = args.center_distance_threshold,
+            boundary_distance_threshold = args.boundary_distance_threshold,
+            fg_threshold = args.fg_threshold,
         )
 
         abs_path = os.path.abspath(args.input)
@@ -82,6 +93,9 @@ def main():
             scale=scale, min_size=min_size,
             block_shape=block_shape, halo=halo,
             seg_class=args.seg_class,
+            center_distance_threshold = args.center_distance_threshold,
+            boundary_distance_threshold = args.boundary_distance_threshold,
+            fg_threshold = args.fg_threshold,
         )
         timer_output = os.path.join(args.output_folder, "timer.json")
 
