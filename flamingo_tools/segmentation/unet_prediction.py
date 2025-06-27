@@ -67,6 +67,7 @@ def prediction_impl(
     slurm_task_id=0,
     mean=None,
     std=None,
+    mask=None
 ):
     """@private
     """
@@ -79,18 +80,20 @@ def prediction_impl(
 
     input_ = read_image_data(input_path, input_key)
     chunks = getattr(input_, "chunks", (64, 64, 64))
-    mask_path = os.path.join(output_folder, "mask.zarr")
 
-    if os.path.exists(mask_path):
-        image_mask = z5py.File(mask_path, "r")["mask"]
-        # resize mask
-        image_shape = input_.shape
-        mask_shape = image_mask.shape
-        if image_shape != mask_shape:
-            image_mask = ResizedVolume(image_mask, image_shape, order=0)
-
+    if output_folder is None:
+        image_mask = mask
     else:
-        image_mask = None
+        mask_path = os.path.join(output_folder, "mask.zarr")
+        if os.path.exists(mask_path):
+            image_mask = z5py.File(mask_path, "r")["mask"]
+            # resize mask
+            image_shape = input_.shape
+            mask_shape = image_mask.shape
+            if image_shape != mask_shape:
+                image_mask = ResizedVolume(image_mask, image_shape, order=0)
+        else:
+            image_mask = mask
 
     if scale is None or np.isclose(scale, 1):
         original_shape = None
@@ -162,16 +165,8 @@ def prediction_impl(
     else:
         slurm_iteration = list(range(n_blocks))
 
-    output_path = os.path.join(output_folder, "predictions.zarr")
-    with open_file(output_path, "a") as f:
-        output = f.require_dataset(
-            "prediction",
-            shape=output_shape,
-            chunks=output_chunks,
-            compression="gzip",
-            dtype="float32",
-        )
-
+    if output_folder is None:
+        output = np.zeros(output_shape, dtype=np.float32)
         predict_with_halo(
             input_, model,
             gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
@@ -180,10 +175,37 @@ def prediction_impl(
             iter_list=slurm_iteration,
         )
 
-    return original_shape
+    else:
+        output_path = os.path.join(output_folder, "predictions.zarr")
+        with open_file(output_path, "a") as f:
+            output = f.require_dataset(
+                "prediction",
+                shape=output_shape,
+                chunks=output_chunks,
+                compression="gzip",
+                dtype="float32",
+            )
+
+            predict_with_halo(
+                input_, model,
+                gpu_ids=gpu_ids, block_shape=block_shape, halo=halo,
+                output=output, preprocess=preprocess, postprocess=postprocess,
+                mask=image_mask,
+                iter_list=slurm_iteration,
+            )
+
+    if output_folder is None:
+        return original_shape, output
+    else:
+        return original_shape, None
 
 
-def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg_class: Optional[str] = "sgn") -> None:
+def find_mask(
+    input_path: str,
+    input_key: Optional[str],
+    output_folder: Optional[str],
+    seg_class: Optional[str] = "sgn"
+) -> None:
     """Determine the mask for running prediction.
 
     The mask corresponds to data that contains actual signal and not just noise.
@@ -197,9 +219,6 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg
         output_folder: The output folder for storing the mask data.
         seg_class: Specifier for exclusion criterias for mask generation.
     """
-    mask_path = os.path.join(output_folder, "mask.zarr")
-    f = z5py.File(mask_path, "a")
-
     # set parameters for the exclusion of chunks within mask generation
     if seg_class == "sgn":
         upper_percentile = 95
@@ -214,10 +233,6 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg
         min_intensity = 200
         print("Calculating mask with default values.")
 
-    mask_key = "mask"
-    if mask_key in f:
-        return
-
     raw = read_image_data(input_path, input_key)
     chunks = getattr(raw, "chunks", (64, 64, 64))
 
@@ -225,7 +240,17 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg
     blocking = nt.blocking([0, 0, 0], raw.shape, block_shape)
     n_blocks = blocking.numberOfBlocks
 
-    ds_mask = f.create_dataset(mask_key, shape=raw.shape, compression="gzip", dtype="uint8", chunks=block_shape)
+    if output_folder is None:
+        ds_mask = np.zeros(raw.shape, dtype=np.uint64)
+
+    else:
+        mask_path = os.path.join(output_folder, "mask.zarr")
+        f = z5py.File(mask_path, "a")
+        mask_key = "mask"
+        if mask_key in f:
+            return
+
+        ds_mask = f.create_dataset(mask_key, shape=raw.shape, compression="gzip", dtype="uint8", chunks=block_shape)
 
     # TODO more sophisticated criterion?!
     def find_mask_block(block_id):
@@ -240,15 +265,20 @@ def find_mask(input_path: str, input_key: Optional[str], output_folder: str, seg
     with futures.ThreadPoolExecutor(n_threads) as tp:
         list(tqdm(tp.map(find_mask_block, range(n_blocks)), total=n_blocks))
 
+    if output_folder is None:
+        return ds_mask
+    else:
+        return None
+
 
 def distance_watershed_implementation(
     input_path: str,
-    output_folder: str,
-    min_size: int,
+    output_folder: Optional[str] = None,
+    min_size: int = 1000,
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
-    original_shape: Optional[Tuple[int, int, int]] = None,
+    original_shape: Optional[Tuple[int, int, int]] = None
 ) -> None:
     """Parallel implementation of the distance-prediction based watershed.
 
@@ -262,7 +292,10 @@ def distance_watershed_implementation(
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
         original_shape: The original shape to resize the segmentation to.
     """
-    input_ = open_file(input_path, "r")["prediction"]
+    if isinstance(input_path, str):
+        input_ = open_file(input_path, "r")["prediction"]
+    else:
+        input_ = input_path
 
     # Limit the number of cores for parallelization.
     n_threads = min(16, mp.cpu_count())
@@ -280,13 +313,17 @@ def distance_watershed_implementation(
     # center_distances = SimpleTransformationWrapper(center_distances, transformation=smoothing)
     # boundary_distances = SimpleTransformationWrapper(boundary_distances, transformation=smoothing)
 
-    # Allocate an zarr array for the seeds.
-    block_shape = center_distances.chunks
-    seed_path = os.path.join(output_folder, "seeds.zarr")
-    seed_file = open_file(os.path.join(seed_path), "a")
-    seeds = seed_file.require_dataset(
-        "seeds", shape=center_distances.shape, chunks=block_shape, compression="gzip", dtype="uint64"
-    )
+    # Allocate the (zarr) array for the seeds.
+    if output_folder is None:
+        block_shape = (20, 128, 128)
+        seeds = np.zeros(center_distances.shape, dtype=np.uint64)
+    else:
+        block_shape = center_distances.chunks
+        seed_path = os.path.join(output_folder, "seeds.zarr")
+        seed_file = open_file(os.path.join(seed_path), "a")
+        seeds = seed_file.require_dataset(
+            "seeds", shape=center_distances.shape, chunks=block_shape, compression="gzip", dtype="uint64"
+        )
 
     # Compute the seed inputs:
     # First, threshold the center distances.
@@ -301,12 +338,15 @@ def distance_watershed_implementation(
         data=seed_inputs, out=seeds, block_shape=block_shape, mask=mask, verbose=True, n_threads=n_threads
     )
 
-    # Allocate the zarr array for the segmentation.
-    seg_path = os.path.join(output_folder, "segmentation.zarr" if original_shape is None else "seg_downscaled.zarr")
-    seg_file = open_file(seg_path, "a")
-    seg = seg_file.create_dataset(
-        "segmentation", shape=seeds.shape, chunks=block_shape, compression="gzip", dtype="uint64"
-    )
+    # Allocate the (zarr) array for the segmentation.
+    if output_folder is None:
+        seg = np.zeros(seeds.shape, dtype=np.uint64)
+    else:
+        seg_path = os.path.join(output_folder, "segmentation.zarr" if original_shape is None else "seg_downscaled.zarr")
+        seg_file = open_file(seg_path, "a")
+        seg = seg_file.create_dataset(
+            "segmentation", shape=seeds.shape, chunks=block_shape, compression="gzip", dtype="uint64"
+        )
 
     # Compute the segmentation with a seeded watershed
     halo = (2, 8, 8)
@@ -341,6 +381,11 @@ def distance_watershed_implementation(
             with futures.ThreadPoolExecutor(n_threads) as tp:
                 tp.map(write_block, range(blocking.numberOfBlocks))
 
+    if output_folder is None:
+        return seg
+    else:
+        return None
+
 
 def calc_mean_and_std(input_path: str, input_key: str, output_folder: str) -> None:
     """Calculate mean and standard deviation of the input volume.
@@ -372,7 +417,7 @@ def calc_mean_and_std(input_path: str, input_key: str, output_folder: str) -> No
 def run_unet_prediction(
     input_path: str,
     input_key: Optional[str],
-    output_folder: str,
+    output_folder: Optional[str],
     model_path: str,
     min_size: int,
     scale: Optional[float] = None,
@@ -403,21 +448,32 @@ def run_unet_prediction(
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
         seg_class: Specifier for exclusion criterias for mask generation.
     """
-    os.makedirs(output_folder, exist_ok=True)
+    if output_folder is not None:
+        os.makedirs(output_folder, exist_ok=True)
 
     if use_mask:
-        find_mask(input_path, input_key, output_folder, seg_class=seg_class)
-    original_shape = prediction_impl(
-        input_path, input_key, output_folder, model_path, scale, block_shape, halo
+        mask = find_mask(input_path, input_key, output_folder=output_folder, seg_class=seg_class)
+    else:
+        mask = None
+
+    original_shape, prediction = prediction_impl(
+        input_path=input_path, input_key=input_key, output_folder=output_folder, model_path=model_path, scale=scale,
+        block_shape=block_shape, halo=halo, mask=mask
     )
 
-    pmap_out = os.path.join(output_folder, "predictions.zarr")
-    distance_watershed_implementation(
+    if output_folder is None:
+        pmap_out = prediction
+    else:
+        pmap_out = os.path.join(output_folder, "predictions.zarr")
+
+    segmentation = distance_watershed_implementation(
         pmap_out, output_folder, min_size=min_size, original_shape=original_shape,
         center_distance_threshold=center_distance_threshold,
         boundary_distance_threshold=boundary_distance_threshold,
-        fg_threshold=fg_threshold,
+        fg_threshold=fg_threshold
     )
+
+    return segmentation
 
 
 #
