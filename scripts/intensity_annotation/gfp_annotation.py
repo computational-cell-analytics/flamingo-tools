@@ -95,7 +95,7 @@ def _extend_sgns_complex(gfp, sgns):
 
 
 # Just dilate by 3 pixels.
-def _extend_sgns_simple(gfp, sgns, dilation=3):
+def _extend_sgns_simple(gfp, sgns, dilation):
     block_shape = (128,) * 3
     halo = (dilation + 2,) * 3
 
@@ -121,7 +121,8 @@ def gfp_annotation(prefix, default_stat="mean"):
 
     # Extend the sgns so that they cover the SGN boundaries.
     # sgns_extended = _extend_sgns(gfp, sgns)
-    sgns_extended = _extend_sgns_simple(gfp, sgns)
+    # TODO we need to integrate this directly in the object measurement to efficiently do it at scale.
+    sgns_extended = _extend_sgns_simple(gfp, sgns, dilation=4)
 
     # Compute the intensity statistics.
     statistics = compute_object_measures_impl(gfp, sgns_extended)
@@ -130,10 +131,10 @@ def gfp_annotation(prefix, default_stat="mean"):
     v = napari.Viewer()
 
     # Add the base layers.
-    v.add_image(gfp)
-    v.add_image(pv, visible=False)
-    v.add_labels(sgns, visible=False)
-    v.add_labels(sgns_extended, name="sgns-extended")
+    v.add_image(gfp, name="GFP")
+    v.add_image(pv, visible=False, name="PV")
+    v.add_labels(sgns, visible=False, name="SGNs")
+    v.add_labels(sgns_extended, name="SGNs-extended")
 
     # Add additional layers for intensity coloring and classification
     # data_numerical = np.zeros(gfp.shape, dtype="float32")
@@ -185,6 +186,10 @@ def gfp_annotation(prefix, default_stat="mean"):
     napari.run()
 
 
+# Cochlea chanel registration quality:
+# - M_LR_000144_L: rough alignment is ok, but specific alignment is a bit poor.
+# - M_LR_000145_L: rough alignment is ok, detailed alignment also ok.
+# - M_LR_000151_R: rough alignment is ok, detailed alignment also ok.
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("prefix")
