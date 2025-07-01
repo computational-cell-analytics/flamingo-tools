@@ -60,8 +60,40 @@ def check_project(save=False):
         print()
 
 
+def plot_distribution():
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    table1 = "./results/sgn-measurements/M_LR_000145_L.csv"
+    table2 = "./results/sgn-measurements/M_LR_000151_R.csv"
+    table3 = "./results/sgn-measurements/M_LR_000155_L.csv"
+
+    table1 = pd.read_csv(table1)
+    table2 = pd.read_csv(table2)
+    table3 = pd.read_csv(table3)
+
+    print(len(table1))
+    print(len(table3))
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    sns.histplot(data=table1, x="mean", bins=32, ax=axes[0])
+    axes[0].set_title("M145_L")
+    # Something is wrong here, the values are normalized.
+    # sns.histplot(data=table2, x="mean", bins=32, ax=axes[1])
+    # axes[1].set_title("M151_R")
+    sns.histplot(data=table3, x="mean", bins=32, ax=axes[1])
+    axes[1].set_title("M155_L")
+
+    fig.suptitle("SGN Gene Therapy - Mean GFP Intensity of SGNs")
+    plt.tight_layout()
+
+    plt.show()
+
+
 def main():
-    check_project(save=True)
+    # check_project(save=True)
+    plot_distribution()
 
 
 if __name__ == "__main__":

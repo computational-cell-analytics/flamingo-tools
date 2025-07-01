@@ -10,19 +10,19 @@ from flamingo_tools.s3_utils import get_s3_path, BUCKET_NAME, SERVICE_ENDPOINT
 from skimage.segmentation import relabel_sequential
 
 
-def filter_component(fs, segmentation, cochlea, seg_name):
+def filter_component(fs, segmentation, cochlea, seg_name, components):
     # First, we download the MoBIE table for this segmentation.
     internal_path = os.path.join(BUCKET_NAME, cochlea, "tables",  seg_name, "default.tsv")
     with fs.open(internal_path, "r") as f:
         table = pd.read_csv(f, sep="\t")
 
     # Then we get the ids for the components and us them to filter the segmentation.
-    component_mask = np.isin(table.component_labels.values, [1])
+    component_mask = np.isin(table.component_labels.values, components)
     keep_label_ids = table.label_id.values[component_mask].astype("int64")
     filter_mask = ~np.isin(segmentation, keep_label_ids)
     segmentation[filter_mask] = 0
 
-    segmentation, _, _ = relabel_sequential(segmentation)
+    # segmentation, _, _ = relabel_sequential(segmentation)
     return segmentation
 
 
@@ -42,8 +42,8 @@ def export_lower_resolution(args):
         with zarr.open(s3_store, mode="r") as f:
             data = f[input_key][:]
         print(data.shape)
-        if args.filter_by_component:
-            data = filter_component(fs, data, args.cochlea, channel)
+        if args.filter_by_components is not None:
+            data = filter_component(fs, data, args.cochlea, channel, args.filter_by_components)
         tifffile.imwrite(out_path, data, bigtiff=True, compression="zlib")
 
 
@@ -53,7 +53,7 @@ def main():
     parser.add_argument("--scale", "-s", type=int, required=True)
     parser.add_argument("--output_folder", "-o", required=True)
     parser.add_argument("--channels", nargs="+", default=["PV", "VGlut3", "CTBP2"])
-    parser.add_argument("--filter_by_component", action="store_true")
+    parser.add_argument("--filter_by_components", nargs="+", type=int, default=None)
     args = parser.parse_args()
 
     export_lower_resolution(args)
