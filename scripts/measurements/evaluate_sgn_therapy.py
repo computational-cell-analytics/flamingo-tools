@@ -32,8 +32,8 @@ def check_project(save=False):
             continue
 
         # Get the ihc table folder.
-        ihc = sources[sgn_name]["segmentation"]
-        table_folder = os.path.join(BUCKET_NAME, cochlea, ihc["tableData"]["tsv"]["relativePath"])
+        sgn = sources[sgn_name]["segmentation"]
+        table_folder = os.path.join(BUCKET_NAME, cochlea, sgn["tableData"]["tsv"]["relativePath"])
 
         # For debugging.
         x = s3.ls(table_folder)
@@ -47,6 +47,7 @@ def check_project(save=False):
             os.path.join(table_folder, "GFP-resized_SGN-resized-v2_object-measures.tsv"), mode="rb"
         )
         measurement_table = pd.read_csv(measurement_table, sep="\t")
+        breakpoint()
 
         if save:
             os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -58,8 +59,40 @@ def check_project(save=False):
         print()
 
 
+def plot_distribution():
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    table1 = "./results/sgn-measurements/M_LR_000145_L.csv"
+    table2 = "./results/sgn-measurements/M_LR_000151_R.csv"
+    table3 = "./results/sgn-measurements/M_LR_000155_L.csv"
+
+    table1 = pd.read_csv(table1)
+    table2 = pd.read_csv(table2)
+    table3 = pd.read_csv(table3)
+
+    print(len(table1))
+    print(len(table3))
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    sns.histplot(data=table1, x="mean", bins=32, ax=axes[0])
+    axes[0].set_title("M145_L")
+    # Something is wrong here, the values are normalized.
+    # sns.histplot(data=table2, x="mean", bins=32, ax=axes[1])
+    # axes[1].set_title("M151_R")
+    sns.histplot(data=table3, x="mean", bins=32, ax=axes[1])
+    axes[1].set_title("M155_L")
+
+    fig.suptitle("SGN Gene Therapy - Mean GFP Intensity of SGNs")
+    plt.tight_layout()
+
+    plt.show()
+
+
 def main():
-    check_project(save=True)
+    # check_project(save=True)
+    plot_distribution()
 
 
 if __name__ == "__main__":

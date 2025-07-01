@@ -49,8 +49,31 @@ def check_project(save=False):
         print()
 
 
+def plot_distribution():
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    table1 = "./results/otof-measurements/M_AMD_OTOF1_L.csv"
+    table2 = "./results/otof-measurements/M_AMD_OTOF2_L.csv"
+
+    table1 = pd.read_csv(table1)
+    table2 = pd.read_csv(table2)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    sns.histplot(data=table1, x="mean", bins=32, ax=axes[0])
+    axes[0].set_title("Dual AAV")
+    sns.histplot(data=table2, x="mean", bins=32, ax=axes[1])
+    axes[1].set_title("Overloaded AAV")
+
+    fig.suptitle("OTOF Gene Therapy - Mean AlphaTag Intensity of IHCs")
+    plt.tight_layout()
+
+    plt.show()
+
+
 def main():
-    check_project(save=True)
+    # check_project(save=True)
+    plot_distribution()
 
 
 if __name__ == "__main__":

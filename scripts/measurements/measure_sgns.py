@@ -21,10 +21,22 @@ def open_tsv(fs, path):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cochleae", "-c", nargs="+")
+    args = parser.parse_args()
+
     fs = create_s3_target()
     project_info = open_json(fs, "project.json")
-    for dataset in project_info["datasets"]:
-        if dataset == "fens":
+
+    if args.cochleae is None:
+        cochleae = project_info["datasets"]
+    else:
+        cochleae = args.cochleae
+
+    for dataset in cochleae:
+        if dataset not in project_info["datasets"]:
+            print("Could not find cochleae", dataset)
             continue
         print(dataset)
         dataset_info = open_json(fs, os.path.join(dataset, "dataset.json"))
@@ -36,12 +48,22 @@ def main():
             source_info = source_info["segmentation"]
             table_path = source_info["tableData"]["tsv"]["relativePath"]
             table = open_tsv(fs, os.path.join(dataset, table_path, "default.tsv"))
-            component_labels = table.component_labels.values
-            remaining_sgns = component_labels[component_labels != 0]
-            print(source)
-            print("Number of SGNs (all components)   :", len(remaining_sgns))
-            _, n_per_component = np.unique(remaining_sgns, return_counts=True)
-            print("Number of SGNs (largest component):", max(n_per_component))
+
+            if hasattr(table, "component_labels"):
+                component_labels = table.component_labels.values
+                remaining_sgns = component_labels[component_labels != 0]
+                print(source)
+                print(
+                    "Number of SGNs (all components)   :", len(remaining_sgns), "/", len(table),
+                    "(total number of segmented objects)"
+                )
+                component_ids, n_per_component = np.unique(
+                    remaining_sgns, return_counts=True
+                )
+                print("Number of SGNs (largest component):", max(n_per_component))
+            else:
+                print(source)
+                print("Number of SGNs (no postprocessing):", len(table))
 
 
 if __name__ == "__main__":
