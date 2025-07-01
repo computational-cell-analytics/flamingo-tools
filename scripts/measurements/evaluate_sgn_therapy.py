@@ -15,8 +15,7 @@ def check_project(save=False):
     project_info = json.loads(content.read())
 
     cochleae = [
-        "M_LR_000144_L", "M_LR_000145_L",
-        "M_LR_000151_R", "M_LR_000155_L",
+        "M_LR_000144_L", "M_LR_000145_L", "M_LR_000151_R", "M_LR_000155_L",
     ]
 
     sgn_name = "SGN_resized_v2"
@@ -32,8 +31,8 @@ def check_project(save=False):
             continue
 
         # Get the ihc table folder.
-        ihc = sources[sgn_name]["segmentation"]
-        table_folder = os.path.join(BUCKET_NAME, cochlea, ihc["tableData"]["tsv"]["relativePath"])
+        sgn = sources[sgn_name]["segmentation"]
+        table_folder = os.path.join(BUCKET_NAME, cochlea, sgn["tableData"]["tsv"]["relativePath"])
 
         # For debugging.
         x = s3.ls(table_folder)
@@ -42,11 +41,14 @@ def check_project(save=False):
 
         default_table = s3.open(os.path.join(table_folder, "default.tsv"), mode="rb")
         default_table = pd.read_csv(default_table, sep="\t")
+        main_ids = default_table[default_table.component_labels == 1].label_id
 
         measurement_table = s3.open(
             os.path.join(table_folder, "GFP-resized_SGN-resized-v2_object-measures.tsv"), mode="rb"
         )
         measurement_table = pd.read_csv(measurement_table, sep="\t")
+        measurement_table = measurement_table[measurement_table.label_id.isin(main_ids)]
+        assert len(measurement_table) == len(main_ids)
 
         if save:
             os.makedirs(OUTPUT_FOLDER, exist_ok=True)
