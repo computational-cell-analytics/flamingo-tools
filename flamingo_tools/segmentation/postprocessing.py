@@ -358,10 +358,11 @@ def components_sgn(
     table: pd.DataFrame,
     keyword: str = "distance_nn100",
     threshold_erode: Optional[float] = None,
-    postprocess_graph: bool = False,
     min_component_length: int = 50,
     min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
+    postprocess_threshold: Optional[float] = None,
+    postprocess_components: Optional[List[int]] = None,
 ) -> List[List[int]]:
     """Eroding the SGN segmentation.
 
@@ -369,10 +370,11 @@ def components_sgn(
         table: Dataframe of segmentation table.
         keyword: Keyword of the dataframe column for erosion.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
-        postprocess_graph: Post-process graph connected components by searching for near points.
         min_component_length: Minimal length for filtering out connected components.
         min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
+        postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
+        postprocess_components: Post-process specific graph connected components ([0] for largest component only).
 
     Returns:
         Subgraph components as lists of label_ids of dataframe.
@@ -411,20 +413,31 @@ def components_sgn(
 
     components = graph_connected_components(coords, min_edge_distance, min_component_length)
 
+    length_components = [len(c) for c in components]
+    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
+
     # add original coordinates closer to eroded component than threshold
-    if postprocess_graph:
-        threshold = 15
+    if postprocess_threshold is not None:
+        if postprocess_components is None:
+            pp_components = components
+        else:
+            pp_components = [components[i] for i in postprocess_components]
+
+        add_coords = []
         for label_id, centr in zip(labels, centroids):
             if label_id not in labels_subset:
                 add_coord = []
-                for comp_index, component in enumerate(components):
+                for comp_index, component in enumerate(pp_components):
                     for comp_label in component:
                         dist = math.dist(centr, centroids[comp_label - 1])
-                        if dist <= threshold:
+                        if dist <= postprocess_threshold:
                             add_coord.append([comp_index, label_id])
                             break
                 if len(add_coord) != 0:
-                    components[add_coord[0][0]].append(add_coord[0][1])
+                    add_coords.append(add_coord)
+        if len(add_coords) != 0:
+            for c in add_coords:
+                components[c[0][0]].append(c[0][1])
 
     return components
 
@@ -436,6 +449,8 @@ def label_components_sgn(
     min_component_length: int = 50,
     min_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
+    postprocess_threshold: Optional[float] = None,
+    postprocess_components: Optional[List[int]] = None,
 ) -> List[int]:
     """Label SGN components using graph connected components.
 
@@ -446,6 +461,8 @@ def label_components_sgn(
         min_component_length: Minimal length for filtering out connected components.
         min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
+        postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
+        postprocess_components: Post-process specific graph connected components ([0] for largest component only).
 
     Returns:
         List of component label for each point in dataframe. 0 - background, then in descending order of size
@@ -456,14 +473,13 @@ def label_components_sgn(
     table = table[table.n_pixels >= min_size]
 
     components = components_sgn(table, threshold_erode=threshold_erode, min_component_length=min_component_length,
-                                min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
+                                min_edge_distance=min_edge_distance, iterations_erode=iterations_erode,
+                                postprocess_threshold=postprocess_threshold,
+                                postprocess_components=postprocess_components)
 
     # add size-filtered objects to have same initial length
     table = pd.concat([table, entries_filtered], ignore_index=True)
     table.sort_values("label_id")
-
-    length_components = [len(c) for c in components]
-    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
 
     component_labels = [0 for _ in range(len(table))]
     # be aware of 'label_id' of dataframe starting at 1
