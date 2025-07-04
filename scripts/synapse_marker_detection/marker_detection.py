@@ -13,7 +13,7 @@ def main():
     parser.add_argument("-m", "--model", required=True, help="Path to synapse detection model.")
     parser.add_argument("-k", "--input_key", default=None,
                         help="Input key for image data and mask data for marker detection.")
-    parser.add_argument("-d", "--max_distance", default=20,
+    parser.add_argument("-d", "--max_distance", type=float, default=20,
                         help="The maximal distance for a valid match of synapse markers to IHCs.")
 
     parser.add_argument("--s3", action="store_true", help="Use S3 bucket.")
@@ -40,7 +40,7 @@ def main():
         mask_path = args.mask
 
     marker_detection(input_path=input_path, input_key=args.input_key, mask_path=mask_path,
-                     output_folder=args.output_folder, model_path=args.model)
+                     output_folder=args.output_folder, model_path=args.model, max_distance=args.max_distance)
 
 
 if __name__ == "__main__":
