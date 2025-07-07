@@ -1,4 +1,6 @@
 import os
+from glob import glob
+from pathlib import Path
 
 import pandas as pd
 from elf.io import open_file
@@ -48,7 +50,7 @@ def visualize_synapse_detections(pred, gt, heatmap_path=None, ctbp2_path=None):
 
     pred = pd.read_csv(pred, sep="\t")[["z", "y", "x"]].values
     gt = pd.read_csv(gt, sep="\t")[["z", "y", "x"]].values
-    tps_pred, tps_gt, fps, fns = match_detections(pred, gt, max_dist=5)
+    tps_pred, tps_gt, fps, fns = match_detections(pred, gt, max_dist=4)
 
     tps = pred[tps_pred]
     fps = pred[fps]
@@ -91,15 +93,20 @@ def main():
     parser.add_argument("--visualize", action="store_true")
     args = parser.parse_args()
 
-    pred_files = [
-        "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/SynapseValidation/m226l_midp330_vglut3-ctbp2/filtered_synapse_detection.tsv",  # noqa
-    ]
-    gt_files = [
-        "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3/labels/m226l_midp330_vglut3-ctbp2_filtered.tsv",  # noqa
-    ]
-    ctbp2_files = [
-        "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3/images/m226l_midp330_vglut3-ctbp2.zarr",  # noqa
-    ]
+    pred_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/SynapseValidation"
+    gt_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3/labels"
+    ctbp2_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3/images"  # noqa
+
+    ctbp2_files = sorted(glob(os.path.join(ctbp2_root, "*.zarr")))
+    gt_files = sorted(glob(os.path.join(gt_root, "*_filtered.tsv")))
+    assert len(ctbp2_files) == len(gt_files)
+
+    pred_files = []
+    for ff in ctbp2_files:
+        fname = Path(ff).stem
+        pred_file = os.path.join(pred_root, fname, "filtered_synapse_detection.tsv")
+        assert os.path.exists(pred_file), pred_file
+        pred_files.append(pred_file)
 
     if args.visualize:
         visualize_evaluation(pred_files, gt_files, ctbp2_files)

@@ -7,7 +7,7 @@ import tifffile
 import zarr
 
 from flamingo_tools.s3_utils import get_s3_path, BUCKET_NAME, SERVICE_ENDPOINT
-from skimage.segmentation import relabel_sequential
+# from skimage.segmentation import relabel_sequential
 
 
 def filter_component(fs, segmentation, cochlea, seg_name, components):
@@ -44,6 +44,8 @@ def export_lower_resolution(args):
         print(data.shape)
         if args.filter_by_components is not None:
             data = filter_component(fs, data, args.cochlea, channel, args.filter_by_components)
+        if args.binarize:
+            data = (data > 0).astype("uint8")
         tifffile.imwrite(out_path, data, bigtiff=True, compression="zlib")
 
 
@@ -54,6 +56,7 @@ def main():
     parser.add_argument("--output_folder", "-o", required=True)
     parser.add_argument("--channels", nargs="+", default=["PV", "VGlut3", "CTBP2"])
     parser.add_argument("--filter_by_components", nargs="+", type=int, default=None)
+    parser.add_argument("--binarize", action="store_true")
     args = parser.parse_args()
 
     export_lower_resolution(args)

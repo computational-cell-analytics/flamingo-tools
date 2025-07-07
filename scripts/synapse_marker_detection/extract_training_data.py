@@ -191,10 +191,32 @@ def process_training_data_v3(visualize=True):
             extract_training_data(imaris_file, output_folder, tif_file=None, crop=True)
 
 
+def process_eval_data(visualize=False):
+    input_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/SynapseValidation"  # noqa
+    test_folders = ["M227R_IHC-synapsecrops", "MLR227L_IHC-synapsecrops"]
+    test_output = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/synapses/test_data/v3"  # noqa
+    exclude_names = []
+
+    for folder in test_folders:
+
+        if visualize:
+            output_folder = None
+        else:
+            output_folder = test_output
+
+        imaris_files = sorted(glob(os.path.join(input_root, folder, "*.ims")))
+        for imaris_file in imaris_files:
+            if os.path.basename(imaris_file) in exclude_names:
+                print("Skipping", imaris_file)
+                continue
+            extract_training_data(imaris_file, output_folder, tif_file=None, crop=True)
+
+
 def main():
     # process_training_data_v1()
     # process_training_data_v2(visualize=True)
-    process_training_data_v3(visualize=False)
+    # process_training_data_v3(visualize=False)
+    process_eval_data(visualize=False)
 
 
 if __name__ == "__main__":
