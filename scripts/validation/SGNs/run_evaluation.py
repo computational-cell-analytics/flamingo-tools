@@ -6,8 +6,13 @@ from flamingo_tools.validation import (
     fetch_data_for_evaluation, _parse_annotation_path, compute_scores_for_annotated_slice
 )
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
-ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+# OLD EVALUATION FOR INITIAL ANNOTATIONS
+# ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
+# ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+
+# NEW EVALUATION FOR FINAL ANNOTATIONS
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs/final_annotations"  # noqa
+ANNOTATION_FOLDERS = ["final_consensus_annotations"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):

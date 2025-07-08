@@ -6,8 +6,8 @@ from flamingo_tools.validation import create_consensus_annotations
 
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs/for_consensus_annotation"  # noqa
 
-ANNOTATION_FOLDERS = ["AnnotationsAMD", "AnnotationsEK"]
-COLOR = ["blue", "yellow"]
+ANNOTATION_FOLDERS = ["AnnotationsAMD", "AnnotationsEK", "AnnotationsLR"]
+COLOR = ["blue", "yellow", "orange"]
 CONSENSUS_ANNOTATIONS = "consensus_annotations"
 OUTPUT_FOLDER = os.path.join(ROOT, "final_consensus_annotations")
 
@@ -20,7 +20,9 @@ def match_annotations(image_path, annotation_folders):
     annotations = {}
     for annotation_folder in annotation_folders:
         all_annotations = glob(os.path.join(ROOT, annotation_folder, "*.csv"))
-        matches = [ann for ann in all_annotations if os.path.basename(ann).startswith(prefix)]
+        matches = [
+            ann for ann in all_annotations if (os.path.basename(ann).startswith(prefix) and "negative" not in ann)
+        ]
         if len(matches) != 1:
             breakpoint()
         assert len(matches) == 1
@@ -34,7 +36,7 @@ def match_annotations(image_path, annotation_folders):
 def create_consensus_step2(image_path, check):
     print("Compute consensus annotations for", image_path)
     annotation_paths = match_annotations(image_path, ANNOTATION_FOLDERS)
-    matching_distance = 8  # TODO
+    matching_distance = 8
     consensus_annotations, unmatched_annotations = create_consensus_annotations(
         annotation_paths, matching_distance=matching_distance, min_matches_for_consensus=2,
     )
