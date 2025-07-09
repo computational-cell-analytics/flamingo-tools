@@ -58,17 +58,18 @@ def eval_all_sgn():
     annotation_dir = os.path.join(cochlea_dir,
                                   "AnnotatedImageCrops",
                                   "F1ValidationSGNs",
-                                  "for_consensus_annotation",
-                                  "consensus_annotations")
+                                  "final_annotations",
+                                  "final_consensus_annotations")
+
     baselines = [
         "cellpose3",
-        "cellpose-sam"
-        "distance-unet",
+        "cellpose-sam",
+        "distance_unet",
         "micro-sam",
         "stardist"]
 
     for baseline in baselines:
-        eval_segmentation(seg_dir=seg_dir, annotation_dir=annotation_dir)
+        eval_segmentation(os.path.join(seg_dir, baseline), annotation_dir=annotation_dir)
 
 
 def eval_all_ihc():
@@ -79,15 +80,16 @@ def eval_all_ihc():
     annotation_dir = (cochlea_dir, "AnnotatedImageCrops/F1ValidationIHCs/consensus_annotation")
     baselines = [
         "cellpose3",
-        "cellpose-sam"
-        "distance-unet_v3",
+        "cellpose-sam",
+        "distance_unet_v3",
         "micro-sam"]
 
     for baseline in baselines:
-        eval_segmentation(seg_dir=seg_dir, annotation_dir=annotation_dir)
+        eval_segmentation(os.path.join(seg_dir, baseline), annotation_dir=annotation_dir)
 
 
 def eval_segmentation(seg_dir, annotation_dir):
+    print(f"Evaluating segmentation in directory {seg_dir}")
     segs = [entry.path for entry in os.scandir(seg_dir) if entry.is_file() and ".tif" in entry.path]
 
     seg_dicts = []
@@ -97,6 +99,7 @@ def eval_segmentation(seg_dir, annotation_dir):
         basename = ".".join(basename.split(".")[:-1])
         basename = "".join(basename.split("_seg")[0])
         print(basename)
+        print("Annotation_dir", annotation_dir)
         dic_out = os.path.join(seg_dir, f"{basename}_dic.json")
         if not os.path.isfile(dic_out):
 
@@ -110,7 +113,7 @@ def eval_segmentation(seg_dir, annotation_dir):
             seg_filtered = filter_seg(seg_arr=seg_arr)
 
             seg_dic = compute_matches_for_annotated_slice(segmentation=seg_filtered,
-                                                          annotations=annotation_dir,
+                                                          annotations=df,
                                                           matching_tolerance=5)
             seg_dic["annotation_length"] = len(df)
             seg_dic["crop_name"] = basename
@@ -125,3 +128,81 @@ def eval_segmentation(seg_dir, annotation_dir):
     json_out = os.path.join(seg_dir, "eval_seg.json")
     with open(json_out, "w") as f:
         json.dump(seg_dicts, f, indent='\t', separators=(',', ': '))
+
+
+def print_accuracy(eval_dir):
+    """Print 'Precision', 'Recall', and 'F1-score' for dictionaries in a given directory.
+    """
+    eval_dicts = [entry.path for entry in os.scandir(eval_dir) if entry.is_file() and "dic.json" in entry.path]
+    precision_list = []
+    recall_list = []
+    f1_score_list = []
+    for eval_dic in eval_dicts:
+        with open(eval_dic, "r") as f:
+            d = json.load(f)
+        tp = len(d["tp_objects"])
+        fp = len(d["fp"])
+        fn = len(d["fn"])
+
+        if tp + fp != 0:
+            precision = tp / (tp + fp)
+        else:
+            precision = 0
+        if tp + fn != 0:
+            recall = tp / (tp + fn)
+        else:
+            recall = 0
+        if precision + recall != 0:
+            f1_score = 2 * precision * recall / (precision + recall)
+        else: f1_score = 0
+
+        precision_list.append(precision)
+        recall_list.append(recall)
+        f1_score_list.append(f1_score)
+
+    names = ["Precision", "Recall", "F1 score"]
+    for num, lis in enumerate([precision_list, recall_list, f1_score_list]):
+        print(names[num], sum(lis) / len(lis))
+
+
+def print_accuracy_sgn():
+    """Print 'Precision', 'Recall', and 'F1-score' for all SGN baselines.
+    """
+    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
+    seg_dir = os.path.join(cochlea_dir, "predictions/val_sgn")
+    baselines = [
+        "cellpose3",
+        "cellpose-sam",
+        "distance_unet",
+        "micro-sam",
+        "stardist"]
+    for baseline in baselines:
+        print(f"Evaluating baseline {baseline}")
+        print_accuracy(os.path.join(seg_dir, baseline))
+
+
+def print_accuracy_ihc():
+    """Print 'Precision', 'Recall', and 'F1-score' for all IHC baselines.
+    """
+    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
+    seg_dir = os.path.join(cochlea_dir, "predictions/val_ihc")
+    baselines = [
+        "cellpose3",
+        "cellpose-sam",
+        "distance_unet_v3",
+        "micro-sam"]
+
+    for baseline in baselines:
+        print(f"Evaluating baseline {baseline}")
+        print_accuracy(os.path.join(seg_dir, baseline))
+
+
+def main():
+    #eval_all_sgn()
+    #eval_all_ihc()
+    #print_accuracy_sgn()
+    print_accuracy_ihc()
+
+
+if __name__ == "__main__":
+    main()
