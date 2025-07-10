@@ -1,3 +1,5 @@
+import math
+
 import networkx as nx
 from networkx.algorithms.approximation import steiner_tree
 
@@ -40,36 +42,8 @@ def steiner_path_between_distant_nodes(G, weight='weight'):
     }
 
 
-def nearest_node_on_path(G, main_path, query_node, weight='weight'):
-    """Find the nearest node in the connected component graph,
-    which lies on the path between the two most distant nodes.
-    """
-    if query_node in main_path:
-        return {
-            "nearest_node": query_node,
-            "distance": 0
-        }
-
-    min_dist = float('inf')
-    nearest_node = None
-
-    for path_node in main_path:
-        try:
-            dist = nx.dijkstra_path_length(G, source=query_node, target=path_node, weight=weight)
-            if dist < min_dist:
-                min_dist = dist
-                nearest_node = path_node
-        except nx.NetworkXNoPath:
-            continue  # No path to this node
-
-    return {
-        "nearest_node": nearest_node,
-        "distance": min_dist if nearest_node is not None else None
-    }
-
-
 def tonotopic_mapping(table, component_label=[1], min_edge_distance=30, min_component_length=50,
-                      cell_type="ihc"):
+                      cell_type="ihc", weight='weight'):
     """Tonotopic mapping of IHCs by supplying a table with component labels.
     The mapping assigns a tonotopic label to each IHC according to the position along the length of the cochlea.
     """
@@ -92,39 +66,44 @@ def tonotopic_mapping(table, component_label=[1], min_edge_distance=30, min_comp
     if cell_type == "ihc":
         terminals = set(graph.nodes())  # All nodes are required
         # Approximate Steiner Tree over all nodes
-        T = steiner_tree(graph, terminals)
-        path = nx.shortest_path(T, source=u, target=v)
-        total_distance = nx.path_weight(T, path)
+        T = steiner_tree(graph, terminals, weight=weight)
+        path = nx.shortest_path(T, source=u, target=v, weight=weight)
+        total_distance = nx.path_weight(T, path, weight=weight)
 
     else:
-        path = nx.shortest_path(graph, source=u, target=v)
-        total_distance = nx.path_weight(graph, path)
+        path = nx.shortest_path(graph, source=u, target=v, weight=weight)
+        total_distance = nx.path_weight(graph, path, weight=weight)
 
     # assign relative distance to nodes on path
-    path_list = []
-    path_list.append({"label_id": path[0], "value": 0})
+    path_list = {}
+    path_list[path[0]] = {"label_id": path[0], "tonotopic": 0}
     accumulated = 0
     for num, p in enumerate(path[1:-1]):
         distance = graph.get_edge_data(path[num], p)["weight"]
         accumulated += distance
         rel_dist = accumulated / total_distance
-        path_list.append({"label_id": p, "value": rel_dist})
-    path_list.append({"label_id": path[-1], "value": 1})
+        path_list[p] = {"label_id": p, "tonotopic": rel_dist}
+    path_list[path[-1]] = {"label_id": path[-1], "tonotopic": 1}
 
     # add missing nodes from component
+    pos = nx.get_node_attributes(graph, 'pos')
     for c in comp_label_ids:
         if c not in path:
-            nearest_node = nearest_node_on_path(graph, path, c)["nearest_node"]
-            for label in path_list:
-                if label["label_id"] == nearest_node:
-                    nearest_node_value = label["value"]
-                    continue
-            path_list.append({"label_id": int(c), "value": nearest_node_value})
+            min_dist = float('inf')
+            nearest_node = None
+
+            for p in path:
+                dist = math.dist(pos[c], pos[p])
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_node = p
+
+            path_list[c] = {"label_id": c, "tonotopic": path_list[nearest_node]["tonotopic"]}
 
     tonotopic = [0 for _ in range(len(table))]
     # be aware of 'label_id' of dataframe starting at 1
     for d in path_list:
-        tonotopic[d["label_id"] - 1] = d["value"] * len(total_distance)
+        tonotopic[d["label_id"] - 1] = d["value"] * total_distance
 
     table.loc[:, "tonotopic_label"] = tonotopic
 
