@@ -324,7 +324,7 @@ def graph_connected_components(coords: dict, min_edge_distance: float, min_compo
 
     Args:
         coords: Dictionary containing label IDs as keys and their position as value.
-        min_edge_distance: Minimal edge distance between graph nodes to create an edge between nodes.
+        min_edge_distance: Maximal edge distance between graph nodes to create an edge between nodes.
         min_component_length: Minimal length of nodes of connected component. Filtered out if lower.
 
     Returns:
@@ -372,7 +372,7 @@ def components_sgn(
         keyword: Keyword of the dataframe column for erosion.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        min_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
         postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
         postprocess_components: Post-process specific graph connected components ([0] for largest component only).
@@ -460,7 +460,7 @@ def label_components_sgn(
         min_size: Minimal number of pixels for filtering small instances.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        min_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
         postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
         postprocess_components: Post-process specific graph connected components ([0] for largest component only).
@@ -506,7 +506,7 @@ def postprocess_sgn_seg(
         min_size: Minimal number of pixels for filtering small instances.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        min_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
 
     Returns:
@@ -532,7 +532,7 @@ def components_ihc(
     Args:
         table: Dataframe of segmentation table.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        min_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
 
     Returns:
         Subgraph components as lists of label_ids of dataframe.
@@ -559,7 +559,7 @@ def label_components_ihc(
         table: Dataframe of segmentation table.
         min_size: Minimal number of pixels for filtering small instances.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        min_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
 
     Returns:
         List of component label for each point in dataframe. 0 - background, then in descending order of size
@@ -600,7 +600,7 @@ def postprocess_ihc_seg(
         table: Dataframe of segmentation table.
         min_size: Minimal number of pixels for filtering small instances.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        min_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
 
     Returns:
         Dataframe with component labels.

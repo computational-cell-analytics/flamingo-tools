@@ -18,7 +18,7 @@ def repro_postprocess_sgn_v1(
     min_size = 1000
     default_threshold_erode = None
     default_min_length = 50
-    default_min_edge_distance = 30
+    default_max_edge_distance = 30
     default_iterations_erode = None
 
     with open(ddict, 'r') as myfile:
@@ -36,18 +36,18 @@ def repro_postprocess_sgn_v1(
 
         threshold_erode = dic["threshold_erode"] if "threshold_erode" in dic else default_threshold_erode
         min_component_length = dic["min_component_length"] if "min_component_length" in dic else default_min_length
-        min_edge_distance = dic["min_edge_distance"] if "min_edge_distance" in dic else default_min_edge_distance
+        max_edge_distance = dic["max_edge_distance"] if "max_edge_distance" in dic else default_max_edge_distance
         iterations_erode = dic["iterations_erode"] if "iterations_erode" in dic else default_iterations_erode
 
         print("threshold_erode", threshold_erode)
         print("min_component_length", min_component_length)
-        print("min_edge", min_edge_distance)
+        print("max_edge", max_edge_distance)
         print("iterations_erode", iterations_erode)
 
         tsv_table = postprocess_sgn_seg(table, min_size=min_size,
                                         threshold_erode=threshold_erode,
                                         min_component_length=min_component_length,
-                                        min_edge_distance=min_edge_distance,
+                                        max_edge_distance=max_edge_distance,
                                         iterations_erode=iterations_erode)
 
         largest_comp = len(tsv_table[tsv_table["component_labels"] == 1])
