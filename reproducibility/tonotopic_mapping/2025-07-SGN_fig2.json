@@ -1,0 +1,27 @@
+[
+	{
+		"cochlea": "M_LR_000226_L",
+		"segmentation_channel": "SGN_v2",
+		"type": "sgn",
+		"filter_factor": 0.75
+	},
+	{
+		"cochlea": "M_LR_000226_R",
+		"segmentation_channel": "SGN_v2",
+		"type": "sgn",
+		"filter_factor": 0.75
+	},
+	{
+		"cochlea": "M_LR_000227_L",
+		"segmentation_channel": "SGN_v2",
+		"type": "sgn",
+		"max_edge_distance": 70,
+		"filter_factor": 0.75
+	},
+	{
+		"cochlea": "M_LR_000227_R",
+		"segmentation_channel": "SGN_v2",
+		"type": "sgn",
+		"filter_factor": 0.75
+	}
+]

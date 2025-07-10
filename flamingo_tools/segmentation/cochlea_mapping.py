@@ -1,12 +1,15 @@
 import math
+from typing import List, Optional, Tuple
 
 import networkx as nx
+import numpy as np
+import pandas as pd
 from networkx.algorithms.approximation import steiner_tree
 
 from flamingo_tools.segmentation.postprocessing import graph_connected_components
 
 
-def find_most_distant_nodes(G, weight='weight'):
+def find_most_distant_nodes(G: nx.classes.graph.Graph, weight: str = 'weight') -> Tuple[float, float]:
     all_lengths = dict(nx.all_pairs_dijkstra_path_length(G, weight=weight))
     max_dist = 0
     farthest_pair = (None, None)
@@ -21,32 +24,29 @@ def find_most_distant_nodes(G, weight='weight'):
     return u, v
 
 
-def steiner_path_between_distant_nodes(G, weight='weight'):
-    # Step 1: Find the most distant pair of nodes
-    u, v = find_most_distant_nodes(G, weight=weight)
-    terminals = set(G.nodes())  # All nodes are required
-
-    # Step 2: Approximate Steiner Tree over all nodes
-    T = steiner_tree(G, terminals, weight=weight)
-
-    # Step 3: Find the shortest path between u and v in the Steiner Tree
-    path = nx.shortest_path(T, source=u, target=v, weight=weight)
-    total_weight = nx.path_weight(T, path, weight=weight)
-
-    return {
-        "start": u,
-        "end": v,
-        "path": path,
-        "total_weight": total_weight,
-        "steiner_tree": T
-    }
-
-
-def tonotopic_mapping(table, component_label=[1], min_edge_distance=30, min_component_length=50,
-                      cell_type="ihc", weight='weight'):
+def tonotopic_mapping(
+    table: pd.DataFrame,
+    component_label: List[int] = [1],
+    max_edge_distance: float = 30,
+    min_component_length: int = 50,
+    cell_type: str = "ihc",
+    filter_factor: Optional[float] = None
+) -> pd.DataFrame:
     """Tonotopic mapping of IHCs by supplying a table with component labels.
     The mapping assigns a tonotopic label to each IHC according to the position along the length of the cochlea.
+
+    Args:
+        table: Dataframe of segmentation table.
+        component_label: List of component labels to evaluate.
+        max_edge_distance: Maximal edge distance to connect nodes.
+        min_component_length: Minimal number of nodes in component.
+        cell_type: Cell type of segmentation.
+        Filter factor: Fraction of nodes to remove before mapping.
+
+    Returns:
+        Table with tonotopic label for cells.
     """
+    weight = "weight"
     # subset of centroids for given component label(s)
     new_subset = table[table["component_labels"].isin(component_label)]
     comp_label_ids = list(new_subset["label_id"])
@@ -58,12 +58,25 @@ def tonotopic_mapping(table, component_label=[1], min_edge_distance=30, min_comp
     for index, element in zip(labels_subset, centroids_subset):
         coords[index] = element
 
-    components, graph = graph_connected_components(coords, min_edge_distance, min_component_length)
+    _, graph = graph_connected_components(coords, max_edge_distance, min_component_length)
 
-    # approximate Steiner tree and find shortest path between the two most distant nodes
+    unfiltered_graph = graph.copy()
+
+    if filter_factor is not None:
+        if 0 < filter_factor < 1:
+            rng = np.random.default_rng(seed=1234)
+            original_array = np.array(comp_label_ids)
+            target_length = int(len(original_array) * filter_factor)
+            filtered_list = list(rng.choice(original_array, size=target_length, replace=False))
+            for filter_id in filtered_list:
+                graph.remove_node(filter_id)
+        else:
+            raise ValueError(f"Invalid filter factor {filter_factor}. Choose a filter factor between 0 and 1.")
 
     u, v = find_most_distant_nodes(graph)
-    if cell_type == "ihc":
+
+    if not nx.has_path(graph, source=u, target=v) or cell_type == "ihc":
+        # approximate Steiner tree and find shortest path between the two most distant nodes
         terminals = set(graph.nodes())  # All nodes are required
         # Approximate Steiner Tree over all nodes
         T = steiner_tree(graph, terminals, weight=weight)
@@ -86,7 +99,7 @@ def tonotopic_mapping(table, component_label=[1], min_edge_distance=30, min_comp
     path_list[path[-1]] = {"label_id": path[-1], "tonotopic": 1}
 
     # add missing nodes from component
-    pos = nx.get_node_attributes(graph, 'pos')
+    pos = nx.get_node_attributes(unfiltered_graph, 'pos')
     for c in comp_label_ids:
         if c not in path:
             min_dist = float('inf')
@@ -102,8 +115,8 @@ def tonotopic_mapping(table, component_label=[1], min_edge_distance=30, min_comp
 
     tonotopic = [0 for _ in range(len(table))]
     # be aware of 'label_id' of dataframe starting at 1
-    for d in path_list:
-        tonotopic[d["label_id"] - 1] = d["value"] * total_distance
+    for key in list(path_list.keys()):
+        tonotopic[int(path_list[key]["label_id"] - 1)] = path_list[key]["tonotopic"] * total_distance
 
     table.loc[:, "tonotopic_label"] = tonotopic
 
