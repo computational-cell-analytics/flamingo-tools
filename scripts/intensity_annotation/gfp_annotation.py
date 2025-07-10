@@ -110,7 +110,7 @@ def _extend_sgns_simple(gfp, sgns, dilation):
     return sgns_extended
 
 
-def gfp_annotation(prefix, default_stat="mean"):
+def gfp_annotation(prefix, default_stat="median"):
     gfp = imageio.imread(f"{prefix}_GFP_resized.tif")
     sgns = imageio.imread(f"{prefix}_SGN_resized_v2.tif")
     pv = imageio.imread(f"{prefix}_PV_resized.tif")
@@ -148,20 +148,38 @@ def gfp_annotation(prefix, default_stat="mean"):
     # 1.) The widget for selcting the statistics to be used and displaying the histogram.
     stat_widget = _create_stat_widget(statistics, default_stat)
 
-    # 2.) The widget for setting the threshold and updating the positive / negative classification based on it.
+    # 2.) Precompute statistic ranges.
     stat_names = stat_widget.stat_names
-    step = 1
     all_values = statistics[stat_names].values
     min_val = all_values.min()
     max_val = all_values.max()
 
+    # 3.) The widget for printing the intensity of a selected cell.
+    @magicgui(
+        value={"label": "value", "enabled": False, "widget_type": "FloatSpinBox", "min": 0.0, "max": max_val},
+        call_button="Pick Value"
+    )
+    def pick_widget(viewer: napari.Viewer, value: float = 0.0):
+        layer = viewer.layers["SGNs-extended"]
+        selected_id = layer.selected_label
+
+        stat_name = stat_widget.param_box.currentText()
+        label_ids = statistics.label_id.values
+        if selected_id not in label_ids:
+            return {"value": 0.0}
+
+        vals = statistics[stat_name].values
+        picked_value = vals[label_ids == selected_id][0]
+        pick_widget.value.value = picked_value
+
+    # 4.) The widget for setting the threshold and updating the positive / negative classification based on it.
     @magicgui(
         threshold={
             "widget_type": "FloatSlider",
             "label": "Threshold",
             "min": min_val,
             "max": max_val,
-            "step": step,
+            "step": 1,
         },
         call_button="Apply",
     )
@@ -180,6 +198,7 @@ def gfp_annotation(prefix, default_stat="mean"):
 
     # Bind the widgets.
     v.window.add_dock_widget(stat_widget, area="right")
+    v.window.add_dock_widget(pick_widget, area="right")
     v.window.add_dock_widget(threshold_widget, area="right")
     stat_widget.setWindowTitle("GFP Histogram")
 
