@@ -329,6 +329,7 @@ def graph_connected_components(coords: dict, min_edge_distance: float, min_compo
 
     Returns:
         List of dictionary keys of connected components.
+        Graph of connected components.
     """
     graph = nx.Graph()
     for num, pos in coords.items():
@@ -351,7 +352,7 @@ def graph_connected_components(coords: dict, min_edge_distance: float, min_compo
                 graph.remove_node(c)
 
     components = [list(s) for s in nx.connected_components(graph)]
-    return components
+    return components, graph
 
 
 def components_sgn(
@@ -411,7 +412,7 @@ def components_sgn(
     for index, element in zip(labels_subset, centroids_subset):
         coords[index] = element
 
-    components = graph_connected_components(coords, min_edge_distance, min_component_length)
+    components, _ = graph_connected_components(coords, min_edge_distance, min_component_length)
 
     length_components = [len(c) for c in components]
     length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
@@ -542,7 +543,7 @@ def components_ihc(
     for index, element in zip(labels, centroids):
         coords[index] = element
 
-    components = graph_connected_components(coords, min_edge_distance, min_component_length)
+    components, _ = graph_connected_components(coords, min_edge_distance, min_component_length)
     return components
 
 
