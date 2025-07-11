@@ -352,6 +352,9 @@ def graph_connected_components(coords: dict, max_edge_distance: float, min_compo
                 graph.remove_node(c)
 
     components = [list(s) for s in nx.connected_components(graph)]
+    length_components = [len(c) for c in components]
+    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
+
     return components, graph
 
 
@@ -413,9 +416,6 @@ def components_sgn(
         coords[index] = element
 
     components, _ = graph_connected_components(coords, max_edge_distance, min_component_length)
-
-    length_components = [len(c) for c in components]
-    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
 
     # add original coordinates closer to eroded component than threshold
     if postprocess_threshold is not None:

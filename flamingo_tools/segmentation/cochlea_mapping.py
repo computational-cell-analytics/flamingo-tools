@@ -1,4 +1,5 @@
 import math
+import warnings
 from typing import List, Optional, Tuple
 
 import networkx as nx
@@ -58,7 +59,10 @@ def tonotopic_mapping(
     for index, element in zip(labels_subset, centroids_subset):
         coords[index] = element
 
-    _, graph = graph_connected_components(coords, max_edge_distance, min_component_length)
+    components, graph = graph_connected_components(coords, max_edge_distance, min_component_length)
+    if len(components) > 1:
+        warnings.warn(f"There are {len(components)} connected components, expected 1. "
+                      "Check parameters for post-processing (max_edge_distance, min_component_length).")
 
     unfiltered_graph = graph.copy()
 
