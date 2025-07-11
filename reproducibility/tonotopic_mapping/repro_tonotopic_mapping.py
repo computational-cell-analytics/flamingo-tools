@@ -19,7 +19,7 @@ def repro_tonotopic_mapping(
     default_cell_type = "ihc"
     default_max_edge_distance = 30
     default_min_length = 50
-    default_filter_factor = 0
+    default_filter_factor = None
     default_component_list = [1]
 
     with open(ddict, 'r') as myfile:

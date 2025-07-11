@@ -67,7 +67,7 @@ def tonotopic_mapping(
     unfiltered_graph = graph.copy()
 
     if filter_factor is not None:
-        if 0 < filter_factor < 1:
+        if 0 <= filter_factor < 1:
             rng = np.random.default_rng(seed=1234)
             original_array = np.array(comp_label_ids)
             target_length = int(len(original_array) * filter_factor)
