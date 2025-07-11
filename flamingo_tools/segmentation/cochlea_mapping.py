@@ -117,11 +117,25 @@ def tonotopic_mapping(
 
             path_list[c] = {"label_id": c, "tonotopic": path_list[nearest_node]["tonotopic"]}
 
+    # label in micrometer
     tonotopic = [0 for _ in range(len(table))]
     # be aware of 'label_id' of dataframe starting at 1
     for key in list(path_list.keys()):
         tonotopic[int(path_list[key]["label_id"] - 1)] = path_list[key]["tonotopic"] * total_distance
 
     table.loc[:, "tonotopic_label"] = tonotopic
+
+    # map frequency using Greenwood function f(x) = A * (10 **(ax) - K), for humans: a=2.1, k=0.88, A = 165.4 [kHz]
+    tonotopic_map = [0 for _ in range(len(table))]
+    var_k = 0.88
+    # calculate values to fit (assumed) minimal (1kHz) and maximal (80kHz) hearing range of mice at x=0, x=1
+    fmin = 1
+    fmax = 80
+    var_A = fmin / (1 - var_k)
+    var_exp = ((fmax + var_A * var_k) / var_A)
+    for key in list(path_list.keys()):
+        tonotopic_map[int(path_list[key]["label_id"] - 1)] = var_A * (var_exp ** path_list[key]["tonotopic"] - var_k)
+
+    table.loc[:, "tonotopic_value[kHz]"] = tonotopic_map
 
     return table
