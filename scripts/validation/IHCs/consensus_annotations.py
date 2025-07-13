@@ -1,22 +1,14 @@
 import os
 from glob import glob
 
+import pandas as pd
 from flamingo_tools.validation import create_consensus_annotations
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationIHCs"
+ANNOTATION_FOLDERS = ["Annotations_AMD", "Annotations_EK", "Annotations_LR"]
 
+OUTPUT_FOLDER = os.path.join(ROOT, "consensus_annotation")
 COLOR = ["blue", "yellow", "orange"]
-
-# First iteration of consensus annotations.
-OUTPUT_FOLDER = os.path.join(ROOT, "for_consensus_annotation")
-ANNOTATION_FOLDERS = ["AnnotationsAMD", "AnnotationsEK", "AnnotationsLR"]
-
-# Second iteration of consensus annotations for the two images of rescaled cochlea.
-# OUTPUT_FOLDER = os.path.join(ROOT, "for_consensus_annotation2")
-# ANNOTATION_FOLDERS = [
-#     "for_consensus_annotation2/AnnotationsAMD", "for_consensus_annotation2/AnnotationsEK",
-#     "for_consensus_annotation2/AnnotationsLR"
-# ]
 
 
 def match_annotations(image_path):
@@ -36,9 +28,12 @@ def match_annotations(image_path):
 
 
 def consensus_annotations(image_path, check):
-    print("Compute consensus annotations for", image_path)
     annotation_paths = match_annotations(image_path)
-    matching_distance = 8
+    assert len(annotation_paths) == len(ANNOTATION_FOLDERS)
+
+    # I tried first with a matching distnce of 8, but that is too conservative.
+    # A mathing distance of 16 seems better, but might still need to refine this.
+    matching_distance = 16.0
     consensus_annotations, unmatched_annotations = create_consensus_annotations(
         annotation_paths, matching_distance=matching_distance, min_matches_for_consensus=2,
     )
@@ -64,35 +59,27 @@ def consensus_annotations(image_path, check):
         )
         v.title = os.path.basename(fname)
         napari.run()
-
     else:
-        # Save the consensus and unmatched annotation.
+        os.makedirs(OUTPUT_FOLDER, exist_ok=True)
         consensus_annotations = consensus_annotations[["axis-0", "axis-1", "axis-2"]]
-        unmatched_annotations = unmatched_annotations[["axis-0", "axis-1", "axis-2"]]
-
-        consensus_out = os.path.join(OUTPUT_FOLDER, "consensus_annotations")
-        os.makedirs(consensus_out, exist_ok=True)
-
-        unmatched_out = os.path.join(OUTPUT_FOLDER, "unmatched_annotations")
-        os.makedirs(unmatched_out, exist_ok=True)
-
-        out_name = fname.replace(".tif", ".csv")
-        consensus_out_path = os.path.join(consensus_out, out_name)
-        unmatched_out_path = os.path.join(unmatched_out, out_name)
-
-        consensus_annotations.to_csv(consensus_out_path, index=False)
-        unmatched_annotations.to_csv(unmatched_out_path, index=False)
+        consensus_annotations.insert(0, "annotator", ["consensus"] * len(consensus_annotations))
+        unmatched_annotations = unmatched_annotations[["axis-0", "axis-1", "axis-2", "annotator"]]
+        annotations = pd.concat([consensus_annotations, unmatched_annotations])
+        output_path = os.path.join(OUTPUT_FOLDER, fname.replace(".tif", ".csv"))
+        annotations.to_csv(output_path, index=False)
+        print("Saved to", output_path)
 
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--images", nargs="+")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
     if args.images is None:
-        image_paths = sorted(glob(os.path.join(OUTPUT_FOLDER, "*.tif")))
+        image_paths = sorted(glob(os.path.join(ROOT, "*.tif")))
     else:
         image_paths = args.images
 

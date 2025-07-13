@@ -51,8 +51,12 @@ def pred_synapse_impl(input_path, output_folder):
 def predict_synapses():
     files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
     for ff in files:
-        print("Segmenting", ff)
         output_folder = os.path.join(OUTPUT_ROOT, Path(ff).stem)
+        if os.path.exists(os.path.join(output_folder, "predictions.zarr", "prediction")):
+            print("Synapse prediction in", ff, "already done")
+            continue
+        else:
+            print("Predicting synapses in", ff)
         pred_synapse_impl(ff, output_folder)
 
 
@@ -68,8 +72,12 @@ def pred_ihc_impl(input_path, output_folder):
 def predict_ihcs():
     files = sorted(glob(os.path.join(INPUT_ROOT, "*.zarr")))
     for ff in files:
-        print("Segmenting", ff)
         output_folder = os.path.join(OUTPUT_ROOT, f"{Path(ff).stem}_ihc")
+        if os.path.exists(os.path.join(output_folder, "predictions.zarr", "prediction")):
+            print("IHC segmentation in", ff, "already done")
+            continue
+        else:
+            print("Segmenting IHCs in", ff)
         pred_ihc_impl(ff, output_folder)
 
 
@@ -147,8 +155,8 @@ def process_everything():
 
 
 def main():
-    process_everything()
-    # check_predictions()
+    # process_everything()
+    check_predictions()
 
 
 if __name__ == "__main__":

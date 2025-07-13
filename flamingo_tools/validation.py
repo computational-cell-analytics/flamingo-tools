@@ -43,6 +43,8 @@ def fetch_data_for_evaluation(
     seg_name: str = "SGN_v2",
     z_extent: int = 0,
     components_for_postprocessing: Optional[List[int]] = None,
+    cochlea: Optional[str] = None,
+    extra_data: Optional[str] = None,
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """Fetch segmentation from S3 matching the annotation path for evaluation.
 
@@ -53,6 +55,8 @@ def fetch_data_for_evaluation(
         z_extent: Additional z-slices to load from the segmentation.
         components_for_postprocessing: The component ids for restricting the segmentation to.
             Choose [1] for the default componentn containing the helix.
+        cochlea: Optional name of the cochlea.
+        extra_data: Extra data to fetch.
 
     Returns:
         The segmentation downloaded from the S3 bucket.
@@ -60,13 +64,11 @@ def fetch_data_for_evaluation(
     """
     # Load the annotations and normalize them for the given z-extent.
     annotations = pd.read_csv(annotation_path)
-    annotations = annotations.drop(columns="index")
+    if "index" in annotations.columns:
+        annotations = annotations.drop(columns="index")
     if z_extent == 0:  # If we don't have a z-extent then we just drop the first axis and rename the other two.
         annotations = annotations.drop(columns="axis-0")
         annotations = annotations.rename(columns={"axis-1": "axis-0", "axis-2": "axis-1"})
-    else:  # Otherwise we have to center the first axis.
-        # TODO
-        raise NotImplementedError
 
     # Load the segmentaiton from cache path if it is given and if it is already cached.
     if cache_path is not None and os.path.exists(cache_path):
@@ -74,7 +76,10 @@ def fetch_data_for_evaluation(
         return segmentation, annotations
 
     # Parse which ID and which cochlea from the name.
-    cochlea, slice_id = _parse_annotation_path(annotation_path)
+    if cochlea is None:
+        cochlea, slice_id = _parse_annotation_path(annotation_path)
+    else:
+        _, slice_id = _parse_annotation_path(annotation_path)
 
     # Open the S3 connection, get the path to the SGN segmentation in S3.
     internal_path = os.path.join(cochlea, "images",  "ome-zarr", f"{seg_name}.ome.zarr")
@@ -110,6 +115,14 @@ def fetch_data_for_evaluation(
     # Cache it if required.
     if cache_path is not None:
         imageio.imwrite(cache_path, segmentation, compression="zlib")
+
+    if extra_data is not None:
+        internal_path = os.path.join(cochlea, "images",  "ome-zarr", f"{extra_data}.ome.zarr")
+        s3_store, fs = get_s3_path(internal_path, bucket_name=BUCKET_NAME, service_endpoint=SERVICE_ENDPOINT)
+        input_key = "s0"
+        with zarr.open(s3_store, mode="r") as f:
+            extra_im_data = f[input_key][roi]
+        return segmentation, annotations, extra_im_data
 
     return segmentation, annotations
 
@@ -345,6 +358,62 @@ def create_consensus_annotations(
     consensus_df = pd.DataFrame(consensus_rows)
     unmatched_df = big.iloc[unmatched].reset_index(drop=True)
     return consensus_df, unmatched_df
+
+
+def match_detections(
+    detections: np.ndarray,
+    annotations: np.ndarray,
+    max_dist: float
+):
+    """One-to-one matching between 3-D detections and ground-truth points.
+
+    Args:
+        detections: N x 3 candidate detections.
+        annotations: M x 3 ground-truth annotations for the reference points.
+        max_dist: Maximum Euclidean distance allowed for a match.
+
+    Returns:
+        Indices in `detections` that were matched (true positives).
+        Indices in `annotations` that were matched (true positives).
+        Unmatched detection indices (false positives).
+        Unmatched annotation indices (false negatives).
+    """
+    det = np.asarray(detections, dtype=float)
+    ann = np.asarray(annotations, dtype=float)
+    N, M = len(det), len(ann)
+
+    # trivial corner cases --------------------------------------------------------
+    if N == 0:
+        return np.empty(0, int), np.empty(0, int), np.empty(0, int), np.arange(M)
+    if M == 0:
+        return np.empty(0, int), np.empty(0, int), np.arange(N), np.empty(0, int)
+
+    # 1. build sparse radius-filtered distance matrix -----------------------------
+    tree_det = cKDTree(det)
+    tree_ann = cKDTree(ann)
+    coo = tree_det.sparse_distance_matrix(tree_ann, max_dist, output_type="coo_matrix")
+
+    if coo.nnz == 0:                       # nothing is close enough
+        return np.empty(0, int), np.empty(0, int), np.arange(N), np.arange(M)
+
+    cost = np.full((N, M), 5 * max_dist, dtype=float)
+    cost[coo.row, coo.col] = coo.data      # fill only existing edges
+
+    # 2. optimal one-to-one assignment (Hungarian) --------------------------------
+    row_ind, col_ind = linear_sum_assignment(cost)
+
+    # Filter assignments that were padded with +∞ cost for non-existent edges
+    # (linear_sum_assignment automatically does that padding internally).
+    valid_mask = cost[row_ind, col_ind] <= max_dist
+    tp_det_ids = row_ind[valid_mask]
+    tp_ann_ids = col_ind[valid_mask]
+    assert len(tp_det_ids) == len(tp_ann_ids)
+
+    # 3. derive FP / FN -----------------------------------------------------------
+    fp_det_ids = np.setdiff1d(np.arange(N), tp_det_ids, assume_unique=True)
+    fn_ann_ids = np.setdiff1d(np.arange(M), tp_ann_ids, assume_unique=True)
+
+    return tp_det_ids, tp_ann_ids, fp_det_ids, fn_ann_ids
 
 
 def for_visualization(segmentation, annotations, matches):
