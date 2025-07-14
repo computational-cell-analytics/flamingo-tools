@@ -27,7 +27,7 @@ class HistogramWidget(QWidget):
         self.canvas = FigureCanvasQTAgg(self.fig)
 
         # We exclude the label id and the volume / surface measurements.
-        self.stat_names = statistics.columns[1:-2]
+        self.stat_names = statistics.columns[1:-2] if len(statistics.columns) > 2 else statistics.columns[1:]
         self.param_choices = self.stat_names
 
         self.param_box = QComboBox()
@@ -110,7 +110,30 @@ def _extend_sgns_simple(gfp, sgns, dilation):
     return sgns_extended
 
 
-def gfp_annotation(prefix, default_stat="median"):
+def _create_mask(sgns_extended, gfp):
+    from skimage.transform import downscale_local_mean, resize
+
+    gfp_averaged = downscale_local_mean(gfp, factors=(16, 16, 16))
+    # The 35th percentile seems to be a decent approximation for the background subtraction.
+    threshold = np.percentile(gfp_averaged, 35)
+    mask = gfp_averaged > threshold
+    mask = resize(mask, sgns_extended.shape, order=0, anti_aliasing=False, preserve_range=True).astype(bool)
+    mask[sgns_extended != 0] = 0
+
+    # v = napari.Viewer()
+    # v.add_image(gfp)
+    # v.add_image(gfp_averaged, scale=(16, 16, 16))
+    # v.add_labels(mask)
+    # # v.add_labels(mask, scale=(16, 16, 16))
+    # v.add_labels(sgns_extended)
+    # napari.run()
+
+    return mask
+
+
+def gfp_annotation(prefix, default_stat="median", background_norm=None):
+    assert background_norm in (None, "division", "subtraction")
+
     gfp = imageio.imread(f"{prefix}_GFP_resized.tif")
     sgns = imageio.imread(f"{prefix}_SGN_resized_v2.tif")
     pv = imageio.imread(f"{prefix}_PV_resized.tif")
@@ -125,7 +148,16 @@ def gfp_annotation(prefix, default_stat="median"):
     sgns_extended = _extend_sgns_simple(gfp, sgns, dilation=4)
 
     # Compute the intensity statistics.
-    statistics = compute_object_measures_impl(gfp, sgns_extended)
+    if background_norm is None:
+        mask = None
+        feature_set = "default"
+    else:
+        mask = _create_mask(sgns_extended, gfp)
+        assert mask.shape == sgns_extended.shape
+        feature_set = "default_background_norm" if background_norm == "division" else "default_background_subtract"
+    statistics = compute_object_measures_impl(
+        gfp, sgns_extended, feature_set=feature_set, foreground_mask=mask, median_only=True
+    )
 
     # Open the napari viewer.
     v = napari.Viewer()
@@ -135,6 +167,8 @@ def gfp_annotation(prefix, default_stat="median"):
     v.add_image(pv, visible=False, name="PV")
     v.add_labels(sgns, visible=False, name="SGNs")
     v.add_labels(sgns_extended, name="SGNs-extended")
+    if mask is not None:
+        v.add_labels(mask, name="mask-for-background", visible=False)
 
     # Add additional layers for intensity coloring and classification
     # data_numerical = np.zeros(gfp.shape, dtype="float32")
@@ -212,9 +246,10 @@ def gfp_annotation(prefix, default_stat="median"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("prefix")
+    parser.add_argument("-b", "--background_norm")
     args = parser.parse_args()
 
-    gfp_annotation(args.prefix)
+    gfp_annotation(args.prefix, background_norm=args.background_norm)
 
 
 if __name__ == "__main__":
