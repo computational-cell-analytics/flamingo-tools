@@ -20,20 +20,20 @@ def check_project(plot=False, save_ihc_table=False):
         sources = info["sources"]
 
         # Load the synapse table.
-        syn = sources["synapse_v3"]["spots"]
+        syn = sources["synapse_v3_ihc_v4"]["spots"]
         rel_path = syn["tableData"]["tsv"]["relativePath"]
         table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
         syn_table = pd.read_csv(table_content, sep="\t")
         max_dist = syn_table.distance_to_ihc.max()
 
         # Load the corresponding ihc table.
-        ihc = sources["IHC_v2"]["segmentation"]
+        ihc = sources["IHC_v4"]["segmentation"]
         rel_path = ihc["tableData"]["tsv"]["relativePath"]
         table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
         ihc_table = pd.read_csv(table_content, sep="\t")
 
         # Keep only the synapses that were matched to a valid IHC.
-        component_id = 2 if cochlea == "M_LR_000226_R" else 1
+        component_id = 1
         valid_ihcs = ihc_table.label_id[ihc_table.component_labels == component_id].values.astype("int")
 
         valid_syn_table = syn_table[syn_table.matched_ihc.isin(valid_ihcs)]
