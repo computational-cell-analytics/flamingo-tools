@@ -16,7 +16,8 @@ def main():
     parser.add_argument("-o", "--output", required=True, help="Output path for post-processed table.")
 
     parser.add_argument("-t", "--type", type=str, default="ihc", help="Cell type of segmentation.")
-    parser.add_argument("--filter", type=float, default=None, help="Fraction of nodes to remove before mapping.")
+    parser.add_argument("--filter", type=float, default=None,
+                        help="Fraction of nodes to keep before mapping. Default: 1.")
     parser.add_argument("--edge_distance", type=float, default=30, help="Maximal edge distance between nodes.")
     parser.add_argument("--component_length", type=int, default=50, help="Minimal number of nodes in component.")
 
