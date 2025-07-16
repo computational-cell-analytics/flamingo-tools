@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import imageio.v3 as imageio
 import napari
@@ -134,9 +135,16 @@ def _create_mask(sgns_extended, gfp):
 def gfp_annotation(prefix, default_stat="median", background_norm=None):
     assert background_norm in (None, "division", "subtraction")
 
-    gfp = imageio.imread(f"{prefix}_GFP_resized.tif")
-    sgns = imageio.imread(f"{prefix}_SGN_resized_v2.tif")
-    pv = imageio.imread(f"{prefix}_PV_resized.tif")
+    direc = os.path.dirname(os.path.abspath(prefix))
+    basename = os.path.basename(prefix)
+    file_names = [entry.name for entry in os.scandir(direc)]
+    gfp_file = [name for name in file_names if basename and "GFP" in name][0]
+    sgn_file = [name for name in file_names if basename and "SGN" in name][0]
+    pv_file = [name for name in file_names if basename and "PV" in name][0]
+
+    gfp = imageio.imread(os.path.join(direc, gfp_file))
+    sgns = imageio.imread(os.path.join(direc, sgn_file))
+    pv = imageio.imread(os.path.join(direc, pv_file))
 
     # bb = np.s_[128:-128, 128:-128, 128:-128]
     # gfp, sgns, pv = gfp[bb], sgns[bb], pv[bb]
