@@ -13,11 +13,9 @@ def main():
         "Either locally or on an S3 bucket.")
 
     parser.add_argument("-i", "--input", required=True, help="Input table with IHC segmentation.")
-    parser.add_argument("-o", "--output", required=True, help="Output path for post-processed table.")
+    parser.add_argument("-o", "--output", required=True, help="Output path for json file with cropping parameters.")
 
-    parser.add_argument("-t", "--type", type=str, default="ihc", help="Cell type of segmentation.")
-    parser.add_argument("--edge_distance", type=float, default=30, help="Maximal edge distance between nodes.")
-    parser.add_argument("--component_length", type=int, default=50, help="Minimal number of nodes in component.")
+    parser.add_argument("-t", "--type", type=str, default="sgn", help="Cell type of segmentation.")
 
     parser.add_argument("--s3", action="store_true", help="Flag for using S3 bucket.")
     parser.add_argument("--s3_credentials", type=str, default=None,
@@ -41,8 +39,7 @@ def main():
             tsv_table = pd.read_csv(f, sep="\t")
 
     table = tonotopic_mapping(
-        tsv_table, max_edge_distance=args.edge_distance, min_component_length=args.component_length,
-        cell_type=args.type,
+        tsv_table, cell_type=args.type,
     )
 
     table.to_csv(args.output, sep="\t", index=False)

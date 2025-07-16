@@ -1,5 +1,4 @@
 import math
-import warnings
 from typing import List, Tuple
 
 import networkx as nx
@@ -7,20 +6,20 @@ import numpy as np
 import pandas as pd
 from networkx.algorithms.approximation import steiner_tree
 from scipy.ndimage import distance_transform_edt, binary_dilation, binary_closing
+from scipy.interpolate import interp1d
 
-import flamingo_tools.segmentation.postprocessing as postprocessing
-from flamingo_tools.segmentation.postprocessing import graph_connected_components
+from flamingo_tools.segmentation.postprocessing import downscaled_centroids
 
 
 def find_most_distant_nodes(G: nx.classes.graph.Graph, weight: str = 'weight') -> Tuple[float, float]:
     """Find the most distant nodes in a graph.
 
     Args:
-        G: Input graph
+        G: Input graph.
 
     Returns:
-        Node 1
-        Node 2
+        Node 1.
+        Node 2.
     """
     all_lengths = dict(nx.all_pairs_dijkstra_path_length(G, weight=weight))
     max_dist = 0
@@ -40,9 +39,12 @@ def central_path_edt_graph(mask: np.ndarray, start: Tuple[int], end: Tuple[int])
     """Find the central path within a binary mask between a start and an end coordinate.
 
     Args:
-        mask: Binary mask of volume
-        start: Starting coordinate
-        end: End coordinate
+        mask: Binary mask of volume.
+        start: Starting coordinate.
+        end: End coordinate.
+
+    Returns:
+        Coordinates of central path.
     """
     dt = distance_transform_edt(mask)
     G = nx.Graph()
@@ -74,11 +76,11 @@ def moving_average_3d(path: np.ndarray, window: int = 5) -> np.ndarray:
     """Smooth a 3D path with a simple moving average filter.
 
     Args:
-        path: ndarray of shape (N, 3)
-        window: half-window size; actual window = 2*window + 1
+        path: ndarray of shape (N, 3).
+        window: half-window size; actual window = 2*window + 1.
 
     Returns:
-        smoothed path: ndarray of same shape
+        smoothed path: ndarray of same shape.
     """
     kernel_size = 2 * window + 1
     kernel = np.ones(kernel_size) / kernel_size
@@ -102,11 +104,15 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
     6) The points of the path are fed into a dictionary along with the fractional length.
 
     Args:
-        centroids: Centroids of the SGN segmentation, ndarray of shape (N, 3)
+        centroids: Centroids of the SGN segmentation, ndarray of shape (N, 3).
         scale_factor: Downscaling factor for finding the central path.
 
+    Returns:
+        Total distance of the path.
+        Path as an nd.array of positions.
+        A dictionary containing the position and the length fraction of each point in the path.
     """
-    mask = postprocessing.downscaled_centroids(centroids, scale_factor=scale_factor, downsample_mode="capped")
+    mask = downscaled_centroids(centroids, scale_factor=scale_factor, downsample_mode="capped")
     mask = binary_dilation(mask, np.ones((3, 3, 3)), iterations=1)
     mask = binary_closing(mask, np.ones((3, 3, 3)), iterations=1)
     pts = np.argwhere(mask == 1)
@@ -137,23 +143,31 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
         path_dict[num + 1] = {"pos": p, "length_fraction": rel_dist}
     path_dict[len(path)] = {"pos": path[-1], "length_fraction": 1}
 
-    return total_distance, path_dict
+    return total_distance, path, path_dict
 
 
-def measure_run_length_ihcs(graph, weight="weight"):
+def measure_run_length_ihcs(centroids):
     """Measure the run lengths of the IHC segmentation
     by finding the shortest path between the most distant nodes in a Steiner Tree.
 
     Args:
-        graph: Input graph.
+        centroids: Centroids of SGN segmentation.
+
+    Returns:
+        Total distance of the path.
+        Path as an nd.array of positions.
+        A dictionary containing the position and the length fraction of each point in the path.
     """
-    u, v = find_most_distant_nodes(graph)
+    graph = nx.Graph()
+    for num, pos in enumerate(centroids):
+        graph.add_node(num, pos=pos)
     # approximate Steiner tree and find shortest path between the two most distant nodes
     terminals = set(graph.nodes())  # All nodes are required
     # Approximate Steiner Tree over all nodes
-    T = steiner_tree(graph, terminals, weight=weight)
-    path = nx.shortest_path(T, source=u, target=v, weight=weight)
-    total_distance = nx.path_weight(T, path, weight=weight)
+    T = steiner_tree(graph, terminals)
+    u, v = find_most_distant_nodes(T)
+    path = nx.shortest_path(T, source=u, target=v)
+    total_distance = nx.path_weight(T, path, weight="weight")
 
     # assign relative distance to points on path
     path_dict = {}
@@ -166,7 +180,7 @@ def measure_run_length_ihcs(graph, weight="weight"):
         path_dict[num + 1] = {"pos": graph.nodes[p]["pos"], "length_fraction": rel_dist}
     path_dict[len(path)] = {"pos": graph.nodes[path[-1]]["pos"], "length_fraction": 1}
 
-    return total_distance, path_dict
+    return total_distance, path, path_dict
 
 
 def map_frequency(table: pd.DataFrame):
@@ -176,7 +190,10 @@ def map_frequency(table: pd.DataFrame):
     For mice: fit values between minimal (1kHz) and maximal (80kHz) values
 
     Args:
-        table:
+        table: Dataframe containing the segmentation.
+
+    Returns:
+        Dataframe containing frequency in an additional column 'frequency[kHz]'.
     """
     var_k = 0.88
     fmin = 1
@@ -189,11 +206,51 @@ def map_frequency(table: pd.DataFrame):
     return table
 
 
+def equidistant_centers(
+    table: pd.DataFrame,
+    component_label: List[int] = [1],
+    cell_type: str = "sgn",
+    n_blocks: int = 10,
+    offset_blocks: bool = True,
+) -> np.ndarray:
+    """Find equidistant centers within the central path of the Rosenthal's canal.
+
+    Args:
+        table: Dataframe containing centroids of SGN segmentation.
+        component_label: List of components for centroid subset.
+        cell_type: Cell type of the segmentation.
+        n_blocks: Number of equidistant centers for block creation.
+        offset_block: Centers are shifted by half a length if True. Avoid centers at the start/end of the path.
+
+    Returns:
+        Equidistant centers as float values
+    """
+    # subset of centroids for given component label(s)
+    new_subset = table[table["component_labels"].isin(component_label)]
+    centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
+
+    if cell_type == "ihc":
+        total_distance, path, _ = measure_run_length_ihcs(centroids)
+
+    else:
+        total_distance, path, _ = measure_run_length_sgns(centroids)
+
+    diffs = np.diff(path, axis=0)
+    seg_lens = np.linalg.norm(diffs, axis=1)
+    cum_len = np.insert(np.cumsum(seg_lens), 0, 0)
+    if offset_blocks:
+        target_s = np.linspace(0, total_distance, n_blocks * 2 + 1)
+        target_s = [s for num, s in enumerate(target_s) if num % 2 == 1]
+    else:
+        target_s = np.linspace(0, total_distance, n_blocks)
+    f = interp1d(cum_len, path, axis=0)
+    centers = f(target_s)
+    return centers
+
+
 def tonotopic_mapping(
     table: pd.DataFrame,
     component_label: List[int] = [1],
-    max_edge_distance: float = 30,
-    min_component_length: int = 50,
     cell_type: str = "ihc"
 ) -> pd.DataFrame:
     """Tonotopic mapping of IHCs by supplying a table with component labels.
@@ -202,10 +259,7 @@ def tonotopic_mapping(
     Args:
         table: Dataframe of segmentation table.
         component_label: List of component labels to evaluate.
-        max_edge_distance: Maximal edge distance to connect nodes.
-        min_component_length: Minimal number of nodes in component.
         cell_type: Cell type of segmentation.
-        Filter factor: Fraction of nodes to remove before mapping.
 
     Returns:
         Table with tonotopic label for cells.
@@ -215,33 +269,20 @@ def tonotopic_mapping(
     centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
     label_ids = [int(i) for i in list(new_subset["label_id"])]
 
-    # create graph with connected components
-    coords = {}
-    for index, element in zip(label_ids, centroids):
-        coords[index] = element
-
-    components, graph = graph_connected_components(coords, max_edge_distance, min_component_length)
-    if len(components) > 1:
-        warnings.warn(f"There are {len(components)} connected components, expected 1. "
-                      "Check parameters for post-processing (max_edge_distance, min_component_length).")
-
-    unfiltered_graph = graph.copy()
-
     if cell_type == "ihc":
-        total_distance, path_dict = measure_run_length_ihcs(graph)
+        total_distance, _, path_dict = measure_run_length_ihcs(centroids)
 
     else:
-        total_distance, path_dict = measure_run_length_sgns(centroids)
+        total_distance, _, path_dict = measure_run_length_sgns(centroids)
 
     # add missing nodes from component and compute distance to path
-    pos = nx.get_node_attributes(unfiltered_graph, 'pos')
     node_dict = {}
-    for c in label_ids:
+    for num, c in enumerate(label_ids):
         min_dist = float('inf')
         nearest_node = None
 
         for key in path_dict.keys():
-            dist = math.dist(pos[c], path_dict[key]["pos"])
+            dist = math.dist(centroids[num], path_dict[key]["pos"])
             if dist < min_dist:
                 min_dist = dist
                 nearest_node = key
