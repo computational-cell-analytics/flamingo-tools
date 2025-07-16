@@ -16,8 +16,6 @@ def main():
     parser.add_argument("-o", "--output", required=True, help="Output path for post-processed table.")
 
     parser.add_argument("-t", "--type", type=str, default="ihc", help="Cell type of segmentation.")
-    parser.add_argument("--filter", type=float, default=None,
-                        help="Fraction of nodes to keep before mapping. Default: 1.")
     parser.add_argument("--edge_distance", type=float, default=30, help="Maximal edge distance between nodes.")
     parser.add_argument("--component_length", type=int, default=50, help="Minimal number of nodes in component.")
 
@@ -44,7 +42,7 @@ def main():
 
     table = tonotopic_mapping(
         tsv_table, max_edge_distance=args.edge_distance, min_component_length=args.component_length,
-        cell_type=args.type, filter_factor=args.filter,
+        cell_type=args.type,
     )
 
     table.to_csv(args.output, sep="\t", index=False)

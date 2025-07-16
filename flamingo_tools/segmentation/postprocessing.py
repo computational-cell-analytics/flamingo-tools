@@ -267,27 +267,30 @@ def erode_subset(
 
 
 def downscaled_centroids(
-    table: pd.DataFrame,
+    centroids: np.ndarray,
     scale_factor: int,
     ref_dimensions: Optional[Tuple[float, float, float]] = None,
+    component_labels: Optional[List[int]] = None,
     downsample_mode: str = "accumulated",
 ) -> np.typing.NDArray:
     """Downscale centroids in dataframe.
 
     Args:
-        table: Dataframe of segmentation table.
+        centroids: Centroids of SGN segmentation, ndarray of shape (N, 3)
         scale_factor: Factor for downscaling coordinates.
         ref_dimensions: Reference dimensions for downscaling. Taken from centroids if not supplied.
+        component_labels: List of component labels, which has to be supplied for the downsampling mode 'components'
         downsample_mode: Flag for downsampling, either 'accumulated', 'capped', or 'components'.
 
     Returns:
         The downscaled array
     """
-    centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
     centroids_scaled = [(c[0] / scale_factor, c[1] / scale_factor, c[2] / scale_factor) for c in centroids]
 
     if ref_dimensions is None:
-        bounding_dimensions = (max(table["anchor_x"]), max(table["anchor_y"]), max(table["anchor_z"]))
+        bounding_dimensions = (max([c[0] for c in centroids]),
+                               max([c[1] for c in centroids]),
+                               max([c[2] for c in centroids]))
         bounding_dimensions_scaled = tuple([round(b // scale_factor + 1) for b in bounding_dimensions])
         new_array = np.zeros(bounding_dimensions_scaled)
 
@@ -304,9 +307,8 @@ def downscaled_centroids(
             new_array[int(c[0]), int(c[1]), int(c[2])] = 1
 
     elif downsample_mode == "components":
-        if "component_labels" not in table.columns:
-            raise KeyError("Dataframe must continue key 'component_labels' for downsampling with mode 'components'.")
-        component_labels = list(table["component_labels"])
+        if component_labels is None:
+            raise KeyError("Component labels must be supplied for downsampling with mode 'components'.")
         for comp, centr in zip(component_labels, centroids_scaled):
             if comp != 0:
                 new_array[int(centr[0]), int(centr[1]), int(centr[2])] = comp

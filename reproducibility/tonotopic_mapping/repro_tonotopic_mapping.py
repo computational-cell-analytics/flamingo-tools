@@ -19,8 +19,14 @@ def repro_tonotopic_mapping(
     default_cell_type = "ihc"
     default_max_edge_distance = 30
     default_min_length = 50
-    default_filter_factor = None
     default_component_list = [1]
+
+    remove_columns = ["tonotopic_label",
+                      "tonotopic_value[kHz]",
+                      "distance_to_path[µm]",
+                      "length_fraction",
+                      "run_length[µm]",
+                      "centrality"]
 
     with open(ddict, 'r') as myfile:
         data = myfile.read()
@@ -45,13 +51,15 @@ def repro_tonotopic_mapping(
         cell_type = dic["type"] if "type" in dic else default_cell_type
         max_edge_distance = dic["max_edge_distance"] if "max_edge_distance" in dic else default_max_edge_distance
         min_component_length = dic["min_component_length"] if "min_component_length" in dic else default_min_length
-        filter_factor = dic["filter_factor"] if "filter_factor" in dic else default_filter_factor
         component_list = dic["component_list"] if "component_list" in dic else default_component_list
+
+        for column in remove_columns:
+            if column in list(table.columns):
+                table = table.drop(column, axis=1)
 
         if not os.path.isfile(output_table_path) or force_overwrite:
             table = tonotopic_mapping(table, component_label=component_list, max_edge_distance=max_edge_distance,
-                                      min_component_length=min_component_length, cell_type=cell_type,
-                                      filter_factor=filter_factor)
+                                      min_component_length=min_component_length, cell_type=cell_type)
 
             table.to_csv(output_table_path, sep="\t", index=False)
 
