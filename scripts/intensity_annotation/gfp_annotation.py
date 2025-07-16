@@ -190,7 +190,9 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
 
     # 3.) The widget for printing the intensity of a selected cell.
     @magicgui(
-        value={"label": "value", "enabled": False, "widget_type": "FloatSpinBox", "min": 0.0, "max": max_val},
+        value={
+            "label": "value", "enabled": False, "widget_type": "FloatSpinBox", "min": min(min_val, 0), "max": max_val
+        },
         call_button="Pick Value"
     )
     def pick_widget(viewer: napari.Viewer, value: float = 0.0):
