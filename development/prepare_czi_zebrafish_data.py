@@ -14,7 +14,10 @@ def get_czi_zebrafish_data():
     # HACK: Try it for one dask array with lowest resolution.
     curr_data = dask_data[-1]
 
-    breakpoint()
+    # Load using napari
+    import napari
+    viewer = napari.view_image(curr_data, channel_axis=0)
+    napari.run()
 
 
 def main():
