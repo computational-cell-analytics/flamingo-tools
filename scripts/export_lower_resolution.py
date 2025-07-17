@@ -45,7 +45,7 @@ def export_lower_resolution(args):
         if args.filter_by_components is not None:
             data = filter_component(fs, data, args.cochlea, channel, args.filter_by_components)
         if args.binarize:
-            data = (data > 0).astype("uint8")
+            data = (data > 0).astype("uint16")
         tifffile.imwrite(out_path, data, bigtiff=True, compression="zlib")
 
 
