@@ -8,6 +8,7 @@ import multiprocessing as mp
 import os
 import warnings
 from concurrent import futures
+from functools import partial
 from typing import Optional, Tuple
 
 import elf.parallel as parallel
@@ -17,10 +18,11 @@ import vigra
 import torch
 import z5py
 
-from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper
+from elf.wrapper import ThresholdWrapper, SimpleTransformationWrapper, SimpleTransformationWrapperWithHalo
 from elf.wrapper.base import MultiTransformationWrapper
 from elf.wrapper.resized_volume import ResizedVolume
 from elf.io import open_file
+from skimage.filters import gaussian
 from torch_em.util import load_model
 from torch_em.util.prediction import predict_with_halo
 from tqdm import tqdm
@@ -278,6 +280,7 @@ def distance_watershed_implementation(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
+    distance_smoothing: float = 0.0,
     original_shape: Optional[Tuple[int, int, int]] = None
 ) -> None:
     """Parallel implementation of the distance-prediction based watershed.
@@ -290,6 +293,8 @@ def distance_watershed_implementation(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        distance_smoothing: The sigma value for smoothing the distance predictions with a gaussian kernel.
+            This may help to reduce border artifacts. If set to 0 (the default) smoothing is not applied.
         original_shape: The original shape to resize the segmentation to.
     """
     if isinstance(input_path, str):
@@ -307,11 +312,14 @@ def distance_watershed_implementation(
     center_distances = SelectChannel(input_, 1)
     boundary_distances = SelectChannel(input_, 2)
 
-    # Apply (lazy) smoothing to both.
-    # NOTE: this leads to issues with the parallelization, so we don't implement distance smoothing for now.
-    # smoothing = partial(ff.gaussianSmoothing, sigma=distance_smoothing)
-    # center_distances = SimpleTransformationWrapper(center_distances, transformation=smoothing)
-    # boundary_distances = SimpleTransformationWrapper(boundary_distances, transformation=smoothing)
+    # Apply (lazy) smoothing to both channels if distance smoothing was set.
+    if distance_smoothing > 0:
+        smooth = partial(gaussian, sigma=distance_smoothing)
+        # We assume that the gaussian is truncated at 5.3 sigma (tolerance of 1e-6)
+        halo = int(np.ceil(5.3 * distance_smoothing))
+        halo = 3 * (halo,)
+        center_distances = SimpleTransformationWrapperWithHalo(center_distances, transformation=smooth, halo=halo)
+        boundary_distances = SimpleTransformationWrapperWithHalo(boundary_distances, transformation=smooth, halo=halo)
 
     # Allocate the (zarr) array for the seeds.
     if output_folder is None:
@@ -427,6 +435,7 @@ def run_unet_prediction(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
+    distance_smoothing: float = 0.0,
     seg_class: Optional[str] = None,
 ) -> None:
     """Run prediction and segmentation with a distance U-Net.
@@ -446,6 +455,8 @@ def run_unet_prediction(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        distance_smoothing: The sigma value for smoothing the distance predictions with a gaussian kernel.
+            This may help to reduce border artifacts. If set to 0 (the default) smoothing is not applied.
         seg_class: Specifier for exclusion criterias for mask generation.
     """
     if output_folder is not None:
@@ -470,7 +481,8 @@ def run_unet_prediction(
         pmap_out, output_folder, min_size=min_size, original_shape=original_shape,
         center_distance_threshold=center_distance_threshold,
         boundary_distance_threshold=boundary_distance_threshold,
-        fg_threshold=fg_threshold
+        fg_threshold=fg_threshold,
+        distance_smoothing=distance_smoothing,
     )
 
     return segmentation
@@ -590,6 +602,7 @@ def run_unet_segmentation_slurm(
     center_distance_threshold: float = 0.4,
     boundary_distance_threshold: float = 0.5,
     fg_threshold: float = 0.5,
+    distance_smoothing: float = 0.0,
 ) -> None:
     """Create segmentation from prediction.
 
@@ -600,10 +613,13 @@ def run_unet_segmentation_slurm(
         boundary_distance_threshold: The threshold applied to the boundary predictions to derive seeds.
             By default this is set to 'None', in which case the boundary distances are not used for the seeds.
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
+        distance_smoothing: The sigma value for smoothing the distance predictions with a gaussian kernel.
+            This may help to reduce border artifacts. If set to 0 (the default) smoothing is not applied.
     """
     min_size = int(min_size)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     distance_watershed_implementation(pmap_out, output_folder, center_distance_threshold=center_distance_threshold,
                                       boundary_distance_threshold=boundary_distance_threshold,
                                       fg_threshold=fg_threshold,
+                                      distance_smoothing=distance_smoothing,
                                       min_size=min_size)
