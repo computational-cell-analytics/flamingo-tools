@@ -9,7 +9,7 @@ from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 OUTPUT_FOLDER = "./ihc_counts"
 
 
-def check_project(plot=False, save_ihc_table=False):
+def check_project(plot=False, save_ihc_table=False, max_dist=None):
     s3 = create_s3_target()
     cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R']
     synapse_table_name = "synapse_v3_ihc_v4"
@@ -26,7 +26,10 @@ def check_project(plot=False, save_ihc_table=False):
         rel_path = syn["tableData"]["tsv"]["relativePath"]
         table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
         syn_table = pd.read_csv(table_content, sep="\t")
-        max_dist = syn_table.distance_to_ihc.max()
+        if max_dist is None:
+            max_dist = syn_table.distance_to_ihc.max()
+        else:
+            syn_table = syn_table[syn_table.distance_to_ihc <= max_dist]
 
         # Load the corresponding ihc table.
         ihc = sources[ihc_table_name]["segmentation"]
@@ -61,6 +64,7 @@ def check_project(plot=False, save_ihc_table=False):
                 "synapse_count": list(ihc_to_count.values()),
                 "snyapse_table": [synapse_table_name for _ in list(ihc_to_count.values())],
                 "ihc_table": [ihc_table_name for _ in list(ihc_to_count.values())],
+                "max_dist": [max_dist for _ in list(ihc_to_count.values())],
             })
             os.makedirs(OUTPUT_FOLDER, exist_ok=True)
             output_path = os.path.join(OUTPUT_FOLDER, f"ihc_count_{cochlea}.tsv")
@@ -84,7 +88,7 @@ def check_project(plot=False, save_ihc_table=False):
 
 
 def main():
-    check_project(plot=False, save_ihc_table=True)
+    check_project(plot=False, save_ihc_table=True, max_dist=3)
 
 
 if __name__ == "__main__":
