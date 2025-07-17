@@ -302,6 +302,10 @@ def distance_watershed_implementation(
     else:
         input_ = input_path
 
+    print(f"Using center distance threshold: {center_distance_threshold}")
+    print(f"Using boundary distance threshold: {boundary_distance_threshold}")
+    print(f"Using distance smoothing: {distance_smoothing}")
+
     # Limit the number of cores for parallelization.
     n_threads = min(16, mp.cpu_count())
 
@@ -617,6 +621,9 @@ def run_unet_segmentation_slurm(
             This may help to reduce border artifacts. If set to 0 (the default) smoothing is not applied.
     """
     min_size = int(min_size)
+    center_distance_threshold = float(center_distance_threshold)
+    boundary_distance_threshold = float(boundary_distance_threshold)
+    distance_smoothing = float(distance_smoothing)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
     distance_watershed_implementation(pmap_out, output_folder, center_distance_threshold=center_distance_threshold,
                                       boundary_distance_threshold=boundary_distance_threshold,
