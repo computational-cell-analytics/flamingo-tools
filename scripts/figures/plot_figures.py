@@ -132,7 +132,7 @@ def fig_02d_02(save_path, plot=False):
     """Bar plot showing the distribution of synapse markers per IHC segmentation average over multiple clochleae.
     """
     cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R']
-    ihc_version = "ihc_counts_v3"
+    ihc_version = "ihc_counts_v4"
     synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
 
     max_dist = 3
