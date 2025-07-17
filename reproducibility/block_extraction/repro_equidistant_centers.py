@@ -18,7 +18,7 @@ def repro_equidistant_centers(
 ):
     default_cell_type = "ihc"
     default_component_list = [1]
-    default_halo_size = [256, 256, 100]
+    default_halo_size = [256, 256, 50]
     default_n_blocks = 6
 
     with open(ddict, 'r') as myfile:
