@@ -12,6 +12,13 @@ from torch_em.util.grid_search import DistanceBasedInstanceSegmentation, instanc
 ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/IHC/2025-07-for-grid-search"
 MODEL_PATH = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/IHC/v4_cochlea_distance_unet_IHC_supervised_2025-07-14"  # noqa
 
+GRID_SEARCH_VALUES = {
+    "center_distance_threshold": [0.3, 0.4, 0.5, 0.6, 0.7],
+    "boundary_distance_threshold": [0.3, 0.4, 0.5, 0.6, 0.7],
+    "distance_smoothing": [0.0, 0.6, 1.0, 1.6],
+    "min_size": [0],
+}
+
 
 def preprocess_gt():
     label_paths = sorted(glob(os.path.join(ROOT, "**/*_corrected.tif"), recursive=True))
@@ -40,14 +47,8 @@ def run_grid_search():
     model = load_model(MODEL_PATH)
     segmenter = DistanceBasedInstanceSegmentation(model, block_shape=block_shape, halo=halo)
 
-    grid_search_values = {
-        "center_distance_threshold": [0.3, 0.4, 0.5, 0.6, 0.7],
-        "boundary_distance_threshold": [0.3, 0.4, 0.5, 0.6, 0.7],
-        "distance_smoothing": [0.0, 0.6, 1.0, 1.6],
-        "min_size": [0],
-    }
     best_kwargs, best_score = instance_segmentation_grid_search(
-        segmenter, image_paths, label_paths, result_dir, grid_search_values=grid_search_values
+        segmenter, image_paths, label_paths, result_dir, grid_search_values=GRID_SEARCH_VALUES
     )
     print("Grid-search result:")
     print(best_kwargs)
@@ -56,12 +57,50 @@ def run_grid_search():
 
 # TODO plot the grid search results
 def evaluate_grid_search():
-    pass
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import seaborn as sns
+
+    result_dir = "ihc-v4-gs"
+    criterion = "SA50"
+
+    gs_files = glob(os.path.join(result_dir, "*.csv"))
+    gs_result = pd.concat([pd.read_csv(gs_file) for gs_file in gs_files])
+
+    grid_search_parameters = list(GRID_SEARCH_VALUES.keys())
+
+    # Retrieve only the relevant columns and group by the gridsearch columns
+    # and compute the mean value
+    gs_result = gs_result[grid_search_parameters + [criterion]].reset_index()
+    gs_result = gs_result.groupby(grid_search_parameters).mean().reset_index()
+
+    # Find the best score and best result
+    best_score, best_idx = gs_result[criterion].max(), gs_result[criterion].idxmax()
+    best_params = gs_result.iloc[best_idx]
+    best_kwargs = {k: v for k, v in zip(grid_search_parameters, best_params)}
+
+    print("Best parameters:")
+    print(best_kwargs)
+    print("With score:", best_score)
+
+    fig, axes = plt.subplots(3)
+    for i, (idx, col) in enumerate([
+        ("center_distance_threshold", "boundary_distance_threshold"),
+        ("distance_smoothing", "boundary_distance_threshold"),
+        ("distance_smoothing", "center_distance_threshold"),
+    ]):
+        res = gs_result.groupby([idx, col]).mean().reset_index()
+        res = res[[idx, col, criterion]]
+        res = res.pivot(index=idx, columns=col, values=criterion)
+        sns.heatmap(res, cmap="viridis", annot=True, fmt=".2g", cbar_kws={"label": criterion}, ax=axes[i])
+        axes[i].set_xlabel(idx)
+        axes[i].set_xlabel(col)
+    plt.show()
 
 
 def main():
     # preprocess_gt()
-    run_grid_search()
+    # run_grid_search()
     evaluate_grid_search()
 
 
