@@ -59,7 +59,7 @@ def main():
     parser.add_argument("-i", "--input", default=ROOT)
     parser.add_argument("--folders", default=ANNOTATION_FOLDERS)
     parser.add_argument("--result_file", default="results.csv")
-    parser.add_argument("--segmentation_name", default="IHC_v2")
+    parser.add_argument("--segmentation_name", default="IHC_v4")
     parser.add_argument("--cache_folder")
     args = parser.parse_args()
     run_evaluation(args.input, args.folders, args.result_file, args.cache_folder, args.segmentation_name)

@@ -67,7 +67,8 @@ class TestUnetPrediction(unittest.TestCase):
 
     def test_run_unet_prediction_complex_watershed(self):
         self._test_run_unet_prediction(
-            use_tif=False, use_mask=True, center_distance_threshold=0.5, boundary_distance_threshold=0.5,
+            use_tif=False, use_mask=True,
+            center_distance_threshold=0.5, boundary_distance_threshold=0.5, distance_smoothing=1.0,
         )
 
 
