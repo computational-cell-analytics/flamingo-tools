@@ -12,6 +12,8 @@ OUTPUT_FOLDER = "./ihc_counts"
 def check_project(plot=False, save_ihc_table=False):
     s3 = create_s3_target()
     cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R']
+    synapse_table_name = "synapse_v3_ihc_v4"
+    ihc_table_name = "IHC_v4"
 
     results = {}
     for cochlea in cochleae:
@@ -20,14 +22,14 @@ def check_project(plot=False, save_ihc_table=False):
         sources = info["sources"]
 
         # Load the synapse table.
-        syn = sources["synapse_v3_ihc_v4"]["spots"]
+        syn = sources[synapse_table_name]["spots"]
         rel_path = syn["tableData"]["tsv"]["relativePath"]
         table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
         syn_table = pd.read_csv(table_content, sep="\t")
         max_dist = syn_table.distance_to_ihc.max()
 
         # Load the corresponding ihc table.
-        ihc = sources["IHC_v4"]["segmentation"]
+        ihc = sources[ihc_table_name]["segmentation"]
         rel_path = ihc["tableData"]["tsv"]["relativePath"]
         table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
         ihc_table = pd.read_csv(table_content, sep="\t")
@@ -57,6 +59,8 @@ def check_project(plot=False, save_ihc_table=False):
             ihc_count_table = pd.DataFrame({
                 "label_id": list(ihc_to_count.keys()),
                 "synapse_count": list(ihc_to_count.values()),
+                "snyapse_table": [synapse_table_name for _ in list(ihc_to_count.values())],
+                "ihc_table": [ihc_table_name for _ in list(ihc_to_count.values())],
             })
             os.makedirs(OUTPUT_FOLDER, exist_ok=True)
             output_path = os.path.join(OUTPUT_FOLDER, f"ihc_count_{cochlea}.tsv")
