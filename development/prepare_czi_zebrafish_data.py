@@ -20,8 +20,16 @@ def _get_dasky_data(url):
     return dask_data
 
 
-def get_zebrahub_data(timepoint: int = 99, view: bool = False) -> Tuple[da.Array, pd.DataFrame]:
+def get_zebrahub_data(timepoint: int = 100, view: bool = False) -> Tuple[da.Array, pd.DataFrame]:
     """Gets the ZebraHub data from https://doi.org/10.1016/j.cell.2024.09.047.
+
+    Args:
+        timepoint: The timepoint where the 3d imaging data will be returned from.
+        view: Whether to view the dask array via napari.
+
+    Returns:
+        The daskified chunky array.
+        And the tracking annotations.
     """
     # NOTE: There's more single objective samples for zebrafish available with tracking annotations
     # https://public.czbiohub.org/royerlab/zebrahub/imaging/single-objective/
@@ -103,7 +111,12 @@ def get_czi_zebrafish_data(
 
 def main():
     # image = get_czi_zebrafish_data(neuromast=True, view=False)
-    image, tracks = get_zebrahub_data(view=False)
+
+    # Suggested timepoints I like in the developmental cycle:
+    # 740/760: kind of at the end of cycle.
+    # 650: it's a nice development stage which visually surfaces a lot of nucleus.
+
+    image, tracks = get_zebrahub_data(timepoint=650, view=False)
     print(image.shape)
 
 
