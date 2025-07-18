@@ -20,7 +20,7 @@ def _get_dasky_data(url):
     return dask_data
 
 
-def get_zebrahub_data(timepoint: int = 100, view: bool = False) -> Tuple[da.Array, pd.DataFrame]:
+def get_zebrahub_data(timepoint: int = 740, view: bool = False) -> Tuple[da.Array, pd.DataFrame]:
     """Gets the ZebraHub data from https://doi.org/10.1016/j.cell.2024.09.047.
 
     Args:
@@ -116,7 +116,7 @@ def main():
     # 740/760: kind of at the end of cycle.
     # 650: it's a nice development stage which visually surfaces a lot of nucleus.
 
-    image, tracks = get_zebrahub_data(timepoint=650, view=False)
+    image, tracks = get_zebrahub_data(timepoint=740, view=False)
     print(image.shape)
 
 
