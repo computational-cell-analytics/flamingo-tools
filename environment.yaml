@@ -1,11 +1,9 @@
 name: flamingo
 
 channels:
-  - pytorch
   - conda-forge
 
 dependencies:
-  - cpuonly
   - cluster_tools
   - scikit-image
   - pybdv
