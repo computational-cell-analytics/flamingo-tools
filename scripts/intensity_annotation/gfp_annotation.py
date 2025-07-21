@@ -138,9 +138,9 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
     direc = os.path.dirname(os.path.abspath(prefix))
     basename = os.path.basename(prefix)
     file_names = [entry.name for entry in os.scandir(direc)]
-    gfp_file = [name for name in file_names if basename and "GFP" in name][0]
-    sgn_file = [name for name in file_names if basename and "SGN" in name][0]
-    pv_file = [name for name in file_names if basename and "PV" in name][0]
+    gfp_file = [name for name in file_names if basename in name and "GFP" in name][0]
+    sgn_file = [name for name in file_names if basename in name and "SGN" in name][0]
+    pv_file = [name for name in file_names if basename in name and "PV" in name][0]
 
     gfp = imageio.imread(os.path.join(direc, gfp_file))
     sgns = imageio.imread(os.path.join(direc, sgn_file))
