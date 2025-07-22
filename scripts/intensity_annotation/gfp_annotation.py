@@ -132,15 +132,21 @@ def _create_mask(sgns_extended, gfp):
     return mask
 
 
-def gfp_annotation(prefix, default_stat="median", background_norm=None):
+def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=False):
     assert background_norm in (None, "division", "subtraction")
 
     direc = os.path.dirname(os.path.abspath(prefix))
     basename = os.path.basename(prefix)
     file_names = [entry.name for entry in os.scandir(direc)]
-    gfp_file = [name for name in file_names if basename in name and "GFP" in name][0]
-    sgn_file = [name for name in file_names if basename in name and "SGN" in name][0]
-    pv_file = [name for name in file_names if basename in name and "PV" in name][0]
+    # Keeping the names "gfp", "sgn", and "pv" is a bit hacky, maybe we should change this to more geeric names.
+    if is_otof:  # OTOF cochlea with VGlut3, Alphatag and IHC segmentation.
+        gfp_file = [name for name in file_names if basename in name and "GFP" in name][0]
+        sgn_file = [name for name in file_names if basename in name and "IHC" in name][0]
+        pv_file = [name for name in file_names if basename in name and "lut3" in name][0]
+    else:  # ChReef cochlea with PV, GFPand SGN segmentation
+        gfp_file = [name for name in file_names if basename in name and "GFP" in name][0]
+        sgn_file = [name for name in file_names if basename in name and "SGN" in name][0]
+        pv_file = [name for name in file_names if basename in name and "PV" in name][0]
 
     gfp = imageio.imread(os.path.join(direc, gfp_file))
     sgns = imageio.imread(os.path.join(direc, sgn_file))
@@ -254,12 +260,16 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
 # - M_LR_000145_L: rough alignment is ok, detailed alignment also ok.
 # - M_LR_000151_R: rough alignment is ok, detailed alignment also ok.
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("prefix")
-    parser.add_argument("-b", "--background_norm")
+    parser = argparse.ArgumentParser(description="Start a GUI for determining an intensity threshold for positive / negative transduction in segmented cells.")
+    parser.add_argument("prefix", help="The prefix of the files to open with the annotation tool.")
+    parser.add_argument(
+        "-b", "--background_norm", help="How to normalize the intensity values for background intensity."
+        "Valid options are 'division' and 'subtraction'. If nothing is passed then the intensity values are not normalized."
+    )
+    parser.add_argument("--otof", action="store_true", help="Whether to run the annotation tool for otof samples with VGlut3, Alphatag and IHC segmentation.")  # noqa
     args = parser.parse_args()
 
-    gfp_annotation(args.prefix, background_norm=args.background_norm)
+    gfp_annotation(args.prefix, background_norm=args.background_norm, is_otof=args.otof)
 
 
 if __name__ == "__main__":
