@@ -1,0 +1,54 @@
+[
+	{
+		"cochlea": "M_AMD_OTOF1_L",
+		"image_channel": [
+			"Apha",
+			"Vglut3",
+			"IHC_v4"
+		],
+		"segmentation_channel": "IHC_v4",
+		"type": "ihc",
+		"n_blocks": 6,
+		"component_list": [
+			5,
+			9
+		],
+		"halo_size": [
+			256,
+			256,
+			50
+		],
+		"crop_centers": [
+			[
+				915,
+				1358,
+				870
+			],
+			[
+				1307,
+				776,
+				764
+			],
+			[
+				687,
+				828,
+				362
+			],
+			[
+				598,
+				1142,
+				1014
+			],
+			[
+				1011,
+				469,
+				1118
+			],
+			[
+				710,
+				35,
+				534
+			]
+		]
+	}
+]
