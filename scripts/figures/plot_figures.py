@@ -61,8 +61,8 @@ def fig_02c(save_path, plot=False):
 def fig_02d_01(save_path, plot=False):
     """Box plot showing the counts for SGN and IHC per (mouse) cochlea in comparison to literature values.
     """
-    main_tick_size = 12
-    main_label_size = 16
+    main_tick_size = 16
+    main_label_size = 24
 
     rows = 1
     columns = 2
@@ -81,12 +81,13 @@ def fig_02d_01(save_path, plot=False):
 
     ylim0 = 9500
     ylim1 = 12500
-    y_ticks = [i for i in range(ylim0, ylim1 + 1, 500)]
+    y_ticks = [i for i in range(10000, 12000 + 1, 1000)]
 
     ax[0].set_ylabel('Count per cochlea', fontsize=main_label_size)
     ax[0].set_yticks(y_ticks)
     ax[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
     ax[0].set_ylim(ylim0, ylim1)
+    ax[0].yaxis.set_ticks_position('left')
 
     # set range of literature values
     xmin = 0.5
@@ -100,14 +101,15 @@ def fig_02d_01(save_path, plot=False):
 
     ylim0 = 750
     ylim1 = 950
-    y_ticks = [i for i in range(ylim0, ylim1 + 1, 50)]
+    y_ticks = [i for i in range(800, 900 + 1, 100)]
 
     ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
 
-    ax[1].set_ylabel('Count per cochlea', fontsize=main_label_size)
     ax[1].set_yticks(y_ticks)
     ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
     ax[1].set_ylim(ylim0, ylim1)
+    ax[1].yaxis.tick_right()
+    ax[1].yaxis.set_ticks_position('right')
 
     # set range of literature values
     xmin = 0.5
