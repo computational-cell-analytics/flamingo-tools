@@ -243,7 +243,7 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=
         },
         call_button="Apply",
     )
-    def threshold_widget(viewer: napari.Viewer, threshold: float = (max_val - min_val) / 2):
+    def threshold_widget(viewer: napari.Viewer, threshold: float = (max_val + min_val) / 2):
         label_ids = statistics.label_id.values
         stat_name = stat_widget.param_box.currentText()
         vals = statistics[stat_name].values
