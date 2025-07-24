@@ -51,8 +51,8 @@ def find_overlapping_masks(
 
 
 def replace_masks(
-    data_base: np.ndarray,
-    data_ref: np.ndarray,
+    arr_base: np.ndarray,
+    arr_ref: np.ndarray,
     label_id_base: int,
     edit_labels: List[dict],
 ) -> np.ndarray:
@@ -68,24 +68,24 @@ def replace_masks(
         Base array with updated content.
     """
     print(f"Replacing {len(edit_labels)} instances")
-    data_base[data_base == label_id_base] = 0
+    arr_base[arr_base == label_id_base] = 0
     for edit_dic in edit_labels:
         # bool array for new mask
-        data_ref_id = data_ref.copy()
+        data_ref_id = arr_ref.copy()
         data_ref_id[data_ref_id != edit_dic["ref_id"]] = 0
-        arr_ref = data_ref_id.astype(bool)
+        bool_ref = data_ref_id.astype(bool)
 
-        data_base[arr_ref] = edit_dic["new_label"]
-    return data_base
+        arr_base[bool_ref] = edit_dic["new_label"]
+    return arr_base
 
 
 def postprocess_ihc_synapse_crop(
-    data_base_: np.ndarray,
-    data_ref_: np.ndarray,
+    data_base: np.typing.ArrayLike,
+    data_ref: np.typing.ArrayLike,
     table_base: pd.DataFrame,
     synapse_limit: int = 25,
     min_overlap: float = 0.5,
-) -> np.ndarray:
+) -> np.typing.ArrayLike:
     """Postprocess IHC segmentation based on number of synapse per IHC count.
     Segmentations from a base segmentation are analysed and replaced with
     instances from a reference segmentation, if suitable instances overlap with
@@ -107,25 +107,24 @@ def postprocess_ihc_synapse_crop(
     running_label_id = int(table_base["label_id"].max() + 1)
     min_overlap = 0.5
     edit_labels = []
-    data_base = data_base_.copy()
 
     seg_ids_base = np.unique(data_base)[1:]
     for seg_id_base in seg_ids_base:
         if seg_id_base in list(table_edit["label_id"]):
 
             edit_labels, running_label_id = find_overlapping_masks(
-                data_base.copy(), data_ref_.copy(), seg_id_base,
+                data_base.copy(), data_ref.copy(), seg_id_base,
                 running_label_id, min_overlap=min_overlap,
             )
 
             if len(edit_labels) > 1:
-                data_base = replace_masks(data_base, data_ref_, seg_id_base, edit_labels)
+                data_base = replace_masks(data_base, data_ref, seg_id_base, edit_labels)
     return data_base
 
 
 def postprocess_ihc_synapse(
-    data_base_: np.ndarray,
-    data_ref_: np.ndarray,
+    data_base: np.typing.ArrayLike,
+    data_ref: np.typing.ArrayLike,
     table_base: pd.DataFrame,
     synapse_limit: int = 25,
     min_overlap: float = 0.5,
@@ -138,8 +137,8 @@ def postprocess_ihc_synapse(
     the base segmentation.
 
     Args:
-        data_base_: Base array.
-        data_ref_: Reference array.
+        data_base: Base array.
+        data_ref: Reference array.
         table_base: Segmentation table of base segmentation with synapse per IHC counts.
         synapse_limit: Limit of synapses per IHC to consider replacement of base segmentation.
         min_overlap: Minimal fraction of overlap between ref and base isntances to consider replacement.
@@ -162,17 +161,17 @@ def postprocess_ihc_synapse(
         coords_min = [int(round(c / resolution)) for c in coords_min]
         roi = tuple(slice(cmin - roi_pad, cmax + roi_pad) for cmax, cmin in zip(coords_max, coords_min))
 
-        data_base = data_base_[roi]
-        data_ref = data_ref_[roi]
+        roi_base = data_base[roi]
+        roi_ref = data_ref[roi]
         label_id_base = row["label_id"]
 
         edit_labels, running_label_id = find_overlapping_masks(
-            data_base.copy(), data_ref.copy(), label_id_base,
+            roi_base.copy(), roi_ref.copy(), label_id_base,
             running_label_id, min_overlap=min_overlap,
         )
 
         if len(edit_labels) > 1:
-            data_base = replace_masks(data_base, data_ref, label_id_base, edit_labels)
-            data_base_[roi] = data_base
+            roi_base = replace_masks(roi_base, roi_ref, label_id_base, edit_labels)
+            data_base[roi] = roi_base
 
-    return data_base_
+    return data_base

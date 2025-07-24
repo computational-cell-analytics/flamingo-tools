@@ -43,21 +43,21 @@ def main():
     args = parser.parse_args()
 
     if args.base_key is None:
-        data_base_ = read_image_data(args.base_path, args.base_key)
+        data_base = read_image_data(args.base_path, args.base_key)
     else:
-        data_base_ = open_file(args.base_path, "a")[args.base_key]
-    data_ref_ = read_image_data(args.ref_path, args.ref_key)
+        data_base = open_file(args.base_path, "a")[args.base_key]
+    data_ref = read_image_data(args.ref_path, args.ref_key)
 
     with open(args.base_table, "r") as f:
         table_base = pd.read_csv(f, sep="\t")
 
     if args.crop:
         output_ = ihc_synapse_postprocessing.postprocess_ihc_synapse_crop(
-            data_base_, data_ref_, table_base=table_base, synapse_limit=25, min_overlap=0.5,
+            data_base, data_ref, table_base=table_base, synapse_limit=25, min_overlap=0.5,
             )
     else:
         output_ = ihc_synapse_postprocessing.postprocess_ihc_synapse(
-            data_base_, data_ref_, table_base=table_base, synapse_limit=25, min_overlap=0.5,
+            data_base, data_ref, table_base=table_base, synapse_limit=25, min_overlap=0.5,
             resolution=0.38, roi_buffer=40,
             )
 
