@@ -30,6 +30,8 @@ def find_overlapping_masks(
     edit_labels = []
     # base array containing only segmentation with too many synapses
     arr_base[arr_base != label_id_base] = 0
+    if np.count_nonzero(arr_base) == 0:
+        raise ValueError(f"Label id {label_id_base} not found in array. Wrong input?")
     arr_base = arr_base.astype(bool)
 
     edit_labels = []
@@ -159,6 +161,9 @@ def postprocess_ihc_synapse(
         coords_max = [int(round(c / resolution)) for c in coords_max]
         coords_min = [row["bb_min_x"], row["bb_min_y"], row["bb_min_z"]]
         coords_min = [int(round(c / resolution)) for c in coords_min]
+
+        coords_max.reverse()
+        coords_min.reverse()
         roi = tuple(slice(cmin - roi_pad, cmax + roi_pad) for cmax, cmin in zip(coords_max, coords_min))
 
         roi_base = data_base[roi]

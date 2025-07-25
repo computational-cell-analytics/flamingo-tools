@@ -58,7 +58,7 @@ def main():
     else:
         output_ = ihc_synapse_postprocessing.postprocess_ihc_synapse(
             data_base, data_ref, table_base=table_base, synapse_limit=25, min_overlap=0.5,
-            resolution=0.38, roi_buffer=40,
+            resolution=0.38, roi_pad=40,
             )
 
     if args.tif:
