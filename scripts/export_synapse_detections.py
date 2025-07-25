@@ -12,7 +12,6 @@ from skimage.morphology import ball
 from tqdm import tqdm
 
 
-# TODO
 def export_synapse_detections(cochlea, scale, output_folder, synapse_name, reference_ihcs, max_dist, radius):
     s3 = create_s3_target()
 
