@@ -12,6 +12,7 @@ from skimage.morphology import ball
 from tqdm import tqdm
 
 
+# TODO
 def export_synapse_detections(cochlea, scale, output_folder, synapse_name, reference_ihcs, max_dist, radius):
     s3 = create_s3_target()
 
@@ -53,14 +54,18 @@ def export_synapse_detections(cochlea, scale, output_folder, synapse_name, refer
     coordinates /= (2 ** scale)
     coordinates = np.round(coordinates, 0).astype("int")
 
+    ihc_ids = syn_table["matched_ihc"].values
+
     # Create the output.
     output = np.zeros(shape, dtype="uint16")
     mask = ball(radius).astype(bool)
 
-    for coord in tqdm(coordinates, desc="Writing synapses to volume"):
+    for coord, matched_ihc in tqdm(
+        zip(coordinates, ihc_ids), total=len(coordinates), desc="Writing synapses to volume"
+    ):
         bb = tuple(slice(c - radius, c + radius + 1) for c in coord)
         try:
-            output[bb][mask] = 1
+            output[bb][mask] = matched_ihc
         except IndexError:
             print("Index error for", coord)
             continue
