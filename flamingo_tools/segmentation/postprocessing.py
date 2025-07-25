@@ -10,6 +10,7 @@ import networkx as nx
 import pandas as pd
 
 from elf.io import open_file
+from scipy.ndimage import distance_transform_edt, binary_dilation, binary_closing
 from scipy.sparse import csr_matrix
 from scipy.spatial import distance
 from scipy.spatial import cKDTree, ConvexHull
@@ -615,3 +616,177 @@ def postprocess_ihc_seg(
     table.loc[:, "component_labels"] = comp_labels
 
     return table
+
+
+def dilate_and_trim(
+    arr_orig: np.ndarray,
+    edt: np.ndarray,
+    iterations: int = 15,
+    offset: float = 0.4,
+) -> np.ndarray:
+    """Dilate and trim original binary array according to a
+    Euclidean Distance Trasform computed for a separate target array.
+
+    Args:
+        arr_orig: Original 3D binary array
+        edt: 3D array containing Euclidean Distance transform for guiding dilation
+        iterations: Number of iterations for dilations
+        offset: Offset for regulating dilation. value should be in range(0, 0.45)
+
+    Returns:
+        Dilated binary array
+    """
+    border_coords = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+    for _ in range(iterations):
+        arr_dilated = binary_dilation(arr_orig)
+        for x in range(arr_dilated.shape[0]):
+            for y in range(arr_dilated.shape[1]):
+                for z in range(arr_dilated.shape[2]):
+                    if arr_dilated[x, y, z] != 0:
+                        if arr_orig[x, y, z] == 0:
+                            min_dist = float('inf')
+                            for dx, dy, dz in border_coords:
+                                nx, ny, nz = x+dx, y+dy, z+dz
+                                if arr_orig[nx, ny, nz] == 1:
+                                    min_dist = min([min_dist, edt[nx, ny, nz]])
+                            if edt[x, y, z] >= min_dist - offset:
+                                arr_dilated[x, y, z] = 0
+        arr_orig = arr_dilated
+    return arr_dilated
+
+
+def filter_cochlea_volume_single(
+    table: pd.DataFrame,
+    components: Optional[List[int]] = [1],
+    scale_factor: int = 48,
+    resolution: float = 0.38,
+    dilation_iterations: int = 12,
+    padding: int = 1200,
+) -> np.ndarray:
+    """Filter cochlea volume based on a segmentation table.
+    Centroids contained in the segmentation table are used to create a down-scaled binary array.
+    The array can be dilated.
+
+    Args:
+        table: Segmentation table.
+        components: Component labels for filtering segmentation table.
+        scale_factor: Down-sampling factor for filtering.
+        resolution: Resolution of pixel in µm.
+        dilation_iterations: Iterations for dilating binary segmentation mask. A negative value omits binary closing.
+        padding: Padding in pixel to apply to guessed dimensions based on centroid coordinates.
+
+    Returns:
+        Binary 3D array of filtered cochlea.
+    """
+    # filter components
+    if components is not None:
+        table = table[table["component_labels"].isin(components)]
+
+    # identify approximate input dimensions for down-scaling
+    centroids = list(zip(table["anchor_x"] / resolution,
+                         table["anchor_y"] / resolution,
+                         table["anchor_z"] / resolution))
+
+    # padding the array allows for dilation without worrying about array borders
+    max_x = table["anchor_x"].max() / resolution + padding
+    max_y = table["anchor_y"].max() / resolution + padding
+    max_z = table["anchor_z"].max() / resolution + padding
+    ref_dimensions = (max_x, max_y, max_z)
+
+    # down-scale arrays
+    array_downscaled = downscaled_centroids(centroids, ref_dimensions=ref_dimensions,
+                                            scale_factor=scale_factor, downsample_mode="capped")
+
+    if dilation_iterations > 0:
+        array_dilated = binary_dilation(array_downscaled, np.ones((3, 3, 3)), iterations=dilation_iterations)
+        return binary_closing(array_dilated, np.ones((3, 3, 3)), iterations=1)
+
+    elif dilation_iterations == 0:
+        return binary_closing(array_downscaled, np.ones((3, 3, 3)), iterations=1)
+
+    else:
+        return array_downscaled
+
+
+def filter_cochlea_volume(
+    sgn_table: pd.DataFrame,
+    ihc_table: pd.DataFrame,
+    sgn_components: Optional[List[int]] = [1],
+    ihc_components: Optional[List[int]] = [1],
+    scale_factor: int = 48,
+    resolution: float = 0.38,
+    dilation_iterations: int = 12,
+    padding: int = 1200,
+    dilation_method = "individual",
+) -> np.ndarray:
+    """Filter cochlea volume with SGN and IHC segmentation.
+    Centroids contained in the segmentation tables are used to create down-scaled binary arrays.
+    The arrays are then dilated using guided dilation to fill the section inbetween SGNs and IHCs.
+
+    Args:
+        sgn_table: SGN segmentation table.
+        ihc_table: IHC segmentation table.
+        sgn_components: Component labels for filtering SGN segmentation table.
+        ihc_components: Component labels for filtering IHC segmentation table.
+        scale_factor: Down-sampling factor for filtering.
+        resolution: Resolution of pixel in µm.
+        dilation_iterations: Iterations for dilating binary segmentation mask.
+        padding: Padding in pixel to apply to guessed dimensions based on centroid coordinates.
+        dilation_method: Dilation style for SGN and IHC segmentation, either 'individual', 'combined' or no dilation.
+
+    Returns:
+        Binary 3D array of filtered cochlea.
+    """
+    # filter components
+    if sgn_components is not None:
+        sgn_table = sgn_table[sgn_table["component_labels"].isin(sgn_components)]
+    if ihc_components is not None:
+        ihc_table = ihc_table[ihc_table["component_labels"].isin(ihc_components)]
+
+    # identify approximate input dimensions for down-scaling
+    centroids_sgn = list(zip(sgn_table["anchor_x"] / resolution,
+                             sgn_table["anchor_y"] / resolution,
+                             sgn_table["anchor_z"] / resolution))
+    centroids_ihc = list(zip(ihc_table["anchor_x"] / resolution,
+                             ihc_table["anchor_y"] / resolution,
+                             ihc_table["anchor_z"] / resolution))
+
+    # padding the array allows for dilation without worrying about array borders
+    max_x = max([sgn_table["anchor_x"].max(), ihc_table["anchor_x"].max()]) / resolution + padding
+    max_y = max([sgn_table["anchor_y"].max(), ihc_table["anchor_y"].max()]) / resolution + padding
+    max_z = max([sgn_table["anchor_z"].max(), ihc_table["anchor_z"].max()]) / resolution + padding
+    ref_dimensions = (max_x, max_y, max_z)
+
+    # down-scale arrays
+    array_downscaled_sgn = downscaled_centroids(centroids_sgn, ref_dimensions=ref_dimensions,
+                                                scale_factor=scale_factor, downsample_mode="capped")
+
+    array_downscaled_ihc = downscaled_centroids(centroids_ihc, ref_dimensions=ref_dimensions,
+                                                scale_factor=scale_factor, downsample_mode="capped")
+
+    # dilate down-scaled SGN array in direction of IHC segmentation
+    distance_from_sgn = distance_transform_edt(~array_downscaled_sgn.astype(bool))
+    iterations = 20
+    arr_dilated = dilate_and_trim(array_downscaled_ihc.copy(), distance_from_sgn, iterations=iterations, offset=0.4)
+
+    # dilate single structures first
+    if dilation_method == "individual":
+        ihc_dilated = binary_dilation(array_downscaled_ihc, np.ones((3, 3, 3)), iterations=dilation_iterations)
+        sgn_dilated = binary_dilation(array_downscaled_sgn, np.ones((3, 3, 3)), iterations=dilation_iterations)
+        combined_dilated = arr_dilated + ihc_dilated + sgn_dilated
+        combined_dilated[combined_dilated > 0] = 1
+        combined_dilated = binary_dilation(combined_dilated, np.ones((3, 3, 3)), iterations=1)
+
+    # dilate combined structure
+    elif dilation_method == "combined":
+        # combine SGN, IHC, and region between both to form output mask
+        combined_structure = arr_dilated + array_downscaled_ihc + array_downscaled_sgn
+        combined_structure[combined_structure > 0] = 1
+        combined_dilated = binary_dilation(combined_structure, np.ones((3, 3, 3)), iterations=dilation_iterations)
+
+    # no dilation of combined structure
+    else:
+        combined_dilated = arr_dilated + ihc_dilated + sgn_dilated
+        combined_dilated[combined_dilated > 0] = 1
+
+    return combined_dilated
