@@ -12,7 +12,7 @@ from skimage.morphology import ball
 from tqdm import tqdm
 
 
-def export_synapse_detections(cochlea, scale, output_folder, synapse_name, reference_ihcs, max_dist, radius):
+def export_synapse_detections(cochlea, scale, output_folder, synapse_name, reference_ihcs, max_dist, radius, id_offset):
     s3 = create_s3_target()
 
     content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
@@ -64,7 +64,7 @@ def export_synapse_detections(cochlea, scale, output_folder, synapse_name, refer
     ):
         bb = tuple(slice(c - radius, c + radius + 1) for c in coord)
         try:
-            output[bb][mask] = matched_ihc
+            output[bb][mask] = matched_ihc + id_offset
         except IndexError:
             print("Index error for", coord)
             continue
@@ -72,7 +72,10 @@ def export_synapse_detections(cochlea, scale, output_folder, synapse_name, refer
     # Write the output.
     out_folder = os.path.join(output_folder, cochlea, f"scale{scale}")
     os.makedirs(out_folder, exist_ok=True)
-    out_path = os.path.join(out_folder, f"{synapse_name}.tif")
+    if id_offset != 0:
+        out_path = os.path.join(out_folder, f"{synapse_name}_offset{id_offset}.tif")
+    else:
+        out_path = os.path.join(out_folder, f"{synapse_name}.tif")
     print("Writing synapses to", out_path)
     tifffile.imwrite(out_path, output, bigtiff=True, compression="zlib")
 
@@ -82,16 +85,18 @@ def main():
     parser.add_argument("--cochlea", "-c", required=True)
     parser.add_argument("--scale", "-s", type=int, required=True)
     parser.add_argument("--output_folder", "-o", required=True)
-    parser.add_argument("--synapse_name", default="synapse_v3_ihc_v4")
-    parser.add_argument("--reference_ihcs", default="IHC_v4")
+    parser.add_argument("--synapse_name", default="synapse_v3_ihc_v4b")
+    parser.add_argument("--reference_ihcs", default="IHC_v4b")
     parser.add_argument("--max_dist", type=float, default=3.0)
     parser.add_argument("--radius", type=int, default=3)
+    parser.add_argument("--id_offset", type=int, default=0)
     args = parser.parse_args()
 
     export_synapse_detections(
         args.cochlea, args.scale, args.output_folder,
         args.synapse_name, args.reference_ihcs,
-        args.max_dist, args.radius
+        args.max_dist, args.radius,
+        args.id_offset,
     )
 
 
