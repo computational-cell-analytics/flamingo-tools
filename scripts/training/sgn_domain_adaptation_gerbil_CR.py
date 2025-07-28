@@ -20,7 +20,9 @@ def get_paths():
 def run_training(name):
     patch_shape = (64, 128, 128)
     batch_size = 8
-    source_checkpoint = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/v2_cochlea_distance_unet_SGN_supervised_2025-05-27"
+    source_checkpoint = os.path.join("/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet",
+                                     "trained_models/SGN",
+                                     "v2_cochlea_distance_unet_SGN_supervised_2025-05-27")
 
     train_paths, val_paths = get_paths()
     mean_teacher_training(

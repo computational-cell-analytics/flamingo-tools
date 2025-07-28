@@ -127,18 +127,18 @@ def upscale_volume(
 def export_lower_resolution(args):
     # calculate single filter mask for all lower resolutions
     if args.filter_cochlea_channels is not None:
-            ds_factor = 48
-            filter_volume = filter_cochlea(args.cochlea, args.filter_cochlea_channels,
-                                           sgn_components=args.filter_sgn_components,
-                                           ihc_components=args.filter_ihc_components,
-                                           dilation_iterations=args.filter_dilation_iterations, ds_factor=ds_factor)
-            filter_volume = np.transpose(filter_volume, (2,1,0))
+        ds_factor = 48
+        filter_volume = filter_cochlea(args.cochlea, args.filter_cochlea_channels,
+                                       sgn_components=args.filter_sgn_components,
+                                       ihc_components=args.filter_ihc_components,
+                                       dilation_iterations=args.filter_dilation_iterations, ds_factor=ds_factor)
+        filter_volume = np.transpose(filter_volume, (2, 1, 0))
 
     # iterate through exporting lower resolutions
     for scale in args.scale:
         if args.filter_cochlea_channels is not None:
             output_folder = os.path.join(args.output_folder, args.cochlea,
-                                        f"scale{scale}_dilation{args.filter_dilation_iterations}")
+                                         f"scale{scale}_dilation{args.filter_dilation_iterations}")
         else:
             output_folder = os.path.join(args.output_folder, args.cochlea, f"scale{scale}")
         os.makedirs(output_folder, exist_ok=True)

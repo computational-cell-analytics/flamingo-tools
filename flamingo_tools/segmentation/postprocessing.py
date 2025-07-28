@@ -717,7 +717,7 @@ def filter_cochlea_volume(
     resolution: float = 0.38,
     dilation_iterations: int = 12,
     padding: int = 1200,
-    dilation_method = "individual",
+    dilation_method: str = "individual",
 ) -> np.ndarray:
     """Filter cochlea volume with SGN and IHC segmentation.
     Centroids contained in the segmentation tables are used to create down-scaled binary arrays.
