@@ -20,7 +20,7 @@ def filter_component(fs, segmentation, cochlea, seg_name, components):
     component_mask = np.isin(table.component_labels.values, components)
     keep_label_ids = table.label_id.values[component_mask].astype("int64")
     if max(keep_label_ids) > np.iinfo("uint16").max:
-        warnings.warn(f"Label ID exceeds maximum of data type 'uint16': {np.iinfo("uint16").max}.")
+        warnings.warn(f"Label ID exceeds maximum of data type 'uint16': {np.iinfo('uint16').max}.")
 
     filter_mask = ~np.isin(segmentation, keep_label_ids)
     segmentation[filter_mask] = 0
