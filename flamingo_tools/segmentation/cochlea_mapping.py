@@ -4,7 +4,6 @@ from typing import List, Tuple
 import networkx as nx
 import numpy as np
 import pandas as pd
-from networkx.algorithms.approximation import steiner_tree
 from scipy.ndimage import distance_transform_edt, binary_dilation, binary_closing
 from scipy.interpolate import interp1d
 
@@ -148,10 +147,17 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
 
 def measure_run_length_ihcs(centroids, max_edge_distance=50):
     """Measure the run lengths of the IHC segmentation
-    by finding the shortest path between the most distant nodes in a Steiner Tree.
+    by determining the shortest path between the most distant nodes of a graph.
+    The graph is created based on a maximal edge distance between nodes.
+    However, this value may not correspond to the max_edge_distance parameter used to process the IHC segmentation,
+    which may consist of more than one component.
+    That's why a large max_edge_distance is used to connect different components and identify
+    the two most distant nodes and the shortest path between them.
+    The path is then edited using a moving average filter.
 
     Args:
         centroids: Centroids of SGN segmentation.
+        max_edge_distance: Maximal edge distance between graph nodes to create an edge between nodes.
 
     Returns:
         Total distance of the path.
@@ -166,6 +172,9 @@ def measure_run_length_ihcs(centroids, max_edge_distance=50):
 
     for num, pos in coords.items():
         graph.add_node(num, pos=pos)
+
+    # TODO: Find cleaner option than the creation of a new graph with edges
+    # to identify start / end point and shortest path.
 
     # create edges between points whose distance is less than threshold max_edge_distance
     for num_i, pos_i in coords.items():
