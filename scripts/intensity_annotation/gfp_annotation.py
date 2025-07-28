@@ -58,7 +58,7 @@ class HistogramWidget(QWidget):
         # Seaborn version (nicer aesthetics)
         sns.histplot(data, bins=self.bins, ax=self.ax, kde=False)
 
-        self.ax.set_xlabel(f"{stat_name} GFP Intensity")
+        self.ax.set_xlabel(f"{stat_name} Marker Intensity")
         self.ax.set_ylabel("Count")
         self.canvas.draw_idle()
 
@@ -69,118 +69,134 @@ def _create_stat_widget(statistics, default_stat):
 
 
 # Extend via watershed, this could work for a better alignment.
-def _extend_sgns_complex(gfp, sgns):
+def _extend_seg_complex(stain, seg):
     # 1.) compute distance to the SGNs to create the background seed.
     print("Compute edt")
 
     # Could use parallel impl
     distance_threshol = 7
-    distances = distance_transform(sgns == 0)
+    distances = distance_transform(seg == 0)
 
     # Erode seeds?
-    seeds = sgns.copy()
+    seeds = seg.copy()
     bg_seed_id = int(seeds.max()) + 1
     seeds[distances > distance_threshol] = bg_seed_id
 
     # Dilate to cover everything on the boundary?
     print("Run watershed")
-    sgns_extended = seeded_watershed(gfp, markers=seeds)
-    sgns_extended[sgns_extended == bg_seed_id] = 0
+    seg_extended = seeded_watershed(stain, markers=seeds)
+    seg_extended[seg_extended == bg_seed_id] = 0
 
     v = napari.Viewer()
-    v.add_image(gfp)
+    v.add_image(stain)
     v.add_image(distances)
     v.add_labels(seeds)
-    v.add_labels(sgns_extended)
+    v.add_labels(seg_extended)
     napari.run()
 
 
 # Just dilate by 3 pixels.
-def _extend_sgns_simple(gfp, sgns, dilation):
+def _extend_seg_simple(stain, seg, dilation):
     block_shape = (128,) * 3
     halo = (dilation + 2,) * 3
 
-    distances = distance_transform(sgns == 0, block_shape=block_shape, halo=halo, n_threads=8)
+    distances = distance_transform(seg == 0, block_shape=block_shape, halo=halo, n_threads=8)
     mask = distances < dilation
 
-    sgns_extended = np.zeros_like(sgns)
-    sgns_extended = seeded_watershed(
-        distances, sgns, sgns_extended, block_shape=block_shape, halo=halo, n_threads=8, mask=mask
+    seg_extended = np.zeros_like(seg)
+    seg_extended = seeded_watershed(
+        distances, seg, seg_extended, block_shape=block_shape, halo=halo, n_threads=8, mask=mask
     )
 
-    return sgns_extended
+    return seg_extended
 
 
-def _create_mask(sgns_extended, gfp):
+def _create_mask(seg_extended, stain):
     from skimage.transform import downscale_local_mean, resize
 
-    gfp_averaged = downscale_local_mean(gfp, factors=(16, 16, 16))
+    stain_averaged = downscale_local_mean(stain, factors=(16, 16, 16))
     # The 35th percentile seems to be a decent approximation for the background subtraction.
-    threshold = np.percentile(gfp_averaged, 35)
-    mask = gfp_averaged > threshold
-    mask = resize(mask, sgns_extended.shape, order=0, anti_aliasing=False, preserve_range=True).astype(bool)
-    mask[sgns_extended != 0] = 0
+    threshold = np.percentile(stain_averaged, 35)
+    mask = stain_averaged > threshold
+    mask = resize(mask, seg_extended.shape, order=0, anti_aliasing=False, preserve_range=True).astype(bool)
+    mask[seg_extended != 0] = 0
 
     # v = napari.Viewer()
-    # v.add_image(gfp)
-    # v.add_image(gfp_averaged, scale=(16, 16, 16))
+    # v.add_image(stain)
+    # v.add_image(stain_averaged, scale=(16, 16, 16))
     # v.add_labels(mask)
     # # v.add_labels(mask, scale=(16, 16, 16))
-    # v.add_labels(sgns_extended)
+    # v.add_labels(seg_extended)
     # napari.run()
 
     return mask
 
 
-def gfp_annotation(prefix, default_stat="median", background_norm=None):
+def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=False):
     assert background_norm in (None, "division", "subtraction")
 
     direc = os.path.dirname(os.path.abspath(prefix))
     basename = os.path.basename(prefix)
     file_names = [entry.name for entry in os.scandir(direc)]
-    gfp_file = [name for name in file_names if basename in name and "GFP" in name][0]
-    sgn_file = [name for name in file_names if basename in name and "SGN" in name][0]
-    pv_file = [name for name in file_names if basename in name and "PV" in name][0]
+    if is_otof:  # OTOF cochlea with VGlut3, Alphatag and IHC segmentation.
+        stain1_file = [name for name in file_names if basename in name and "pha" in name][0]
+        stain2_file = [name for name in file_names if basename in name and "lut3" in name][0]
+        seg_file = [name for name in file_names if basename in name and "IHC" in name][0]
 
-    gfp = imageio.imread(os.path.join(direc, gfp_file))
-    sgns = imageio.imread(os.path.join(direc, sgn_file))
-    pv = imageio.imread(os.path.join(direc, pv_file))
+        stain1_name = "Alphatag"
+        stain2_name = "Vglut3"
+        seg_name = "IHC"
+
+    else:  # ChReef cochlea with PV, GFPand SGN segmentation
+        stain1_file = [name for name in file_names if basename in name and "GFP" in name][0]
+        stain2_file = [name for name in file_names if basename in name and "PV" in name][0]
+        seg_file = [name for name in file_names if basename in name and "SGN" in name][0]
+
+        stain1_name = "GFP"
+        stain2_name = "PV"
+        seg_name = "SGN"
+
+    stain1 = imageio.imread(os.path.join(direc, stain1_file))
+    stain2 = imageio.imread(os.path.join(direc, stain2_file))
+    seg = imageio.imread(os.path.join(direc, seg_file))
 
     # bb = np.s_[128:-128, 128:-128, 128:-128]
     # gfp, sgns, pv = gfp[bb], sgns[bb], pv[bb]
     # print(gfp.shape)
 
     # Extend the sgns so that they cover the SGN boundaries.
-    # sgns_extended = _extend_sgns(gfp, sgns)
+    # sgns_extended = _extend_seg(gfp, sgns)
     # TODO we need to integrate this directly in the object measurement to efficiently do it at scale.
-    sgns_extended = _extend_sgns_simple(gfp, sgns, dilation=4)
+    seg_extended = _extend_seg_simple(stain1, seg, dilation=4)
+    if is_otof:
+        seg_extended = seg.copy()
 
     # Compute the intensity statistics.
     if background_norm is None:
         mask = None
         feature_set = "default"
     else:
-        mask = _create_mask(sgns_extended, gfp)
-        assert mask.shape == sgns_extended.shape
+        mask = _create_mask(seg_extended, stain1)
+        assert mask.shape == seg_extended.shape
         feature_set = "default_background_norm" if background_norm == "division" else "default_background_subtract"
     statistics = compute_object_measures_impl(
-        gfp, sgns_extended, feature_set=feature_set, foreground_mask=mask, median_only=True
+        stain1, seg_extended, feature_set=feature_set, foreground_mask=mask, median_only=True
     )
 
     # Open the napari viewer.
     v = napari.Viewer()
 
     # Add the base layers.
-    v.add_image(gfp, name="GFP")
-    v.add_image(pv, visible=False, name="PV")
-    v.add_labels(sgns, visible=False, name="SGNs")
-    v.add_labels(sgns_extended, name="SGNs-extended")
+    v.add_image(stain1, name=stain1_name)
+    v.add_image(stain2, visible=False, name=stain2_name)
+    v.add_labels(seg, visible=False, name=f"{seg_name}s")
+    v.add_labels(seg_extended, name=f"{seg_name}s-extended")
     if mask is not None:
         v.add_labels(mask, name="mask-for-background", visible=False)
 
     # Add additional layers for intensity coloring and classification
     # data_numerical = np.zeros(gfp.shape, dtype="float32")
-    data_labels = np.zeros(gfp.shape, dtype="uint8")
+    data_labels = np.zeros(stain1.shape, dtype="uint8")
 
     # v.add_image(data_numerical, name="gfp-intensity")
     v.add_labels(data_labels, name="positive-negative")
@@ -204,7 +220,7 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
         call_button="Pick Value"
     )
     def pick_widget(viewer: napari.Viewer, value: float = 0.0):
-        layer = viewer.layers["SGNs-extended"]
+        layer = viewer.layers[f"{seg_name}s-extended"]
         selected_id = layer.selected_label
 
         stat_name = stat_widget.param_box.currentText()
@@ -227,15 +243,15 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
         },
         call_button="Apply",
     )
-    def threshold_widget(viewer: napari.Viewer, threshold: float = (max_val - min_val) / 2):
+    def threshold_widget(viewer: napari.Viewer, threshold: float = (max_val + min_val) / 2):
         label_ids = statistics.label_id.values
         stat_name = stat_widget.param_box.currentText()
         vals = statistics[stat_name].values
         pos_ids = label_ids[vals >= threshold]
         neg_ids = label_ids[vals <= threshold]
-        data_labels = np.zeros(gfp.shape, dtype="uint8")
-        data_labels[np.isin(sgns_extended, pos_ids)] = 2
-        data_labels[np.isin(sgns_extended, neg_ids)] = 1
+        data_labels = np.zeros(stain1.shape, dtype="uint8")
+        data_labels[np.isin(seg_extended, pos_ids)] = 2
+        data_labels[np.isin(seg_extended, neg_ids)] = 1
         viewer.layers["positive-negative"].data = data_labels
 
     threshold_widget.viewer.value = v
@@ -244,7 +260,7 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
     v.window.add_dock_widget(stat_widget, area="right")
     v.window.add_dock_widget(pick_widget, area="right")
     v.window.add_dock_widget(threshold_widget, area="right")
-    stat_widget.setWindowTitle("GFP Histogram")
+    stat_widget.setWindowTitle(f"{stain1_name} Histogram")
 
     napari.run()
 
@@ -254,12 +270,20 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None):
 # - M_LR_000145_L: rough alignment is ok, detailed alignment also ok.
 # - M_LR_000151_R: rough alignment is ok, detailed alignment also ok.
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("prefix")
-    parser.add_argument("-b", "--background_norm")
+    parser = argparse.ArgumentParser(
+        description="Start a GUI for determining an intensity threshold for positive "
+        "/ negative transduction in segmented cells.")
+    parser.add_argument("prefix", help="The prefix of the files to open with the annotation tool.")
+    parser.add_argument("-b", "--background_norm",
+                        help="How to normalize the intensity values for background intensity."
+                        "Valid options are 'division' and 'subtraction'."
+                        "If nothing is passed then the intensity values are not normalized.")
+    parser.add_argument("--otof", action="store_true",
+                        help="Whether to run the annotation tool for otof samples with VGlut3, "
+                        "Alphatag and IHC segmentation.")  # noqa
     args = parser.parse_args()
 
-    gfp_annotation(args.prefix, background_norm=args.background_norm)
+    gfp_annotation(args.prefix, background_norm=args.background_norm, is_otof=args.otof)
 
 
 if __name__ == "__main__":

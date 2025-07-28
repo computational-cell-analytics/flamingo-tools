@@ -32,7 +32,6 @@ def repro_equidistant_centers(
 
     for dic in param_dicts:
         cochlea = dic["cochlea"]
-        img_channel = dic["image_channel"]
         seg_channel = dic["segmentation_channel"]
 
         s3_path = os.path.join(f"{cochlea}", "tables", f"{seg_channel}", "default.tsv")
@@ -50,8 +49,7 @@ def repro_equidistant_centers(
 
         centers = equidistant_centers(table, component_label=component_list, cell_type=cell_type, n_blocks=n_blocks)
         centers = [[int(c) for c in center] for center in centers]
-        ddict = {"cochlea": cochlea}
-        ddict["image_channel"] = img_channel
+        ddict = dic.copy()
         ddict["crop_centers"] = centers
         ddict["halo_size"] = halo_size
         out_dict.append(ddict)
