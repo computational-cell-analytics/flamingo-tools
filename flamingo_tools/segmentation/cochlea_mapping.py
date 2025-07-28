@@ -4,7 +4,6 @@ from typing import List, Tuple
 import networkx as nx
 import numpy as np
 import pandas as pd
-from networkx.algorithms.approximation import steiner_tree
 from scipy.ndimage import distance_transform_edt, binary_dilation, binary_closing
 from scipy.interpolate import interp1d
 
@@ -146,12 +145,19 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
     return total_distance, path, path_dict
 
 
-def measure_run_length_ihcs(centroids):
+def measure_run_length_ihcs(centroids, max_edge_distance=50):
     """Measure the run lengths of the IHC segmentation
-    by finding the shortest path between the most distant nodes in a Steiner Tree.
+    by determining the shortest path between the most distant nodes of a graph.
+    The graph is created based on a maximal edge distance between nodes.
+    However, this value may not correspond to the max_edge_distance parameter used to process the IHC segmentation,
+    which may consist of more than one component.
+    That's why a large max_edge_distance is used to connect different components and identify
+    the two most distant nodes and the shortest path between them.
+    The path is then edited using a moving average filter.
 
     Args:
         centroids: Centroids of SGN segmentation.
+        max_edge_distance: Maximal edge distance between graph nodes to create an edge between nodes.
 
     Returns:
         Total distance of the path.
@@ -159,15 +165,28 @@ def measure_run_length_ihcs(centroids):
         A dictionary containing the position and the length fraction of each point in the path.
     """
     graph = nx.Graph()
-    for num, pos in enumerate(centroids):
+    coords = {}
+    labels = [int(i) for i in range(len(centroids))]
+    for index, element in zip(labels, centroids):
+        coords[index] = element
+
+    for num, pos in coords.items():
         graph.add_node(num, pos=pos)
-    # approximate Steiner tree and find shortest path between the two most distant nodes
-    terminals = set(graph.nodes())  # All nodes are required
-    # Approximate Steiner Tree over all nodes
-    T = steiner_tree(graph, terminals)
-    u, v = find_most_distant_nodes(T)
-    path = nx.shortest_path(T, source=u, target=v)
-    total_distance = nx.path_weight(T, path, weight="weight")
+
+    # TODO: Find cleaner option than the creation of a new graph with edges
+    # to identify start / end point and shortest path.
+
+    # create edges between points whose distance is less than threshold max_edge_distance
+    for num_i, pos_i in coords.items():
+        for num_j, pos_j in coords.items():
+            if num_i < num_j:
+                dist = math.dist(pos_i, pos_j)
+                if dist <= max_edge_distance:
+                    graph.add_edge(num_i, num_j, weight=dist)
+
+    u, v = find_most_distant_nodes(graph)
+    path = nx.shortest_path(graph, source=u, target=v)
+    total_distance = nx.path_weight(graph, path, weight="weight")
 
     # assign relative distance to points on path
     path_dict = {}
@@ -179,6 +198,9 @@ def measure_run_length_ihcs(centroids):
         rel_dist = accumulated / total_distance
         path_dict[num + 1] = {"pos": graph.nodes[p]["pos"], "length_fraction": rel_dist}
     path_dict[len(path)] = {"pos": graph.nodes[path[-1]]["pos"], "length_fraction": 1}
+
+    path_pos = np.array([graph.nodes[p]["pos"] for p in path])
+    path = moving_average_3d(path_pos, window=5)
 
     return total_distance, path, path_dict
 
