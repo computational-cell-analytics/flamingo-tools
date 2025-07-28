@@ -18,7 +18,7 @@ def repro_equidistant_centers(
 ):
     default_cell_type = "ihc"
     default_component_list = [1]
-    default_halo_size = [256, 256, 50]
+    default_halo_size = [256, 256, 128]
     default_n_blocks = 6
 
     with open(ddict, 'r') as myfile:
@@ -29,6 +29,14 @@ def repro_equidistant_centers(
 
     if os.path.isfile(output_path) and not force_overwrite:
         print(f"Skipping {output_path}. File already exists.")
+
+    def update_dic(dic, keyword, default):
+        if keyword in dic:
+            value = dic[keyword]
+        else:
+            value = default
+            dic[keyword] = value
+        return value
 
     for dic in param_dicts:
         cochlea = dic["cochlea"]
@@ -42,17 +50,16 @@ def repro_equidistant_centers(
         with fs.open(tsv_path, 'r') as f:
             table = pd.read_csv(f, sep="\t")
 
-        cell_type = dic["type"] if "type" in dic else default_cell_type
-        component_list = dic["component_list"] if "component_list" in dic else default_component_list
-        halo_size = dic["halo_size"] if "halo_size" in dic else default_halo_size
-        n_blocks = dic["n_blocks"] if "n_blocks" in dic else default_n_blocks
+        cell_type = update_dic(dic, "type", default_cell_type)
+        component_list = update_dic(dic, "component_list", default_component_list)
+        _ = update_dic(dic, "halo_size", default_halo_size)
+        n_blocks = update_dic(dic, "n_blocks", default_n_blocks)
 
         centers = equidistant_centers(table, component_label=component_list, cell_type=cell_type, n_blocks=n_blocks)
         centers = [[int(c) for c in center] for center in centers]
-        ddict = dic.copy()
-        ddict["crop_centers"] = centers
-        ddict["halo_size"] = halo_size
-        out_dict.append(ddict)
+
+        dic["crop_centers"] = centers
+        out_dict.append(dic)
 
     with open(output_path, "w") as f:
         json.dump(out_dict, f, indent='\t', separators=(',', ': '))
