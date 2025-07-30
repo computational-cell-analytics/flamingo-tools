@@ -33,6 +33,12 @@ def repro_tonotopic_mapping(
     for dic in param_dicts:
         cochlea = dic["cochlea"]
         seg_channel = dic["segmentation_channel"]
+        if cochlea[0] in ["M", "m"]:
+            animal = "mouse"
+        elif cochlea[0] in ["G", "g"]:
+            animal = "gerbil"
+        else:
+            raise ValueError("Cochlea does not have expected name format 'M_[...]' or 'G_[...]'.")
 
         cochlea_str = "-".join(cochlea.split("_"))
         seg_str = "-".join(seg_channel.split("_"))
@@ -54,7 +60,7 @@ def repro_tonotopic_mapping(
                 table = table.drop(column, axis=1)
 
         if not os.path.isfile(output_table_path) or force_overwrite:
-            table = tonotopic_mapping(table, component_label=component_list, cell_type=cell_type)
+            table = tonotopic_mapping(table, component_label=component_list, animal=animal, cell_type=cell_type)
 
             table.to_csv(output_table_path, sep="\t", index=False)
 

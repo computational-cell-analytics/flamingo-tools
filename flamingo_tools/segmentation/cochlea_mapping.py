@@ -205,7 +205,7 @@ def measure_run_length_ihcs(centroids, max_edge_distance=50):
     return total_distance, path, path_dict
 
 
-def map_frequency(table: pd.DataFrame):
+def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse"):
     """Map the frequency range of SGNs in the cochlea
     using Greenwood function f(x) = A * (10 **(ax) - K).
     Values for humans: a=2.1, k=0.88, A = 165.4 [kHz].
@@ -217,12 +217,42 @@ def map_frequency(table: pd.DataFrame):
     Returns:
         Dataframe containing frequency in an additional column 'frequency[kHz]'.
     """
-    var_k = 0.88
-    fmin = 1
-    fmax = 80
-    var_A = fmin / (1 - var_k)
-    var_exp = ((fmax + var_A * var_k) / var_A)
-    table.loc[table['offset'] >= 0, 'frequency[kHz]'] = var_A * (var_exp ** table["length_fraction"] - var_k)
+    if animal == "mouse":
+        if cell_type == "ihc":
+            # freq_min = 5.16 kHz
+            # freq_max = 81.38 kHz
+            var_A = 4.232
+            var_a = 1.279
+            var_k = -0.22
+        if cell_type == "sgn":
+            # freq_min = 0.0095 kHz
+            # freq_max = 47.47 kHz
+            var_A = 0.38
+            var_a = 2.1
+            var_k = 0.975
+
+    elif animal == "gerbil":
+        if cell_type == "ihc":
+            # freq_min = 0.0105 kHz
+            # freq_max = 43.82 kHz
+            var_A = 0.35
+            var_a = 2.1
+            var_k = 0.7
+        if cell_type == "sgn":
+            # freq_min = 0.0105 kHz
+            # freq_max = 43.82 kHz
+            var_A = 0.35
+            var_a = 2.1
+            var_k = 0.7
+
+        # alternative Gerbil Greenwood function according to Mueller1995
+        # var_A = 0.398
+        # var_a = 2.2
+        # var_k = 0.631
+    else:
+        raise ValueError("Animal not supported. Use either 'mouse' or 'gerbil'.")
+
+    table.loc[table['offset'] >= 0, 'frequency[kHz]'] = var_A * (10 ** (var_a * table["length_fraction"]) - var_k)
     table.loc[table['offset'] < 0, 'frequency[kHz]'] = 0
 
     return table
@@ -273,7 +303,8 @@ def equidistant_centers(
 def tonotopic_mapping(
     table: pd.DataFrame,
     component_label: List[int] = [1],
-    cell_type: str = "ihc"
+    cell_type: str = "ihc",
+    animal: str = "mouse",
 ) -> pd.DataFrame:
     """Tonotopic mapping of IHCs by supplying a table with component labels.
     The mapping assigns a tonotopic label to each IHC according to the position along the length of the cochlea.
@@ -329,6 +360,6 @@ def tonotopic_mapping(
     table.loc[:, "length_fraction"] = length_fraction
     table.loc[:, "length[µm]"] = table["length_fraction"] * total_distance
 
-    table = map_frequency(table)
+    table = map_frequency(table, cell_type=cell_type, animal=animal)
 
     return table
