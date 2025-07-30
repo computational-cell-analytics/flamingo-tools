@@ -7,7 +7,7 @@ import zarr
 import flamingo_tools.s3_utils as s3_utils
 from flamingo_tools.segmentation import filter_segmentation
 from flamingo_tools.segmentation.postprocessing import nearest_neighbor_distance, local_ripleys_k, neighbors_in_radius
-from flamingo_tools.segmentation.postprocessing import postprocess_sgn_seg
+from flamingo_tools.segmentation.postprocessing import label_components_sgn
 
 
 # TODO needs updates
@@ -124,7 +124,7 @@ def main():
                 tsv_table = pd.read_csv(f, sep="\t")
 
     if seg_path is None:
-        post_table = postprocess_sgn_seg(
+        post_table = label_components_sgn(
             tsv_table.copy(), min_size=args.min_size, threshold_erode=args.threshold,
             min_component_length=args.min_component_length, max_edge_distance=args.max_edge_dist,
             iterations_erode=args.iterations_erode,
