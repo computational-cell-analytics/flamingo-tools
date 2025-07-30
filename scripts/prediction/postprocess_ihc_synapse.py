@@ -4,8 +4,8 @@ import argparse
 
 import imageio.v3 as imageio
 import pandas as pd
-import zarr
 from elf.io import open_file
+
 import flamingo_tools.segmentation.ihc_synapse_postprocessing as ihc_synapse_postprocessing
 from flamingo_tools.file_utils import read_image_data
 
@@ -63,9 +63,6 @@ def main():
 
     if args.tif:
         imageio.imwrite(args.out_path, output_, compression="zlib")
-    else:
-        with zarr.open(args.out_path, mode="a") as f_out:
-            f_out.create_dataset(args.out_key, data=output_, compression="gzip")
 
 
 if __name__ == "__main__":

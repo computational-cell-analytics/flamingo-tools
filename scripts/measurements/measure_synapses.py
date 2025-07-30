@@ -11,9 +11,9 @@ OUTPUT_FOLDER = "./ihc_counts"
 
 def check_project(plot=False, save_ihc_table=False, max_dist=None):
     s3 = create_s3_target()
-    cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R']
-    synapse_table_name = "synapse_v3_ihc_v4"
-    ihc_table_name = "IHC_v4"
+    cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R', 'M_AMD_OTOF1_L']
+    synapse_table_name = "synapse_v3_ihc_v4c"
+    ihc_table_name = "IHC_v4c"
 
     results = {}
     for cochlea in cochleae:
