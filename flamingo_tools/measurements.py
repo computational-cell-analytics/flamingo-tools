@@ -351,14 +351,26 @@ def compute_sgn_background_mask(
     segmentation_key: Optional[str] = None,
     threshold_percentile: float = 35.0,
     scale_factor: Tuple[int, int, int] = (16, 16, 16),
+    n_threads: Optional[int] = None,
 ) -> np.typing.ArrayLike:
-    """
+    """Compute the background mask for intensity measurements in the SGN segmentation.
+
+    This function computes a mask for determining the background signal in the rosenthal canal.
+    It is computed by downsampling the image (PV) and segmentation (SGNs) internally,
+    by thresholding the downsampled image, and by then intersecting this mask with the segmentation.
+    This results in a mask that is positive for the background signal within the rosenthal canal.
 
     Args:
-        p
+        image_path: The path to the image data with the PV channel.
+        segmentation_path: The path to the SGN segmentation.
+        image_key: Internal path for the image data, for zarr or similar file formats.
+        segmentation_key: Internal path for the segmentation data, for zarr or similar file formats.
+        threshold_percentile: The percentile threshold for separating foreground and background in the PV signal.
+        scale_factor: The scale factor for internally downsampling the mask.
+        n_threads: The number of threads for parallelizing the computation.
 
     Returns:
-        pass
+        The mask for determining the background values.
     """
     image = read_image_data(image_path, image_key)
     segmentation = read_image_data(segmentation_path, segmentation_key)
@@ -393,16 +405,11 @@ def compute_sgn_background_mask(
 
         low_res_mask[bb] = this_mask
 
-    # TODO parallelize
-    for block_id in range(n_blocks):
-        _compute_block(block_id)
-
-    # stain_averaged = downscale_local_mean(stain, factors=(16, 16, 16))
-    # # The 35th percentile seems to be a decent approximation for the background subtraction.
-    # threshold = np.percentile(stain_averaged, 35)
-    # mask = stain_averaged > threshold
-    # mask = resize(mask, seg_extended.shape, order=0, anti_aliasing=False, preserve_range=True).astype(bool)
-    # mask[seg_extended != 0] = 0
+    n_threads = mp.cpu_count() if n_threads is None else n_threads
+    with futures.ThreadPoolExecutor(n_threads) as tp:
+        list(tqdm(
+            tp.map(_compute_block, range(n_blocks)), total=n_blocks, desc="Compute background mask"
+        ))
 
     mask = ResizedVolume(low_res_mask, shape=original_shape, order=0)
     return mask
