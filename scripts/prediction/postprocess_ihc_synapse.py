@@ -24,8 +24,6 @@ def main():
                         help="Input key for data in base segmentation.")
     parser.add_argument("--ref_key", type=str, default=None,
                         help="Input key for data in reference segmentation.")
-    parser.add_argument("--out_key", type=str, default="segmentation",
-                        help="Input key for data in output file.")
 
     parser.add_argument('-r', "--resolution", type=float, default=0.38, help="Resolution of input in micrometer.")
     parser.add_argument("--tif", action="store_true", help="Store output as tif file.")
