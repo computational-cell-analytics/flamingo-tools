@@ -12,7 +12,7 @@ ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedI
 ANNOTATION_FOLDERS = ["consensus_annotation"]
 
 
-def run_evaluation(root, annotation_folders, result_file, cache_folder, segmentation_name):
+def run_evaluation(root, annotation_folders, result_file, cache_folder, segmentation_name, exclude):
     results = {
         "annotator": [],
         "cochlea": [],
@@ -38,7 +38,8 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder, segmenta
             segmentation, annotations = fetch_data_for_evaluation(
                 annotation_path, components_for_postprocessing=[component],
                 seg_name=segmentation_name,
-                cache_path=None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif")
+                cache_path=None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif"),
+                exclude_zero_synapse_count=exclude,
             )
             scores = compute_scores_for_annotated_slice(segmentation, annotations, matching_tolerance=5)
             results["annotator"].append(annotator)
@@ -59,10 +60,11 @@ def main():
     parser.add_argument("-i", "--input", default=ROOT)
     parser.add_argument("--folders", default=ANNOTATION_FOLDERS)
     parser.add_argument("--result_file", default="results.csv")
-    parser.add_argument("--segmentation_name", default="IHC_v4")
+    parser.add_argument("--segmentation_name", default="IHC_v4c")
     parser.add_argument("--cache_folder")
+    parser.add_argument("--exclude", action="store_true")
     args = parser.parse_args()
-    run_evaluation(args.input, args.folders, args.result_file, args.cache_folder, args.segmentation_name)
+    run_evaluation(args.input, args.folders, args.result_file, args.cache_folder, args.segmentation_name, args.exclude)
 
 
 if __name__ == "__main__":

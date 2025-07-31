@@ -37,6 +37,13 @@ def _parse_annotation_path(annotation_path):
     return cochlea, slice_id
 
 
+def _get_table(fs, cochlea, seg_name):
+    internal_path = os.path.join(BUCKET_NAME, cochlea, "tables",  seg_name, "default.tsv")
+    with fs.open(internal_path, "r") as f:
+        table = pd.read_csv(f, sep="\t")
+    return table
+
+
 def fetch_data_for_evaluation(
     annotation_path: str,
     cache_path: Optional[str] = None,
@@ -45,6 +52,7 @@ def fetch_data_for_evaluation(
     components_for_postprocessing: Optional[List[int]] = None,
     cochlea: Optional[str] = None,
     extra_data: Optional[str] = None,
+    exclude_zero_synapse_count: bool = False,
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """Fetch segmentation from S3 matching the annotation path for evaluation.
 
@@ -57,6 +65,8 @@ def fetch_data_for_evaluation(
             Choose [1] for the default componentn containing the helix.
         cochlea: Optional name of the cochlea.
         extra_data: Extra data to fetch.
+        exclude_zero_synapse_count: Exclude cells that have zero synapses mapped.
+            This is relevant for the IHC evaluation.
 
     Returns:
         The segmentation downloaded from the S3 bucket.
@@ -96,17 +106,25 @@ def fetch_data_for_evaluation(
     with zarr.open(s3_store, mode="r") as f:
         segmentation = f[input_key][roi]
 
+    table = None
     if components_for_postprocessing is not None:
         # Filter the IDs so that only the ones part of 'components_for_postprocessing_remain'.
-
-        # First, we download the MoBIE table for this segmentation.
-        internal_path = os.path.join(BUCKET_NAME, cochlea, "tables",  seg_name, "default.tsv")
-        with fs.open(internal_path, "r") as f:
-            table = pd.read_csv(f, sep="\t")
+        table = _get_table(fs, cochlea, seg_name)
 
         # Then we get the ids for the components and us them to filter the segmentation.
         component_mask = np.isin(table.component_labels.values, components_for_postprocessing)
         keep_label_ids = table.label_id.values[component_mask].astype("int64")
+        filter_mask = ~np.isin(segmentation, keep_label_ids)
+        segmentation[filter_mask] = 0
+
+        # We also filter the table accordingly.
+        table = table[table.label_id.isin(keep_label_ids)]
+
+    if exclude_zero_synapse_count:
+        if table is None:
+            table = _get_table(fs, cochlea, seg_name)
+
+        keep_label_ids = table.label_id[table.syn_per_IHC > 0].astype("int64")
         filter_mask = ~np.isin(segmentation, keep_label_ids)
         segmentation[filter_mask] = 0
 
