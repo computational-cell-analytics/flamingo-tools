@@ -9,8 +9,8 @@ from flamingo_tools.segmentation.cochlea_mapping import equidistant_centers
 
 
 def repro_equidistant_centers(
-    ddict: dict,
-    output_path: str,
+    input_path: str,
+    output_path: Optional[str] = None,
     s3_credentials: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
     s3_service_endpoint: Optional[str] = None,
@@ -21,11 +21,14 @@ def repro_equidistant_centers(
     default_halo_size = [256, 256, 128]
     default_n_blocks = 6
 
-    with open(ddict, 'r') as myfile:
+    with open(input_path, 'r') as myfile:
         data = myfile.read()
     param_dicts = json.loads(data)
 
     out_dict = []
+    if output_path is None:
+        output_path = input_path
+        force_overwrite = True
 
     if os.path.isfile(output_path) and not force_overwrite:
         print(f"Skipping {output_path}. File already exists.")
@@ -56,7 +59,7 @@ def repro_equidistant_centers(
         n_blocks = update_dic(dic, "n_blocks", default_n_blocks)
 
         centers = equidistant_centers(table, component_label=component_list, cell_type=cell_type, n_blocks=n_blocks)
-        centers = [[int(c) for c in center] for center in centers]
+        centers = [[round(c) for c in center] for center in centers]
 
         dic["crop_centers"] = centers
         out_dict.append(dic)
@@ -70,7 +73,7 @@ def main():
         description="Script to extract region of interest (ROI) block around center coordinate.")
 
     parser.add_argument('-i', '--input', type=str, required=True, help="Input JSON dictionary.")
-    parser.add_argument('-o', "--output", type=str, required=True, help="Output JSON dictionary.")
+    parser.add_argument('-o', "--output", type=str, help="Output JSON dictionary. Default: Append to input file.")
 
     parser.add_argument("--force", action="store_true", help="Forcefully overwrite output.")
     parser.add_argument("--s3_credentials", type=str, default=None,

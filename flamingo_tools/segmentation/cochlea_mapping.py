@@ -93,7 +93,11 @@ def moving_average_3d(path: np.ndarray, window: int = 5) -> np.ndarray:
     return smooth_path
 
 
-def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
+def measure_run_length_sgns(
+        centroids: np.ndarray,
+        scale_factor: int = 10,
+        apex_higher: bool = True,
+) -> Tuple[float, np.ndarray, dict]:
     """Measure the run lengths of the SGN segmentation by finding a central path through Rosenthal's canal.
     1) Create a binary mask based on down-scaled centroids.
     2) Dilate the mask and close holes to ensure a filled structure.
@@ -105,6 +109,7 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
     Args:
         centroids: Centroids of the SGN segmentation, ndarray of shape (N, 3).
         scale_factor: Downscaling factor for finding the central path.
+        apex_higher: Flag for identifying apex and base. Apex is set to node with higher y-value if True.
 
     Returns:
         Total distance of the path.
@@ -125,8 +130,16 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
     start_voxel = tuple(pts[proj.argmin()])
     end_voxel = tuple(pts[proj.argmax()])
 
+    # compare y-value to not get into confusion with MoBIE dimensions
+    if start_voxel[1] > end_voxel[1]:
+        apex = start_voxel if apex_higher else end_voxel
+        base = end_voxel if apex_higher else start_voxel
+    else:
+        apex = end_voxel if apex_higher else start_voxel
+        base = start_voxel if apex_higher else end_voxel
+
     # get central path and total distance
-    path = central_path_edt_graph(mask, start_voxel, end_voxel)
+    path = central_path_edt_graph(mask, apex, base)
     path = path * scale_factor
     path = moving_average_3d(path, window=5)
     total_distance = sum([math.dist(path[num + 1], path[num]) for num in range(len(path) - 1)])
@@ -145,7 +158,11 @@ def measure_run_length_sgns(centroids: np.ndarray, scale_factor=10):
     return total_distance, path, path_dict
 
 
-def measure_run_length_ihcs(centroids, max_edge_distance=50):
+def measure_run_length_ihcs(
+    centroids: np.ndarray,
+    max_edge_distance: float = 50,
+    apex_higher: bool = True,
+) -> Tuple[float, np.ndarray, dict]:
     """Measure the run lengths of the IHC segmentation
     by determining the shortest path between the most distant nodes of a graph.
     The graph is created based on a maximal edge distance between nodes.
@@ -158,6 +175,7 @@ def measure_run_length_ihcs(centroids, max_edge_distance=50):
     Args:
         centroids: Centroids of SGN segmentation.
         max_edge_distance: Maximal edge distance between graph nodes to create an edge between nodes.
+        apex_higher: Flag for identifying apex and base. Apex is set to node with higher y-value if True.
 
     Returns:
         Total distance of the path.
@@ -184,8 +202,17 @@ def measure_run_length_ihcs(centroids, max_edge_distance=50):
                 if dist <= max_edge_distance:
                     graph.add_edge(num_i, num_j, weight=dist)
 
-    u, v = find_most_distant_nodes(graph)
-    path = nx.shortest_path(graph, source=u, target=v)
+    start_node, end_node = find_most_distant_nodes(graph)
+
+    # compare y-value to not get into confusion with MoBIE dimensions
+    if graph.nodes[start_node]["pos"][1] > graph.nodes[end_node]["pos"][1]:
+        apex_node = start_node if apex_higher else end_node
+        base_node = end_node if apex_higher else start_node
+    else:
+        apex_node = end_node if apex_higher else start_node
+        base_node = start_node if apex_higher else end_node
+
+    path = nx.shortest_path(graph, source=apex_node, target=base_node)
     total_distance = nx.path_weight(graph, path, weight="weight")
 
     # assign relative distance to points on path
@@ -319,6 +346,15 @@ def tonotopic_mapping(
     """
     # subset of centroids for given component label(s)
     new_subset = table[table["component_labels"].isin(component_label)]
+
+    # option for filtering IHC instances without synapses
+    # leaving it commented for now because it would have little effect
+
+    # if "syn_per_IHC" in new_subset.columns:
+    #    syn_limit = 0
+    #    print(f"Keeping IHC instances with more than {syn_limit} synapses.")
+    #    new_subset = new_subset[new_subset["syn_per_IHC"] > syn_limit]
+
     centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
     label_ids = [int(i) for i in list(new_subset["label_id"])]
 
@@ -347,17 +383,18 @@ def tonotopic_mapping(
             }
 
     offset = [-1 for _ in range(len(table))]
+    offset = list(np.float64(offset))
+    table.loc[:, "offset"] = offset
     # 'label_id' of dataframe starting at 1
     for key in list(node_dict.keys()):
-        offset[int(node_dict[key]["label_id"] - 1)] = node_dict[key]["offset"]
-
-    table.loc[:, "offset"] = offset
+        table.loc[table["label_id"] == key, "offset"] = node_dict[key]["offset"]
 
     length_fraction = [0 for _ in range(len(table))]
-    for key in list(node_dict.keys()):
-        length_fraction[int(node_dict[key]["label_id"] - 1)] = node_dict[key]["length_fraction"]
-
+    length_fraction = list(np.float64(length_fraction))
     table.loc[:, "length_fraction"] = length_fraction
+    for num, key in enumerate(list(node_dict.keys())):
+        table.loc[table["label_id"] == key, "length_fraction"] = node_dict[key]["length_fraction"]
+
     table.loc[:, "length[µm]"] = table["length_fraction"] * total_distance
 
     table = map_frequency(table, cell_type=cell_type, animal=animal)
