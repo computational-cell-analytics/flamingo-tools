@@ -10,14 +10,14 @@ The extraction of blocks from a 3D volume is required for the creation of annota
 Usage:
 ```
 python repro_block_extraction.py --input <JSON-file> --output <out-dir>
-``` 
+```
 
-## Post-processing of SGN segmentation
+## Labeling components in the segmentation
 
-The post-processing of the SGN segmentation may involve the erosion of the segmentation to exclude artifacts, the variation of the minimal number of nodes within a component, or the minimal distance between nodes to consider them the same component.
+The labeling of the SGN segmentation may involve the erosion of the segmentation to exclude artifacts, the variation of the minimal number of nodes within a component, or the minimal distance between nodes to consider them the same component.
 
 Usage:
  ```
-python repro_postprocess_sgn_v1.py --input <JSON-file> --output <out-dir>
-``` 
+python repro_label_components.py --input <JSON-file> --output <out-dir>
+```
 

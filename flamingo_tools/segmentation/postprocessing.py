@@ -249,7 +249,7 @@ def erode_subset(
     Returns:
         The dataframe containing elements left after the erosion.
     """
-    print("initial length", len(table))
+    print(f"Initial length: {len(table)}")
     n_neighbors = 100
     for i in range(iterations):
         table = table[table[keyword] < threshold]
@@ -406,10 +406,12 @@ def components_sgn(
         min_cells = 20000
         threshold = threshold_erode if threshold_erode is not None else 40
 
-    print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
-
-    new_subset = erode_subset(table.copy(), iterations=iterations,
-                              threshold=threshold, min_cells=min_cells, keyword=keyword)
+    if iterations != 0:
+        print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
+        new_subset = erode_subset(table.copy(), iterations=iterations,
+                                  threshold=threshold, min_cells=min_cells, keyword=keyword)
+    else:
+        new_subset = table.copy()
 
     # create graph from coordinates of eroded subset
     centroids_subset = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
@@ -486,41 +488,10 @@ def label_components_sgn(
     table.sort_values("label_id")
 
     component_labels = [0 for _ in range(len(table))]
+    table.loc[:, "component_labels"] = component_labels
     # be aware of 'label_id' of dataframe starting at 1
     for lab, comp in enumerate(components):
-        for comp_index in comp:
-            component_labels[comp_index - 1] = lab + 1
-
-    return component_labels
-
-
-def postprocess_sgn_seg(
-    table: pd.DataFrame,
-    min_size: int = 1000,
-    threshold_erode: Optional[float] = None,
-    min_component_length: int = 50,
-    max_edge_distance: float = 30,
-    iterations_erode: Optional[int] = None,
-) -> pd.DataFrame:
-    """Postprocessing SGN segmentation of cochlea.
-
-    Args:
-        table: Dataframe of segmentation table.
-        min_size: Minimal number of pixels for filtering small instances.
-        threshold_erode: Threshold of column value after erosion step with spatial statistics.
-        min_component_length: Minimal length for filtering out connected components.
-        max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
-        iterations_erode: Number of iterations for erosion, normally determined automatically.
-
-    Returns:
-        Dataframe with component labels.
-    """
-
-    comp_labels = label_components_sgn(table, min_size=min_size, threshold_erode=threshold_erode,
-                                       min_component_length=min_component_length,
-                                       max_edge_distance=max_edge_distance, iterations_erode=iterations_erode)
-
-    table.loc[:, "component_labels"] = comp_labels
+        table.loc[table["label_id"].isin(comp), "component_labels"] = lab + 1
 
     return table
 
@@ -583,37 +554,10 @@ def label_components_ihc(
     length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
 
     component_labels = [0 for _ in range(len(table))]
+    table.loc[:, "component_labels"] = component_labels
     # be aware of 'label_id' of dataframe starting at 1
     for lab, comp in enumerate(components):
-        for comp_index in comp:
-            component_labels[comp_index - 1] = lab + 1
-
-    return component_labels
-
-
-def postprocess_ihc_seg(
-    table: pd.DataFrame,
-    min_size: int = 1000,
-    min_component_length: int = 50,
-    max_edge_distance: float = 30,
-) -> pd.DataFrame:
-    """Postprocessing IHC segmentation of cochlea.
-
-    Args:
-        table: Dataframe of segmentation table.
-        min_size: Minimal number of pixels for filtering small instances.
-        min_component_length: Minimal length for filtering out connected components.
-        max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
-
-    Returns:
-        Dataframe with component labels.
-    """
-
-    comp_labels = label_components_ihc(table, min_size=min_size,
-                                       min_component_length=min_component_length,
-                                       max_edge_distance=max_edge_distance)
-
-    table.loc[:, "component_labels"] = comp_labels
+        table.loc[table["label_id"].isin(comp), "component_labels"] = lab + 1
 
     return table
 
