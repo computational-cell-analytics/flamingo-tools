@@ -55,6 +55,31 @@ class TestMeasurements(unittest.TestCase):
         ]:
             self.assertTrue(np.allclose(table[col].values, expected_measures[col_exp].values))
 
+    # Test the object measurement functionality as it's used for the gfp intensity measurements:
+    # - computing only median intensity
+    # - with a dilation of 4
+    # - with background subtraction
+    # - and using a mask for the background subtraction
+    def test_compute_object_measures_gfp(self):
+        from flamingo_tools.measurements import compute_object_measures, compute_sgn_background_mask
+
+        dilation = 4
+        background_mask = compute_sgn_background_mask(self.image_path, self.seg_path, scale_factor=(2, 4, 4))
+
+        output_path = os.path.join(self.folder, "measurements.tsv")
+        compute_object_measures(
+            self.image_path, self.seg_path, self.table_path, output_path, n_threads=1,
+            dilation=dilation, median_only=True, feature_set="default_background_subtract",
+            background_mask=background_mask,
+        )
+        self.assertTrue(os.path.exists(output_path))
+
+        table = pd.read_csv(output_path, sep="\t")
+        self.assertTrue(len(table) >= 1)
+        expected_columns = ["label_id", "median"]
+        for col in expected_columns:
+            self.assertIn(col, table.columns)
+
 
 if __name__ == "__main__":
     unittest.main()

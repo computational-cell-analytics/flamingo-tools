@@ -2,12 +2,15 @@ import multiprocessing as mp
 import os
 from concurrent import futures
 from functools import partial
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import trimesh
+from elf.wrapper.resized_volume import ResizedVolume
+from nifty.tools import blocking
 from skimage.measure import marching_cubes, regionprops_table
+from scipy.ndimage import binary_dilation
 from tqdm import tqdm
 
 from .file_utils import read_image_data
@@ -29,8 +32,13 @@ def _measure_volume_and_surface(mask, resolution):
     return volume, surface
 
 
-def _get_bounding_box_and_center(table, seg_id, resolution, shape):
+def _get_bounding_box_and_center(table, seg_id, resolution, shape, dilation):
     row = table[table.label_id == seg_id]
+
+    if dilation is not None and dilation > 0:
+        bb_extension = dilation + 1
+    else:
+        bb_extension = 1
 
     bb_min = np.array([
         row.bb_min_z.item(), row.bb_min_y.item(), row.bb_min_x.item()
@@ -43,7 +51,7 @@ def _get_bounding_box_and_center(table, seg_id, resolution, shape):
     bb_max = np.round(bb_max, 0).astype("int32")
 
     bb = tuple(
-        slice(max(bmin - 1, 0), min(bmax + 1, sh))
+        slice(max(bmin - bb_extension, 0), min(bmax + bb_extension, sh))
         for bmin, bmax, sh in zip(bb_min, bb_max, shape)
     )
 
@@ -115,13 +123,15 @@ def _normalize_background(measures, image, mask, center, radius, norm, median_on
 
 def _default_object_features(
     seg_id, table, image, segmentation, resolution,
-    foreground_mask=None, background_radius=None, norm=np.divide, median_only=False,
+    background_mask=None, background_radius=None, norm=np.divide, median_only=False, dilation=None
 ):
-    bb, center = _get_bounding_box_and_center(table, seg_id, resolution, image.shape)
+    bb, center = _get_bounding_box_and_center(table, seg_id, resolution, image.shape, dilation)
 
     local_image = image[bb]
     mask = segmentation[bb] == seg_id
     assert mask.sum() > 0, f"Segmentation ID {seg_id} is empty."
+    if dilation is not None and dilation > 0:
+        mask = binary_dilation(mask, iterations=dilation)
     masked_intensity = local_image[mask]
 
     # Do the base intensity measurements.
@@ -141,7 +151,7 @@ def _default_object_features(
         # The resolution is given in micrometer per pixel.
         # So we have to divide by the resolution to obtain the radius in pixel.
         radius_in_pixel = background_radius / resolution
-        measures = _normalize_background(measures, image, foreground_mask, center, radius_in_pixel, norm, median_only)
+        measures = _normalize_background(measures, image, background_mask, center, radius_in_pixel, norm, median_only)
 
     # Do the volume and surface measurement.
     if not median_only:
@@ -151,13 +161,15 @@ def _default_object_features(
     return measures
 
 
-def _regionprops_features(seg_id, table, image, segmentation, resolution, foreground_mask=None):
-    bb, _ = _get_bounding_box_and_center(table, seg_id, resolution, image.shape)
+def _regionprops_features(seg_id, table, image, segmentation, resolution, background_mask=None, dilation=None):
+    bb, _ = _get_bounding_box_and_center(table, seg_id, resolution, image.shape, dilation)
 
     local_image = image[bb]
     local_segmentation = segmentation[bb]
     mask = local_segmentation == seg_id
     assert mask.sum() > 0, f"Segmentation ID {seg_id} is empty."
+    if dilation is not None and dilation > 0:
+        mask = binary_dilation(mask, iterations=dilation)
     local_segmentation[~mask] = 0
 
     features = regionprops_table(
@@ -196,7 +208,6 @@ around each object.
 """
 
 
-# TODO integrate segmentation post-processing, see `_extend_sgns_simple` in `gfp_annotation.py`
 def compute_object_measures_impl(
     image: np.typing.ArrayLike,
     segmentation: np.typing.ArrayLike,
@@ -204,8 +215,9 @@ def compute_object_measures_impl(
     resolution: float = 0.38,
     table: Optional[pd.DataFrame] = None,
     feature_set: str = "default",
-    foreground_mask: Optional[np.typing.ArrayLike] = None,
+    background_mask: Optional[np.typing.ArrayLike] = None,
     median_only: bool = False,
+    dilation: Optional[int] = None,
 ) -> pd.DataFrame:
     """Compute simple intensity and morphology measures for each segmented cell in a segmentation.
 
@@ -218,8 +230,10 @@ def compute_object_measures_impl(
         resolution: The resolution / voxel size of the data.
         table: The segmentation table. Will be computed on the fly if it is not given.
         feature_set: The features to compute for each object. Refer to `FEATURE_FUNCTIONS` for details.
-        foreground_mask: An optional mask indicating the area to use for computing background correction values.
+        background_mask: An optional mask indicating the area to use for computing background correction values.
         median_only: Whether to only compute the median intensity.
+        dilation: Value for dilating the segmentation before computing measurements.
+            By default no dilation is applied.
 
     Returns:
         The table with per object measurements.
@@ -235,8 +249,9 @@ def compute_object_measures_impl(
         image=image,
         segmentation=segmentation,
         resolution=resolution,
-        foreground_mask=foreground_mask,
+        background_mask=background_mask,
         median_only=median_only,
+        dilation=dilation,
     )
 
     seg_ids = table.label_id.values
@@ -272,6 +287,9 @@ def compute_object_measures(
     feature_set: str = "default",
     s3_flag: bool = False,
     component_list: List[int] = [],
+    dilation: Optional[int] = None,
+    median_only: bool = False,
+    background_mask: Optional[np.typing.ArrayLike] = None,
 ) -> None:
     """Compute simple intensity and morphology measures for each segmented cell in a segmentation.
 
@@ -291,6 +309,12 @@ def compute_object_measures(
         resolution: The resolution / voxel size of the data.
         force: Whether to overwrite an existing output table.
         feature_set: The features to compute for each object. Refer to `FEATURE_FUNCTIONS` for details.
+        s3_flag:
+        component_list:
+        median_only: Whether to only compute the median intensity.
+        dilation: Value for dilating the segmentation before computing measurements.
+            By default no dilation is applied.
+        background_mask: An optional mask indicating the area to use for computing background correction values.
     """
     if os.path.exists(output_table_path) and not force:
         return
@@ -315,5 +339,70 @@ def compute_object_measures(
 
     measures = compute_object_measures_impl(
         image, segmentation, n_threads, resolution, table=table, feature_set=feature_set,
+        median_only=median_only, dilation=dilation, background_mask=background_mask,
     )
     measures.to_csv(output_table_path, sep="\t", index=False)
+
+
+def compute_sgn_background_mask(
+    image_path: str,
+    segmentation_path: str,
+    image_key: Optional[str] = None,
+    segmentation_key: Optional[str] = None,
+    threshold_percentile: float = 35.0,
+    scale_factor: Tuple[int, int, int] = (16, 16, 16),
+) -> np.typing.ArrayLike:
+    """
+
+    Args:
+        p
+
+    Returns:
+        pass
+    """
+    image = read_image_data(image_path, image_key)
+    segmentation = read_image_data(segmentation_path, segmentation_key)
+    assert image.shape == segmentation.shape
+
+    original_shape = image.shape
+    downsampled_shape = tuple(int(np.round(sh / sf)) for sh, sf in zip(original_shape, scale_factor))
+
+    low_res_mask = np.zeros(downsampled_shape, dtype="bool")
+
+    # This corresponds to a block shape of 128 x 512 x 512 in the original resolution,
+    # which roughly corresponds to the size of the blocks we use for the GFP annotation.
+    chunk_shape = (8, 32, 32)
+
+    blocks = blocking((0, 0, 0), downsampled_shape, chunk_shape)
+    n_blocks = blocks.numberOfBlocks
+
+    img_resized = ResizedVolume(image, downsampled_shape)
+    seg_resized = ResizedVolume(segmentation, downsampled_shape, order=0)
+
+    def _compute_block(block_id):
+        block = blocks.getBlock(block_id)
+        bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
+
+        img = img_resized[bb]
+        threshold = np.percentile(img, threshold_percentile)
+
+        this_mask = img > threshold
+        this_seg = seg_resized[bb] != 0
+        this_seg = binary_dilation(this_seg)
+        this_mask[this_seg] = 0
+
+        low_res_mask[bb] = this_mask
+
+    # TODO parallelize
+    for block_id in range(n_blocks):
+        _compute_block(block_id)
+
+    # stain_averaged = downscale_local_mean(stain, factors=(16, 16, 16))
+    # # The 35th percentile seems to be a decent approximation for the background subtraction.
+    # threshold = np.percentile(stain_averaged, 35)
+    # mask = stain_averaged > threshold
+    # mask = resize(mask, seg_extended.shape, order=0, anti_aliasing=False, preserve_range=True).astype(bool)
+    # mask[seg_extended != 0] = 0
+
+    mask = ResizedVolume(low_res_mask, shape=original_shape, order=0)
+    return mask
