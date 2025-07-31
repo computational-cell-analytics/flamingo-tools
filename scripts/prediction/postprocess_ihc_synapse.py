@@ -14,9 +14,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Script to postprocess IHC segmentation based on the number of synapses per IHC.")
 
-    parser.add_argument('--base_path', type=str, required=True, help="Base segmentation.")
+    parser.add_argument('--base_path', type=str, required=True, help="Base segmentation. WARNING: Will be edited.")
     parser.add_argument('--ref_path', type=str, required=True, help="Reference segmentation.")
-    parser.add_argument('--out_path', type=str, required=True, help="Output segmentation.")
+    parser.add_argument('--out_path_tif', type=str, default=None, help="Output segmentation for tif output.")
 
     parser.add_argument('--base_table', type=str, required=True, help="Synapse per IHC table of base segmentation.")
 
@@ -42,6 +42,10 @@ def main():
 
     args = parser.parse_args()
 
+    if args.tif:
+        if args.out_path_tif is None:
+            raise ValueError("Specify out_path_tif for saving TIF file.")
+
     if args.base_key is None:
         data_base = read_image_data(args.base_path, args.base_key)
     else:
@@ -54,12 +58,12 @@ def main():
     if args.crop:
         output_ = ihc_synapse_postprocessing.postprocess_ihc_synapse_crop(
             data_base, data_ref, table_base=table_base, synapse_limit=25, min_overlap=0.5,
-            )
+        )
     else:
         output_ = ihc_synapse_postprocessing.postprocess_ihc_synapse(
             data_base, data_ref, table_base=table_base, synapse_limit=25, min_overlap=0.5,
             resolution=0.38, roi_pad=40,
-            )
+        )
 
     if args.tif:
         imageio.imwrite(args.out_path, output_, compression="zlib")
