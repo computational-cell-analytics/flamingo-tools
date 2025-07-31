@@ -130,11 +130,11 @@ def fig_02d_01(save_path, plot=False):
         plt.close()
 
 
-def fig_02d_02(save_path, plot=False):
+def fig_02d_02(save_path, filter_zeros=True, plot=False):
     """Bar plot showing the distribution of synapse markers per IHC segmentation average over multiple clochleae.
     """
     cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R']
-    ihc_version = "ihc_counts_v4"
+    ihc_version = "ihc_counts_v4c"
     synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
 
     max_dist = 3
@@ -147,6 +147,8 @@ def fig_02d_02(save_path, plot=False):
         synapse_file = os.path.join(synapse_dir, f"ihc_count_{cochlea}.tsv")
         ihc_table = pd.read_csv(synapse_file, sep="\t")
         syn_per_ihc = list(ihc_table["synapse_count"])
+        if filter_zeros:
+            syn_per_ihc = [s for s in syn_per_ihc if s != 0]
         results.append(syn_per_ihc)
 
     results = [np.clip(r, 0, cap) for r in results]
@@ -187,7 +189,10 @@ def fig_02d_02(save_path, plot=False):
 
     plt.xticks(x_ticks, fontsize=main_tick_size)
     plt.yticks(y_ticks, fontsize=main_tick_size)
-    plt.ylabel('Proportion of IHCs [%]', fontsize=main_label_size)
+    if plot_density:
+        plt.ylabel('Proportion of IHCs [%]', fontsize=main_label_size)
+    else:
+        plt.ylabel('Number of IHCs', fontsize=main_label_size)
     plt.xlabel(f"Ribbon Synapses per IHC @ {max_dist} µm", fontsize=main_label_size)
 
     plt.title('Average Synapses per IHC for a Dataset of 4 Cochleae')
