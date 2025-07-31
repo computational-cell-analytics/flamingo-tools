@@ -154,7 +154,8 @@ def print_accuracy(eval_dir):
             recall = 0
         if precision + recall != 0:
             f1_score = 2 * precision * recall / (precision + recall)
-        else: f1_score = 0
+        else:
+            f1_score = 0
 
         precision_list.append(precision)
         recall_list.append(recall)
@@ -198,9 +199,9 @@ def print_accuracy_ihc():
 
 
 def main():
-    #eval_all_sgn()
-    #eval_all_ihc()
-    #print_accuracy_sgn()
+    eval_all_sgn()
+    eval_all_ihc()
+    print_accuracy_sgn()
     print_accuracy_ihc()
 
 
