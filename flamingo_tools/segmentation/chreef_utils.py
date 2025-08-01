@@ -1,4 +1,5 @@
 import os
+import math
 import multiprocessing as mp
 from concurrent import futures
 from typing import List, Tuple
@@ -8,7 +9,7 @@ import tifffile
 from tqdm import tqdm
 
 
-def find_annotations(annotation_dir) -> dict:
+def find_annotations(annotation_dir, cochleae=None) -> dict:
     """Create dictionary for analysis of ChReef annotations.
     Annotations should have format positive-negative_<cochlea>_crop_<coord>_allNegativeExcluded_thr<thr>.tif
 
@@ -30,7 +31,9 @@ def find_annotations(annotation_dir) -> dict:
         return cochlea
 
     file_names = [entry.name for entry in os.scandir(annotation_dir)]
-    cochleae = list(set([extract_cochlea_str(file_name) for file_name in file_names]))
+    if cochleae is None:
+        cochleae = list(set([extract_cochlea_str(file_name) for file_name in file_names]))
+
     annotation_dic = {}
     for cochlea in cochleae:
         cochlea_files = [entry.name for entry in os.scandir(annotation_dir) if cochlea in entry.name]
@@ -38,8 +41,8 @@ def find_annotations(annotation_dir) -> dict:
         dic["cochlea_files"] = cochlea_files
         center_crops = list(set([extract_center_crop(cochlea, name=file_name) for file_name in cochlea_files]))
         dic["center_coords"] = center_crops
-        dic["center_coords_str"] = [("-").join([str(c).zfill(4) for center_crop in center_crops for c in center_crop])]
-        for center_str in dic["center_coords_str"]:
+        dic["center_str"] = [("-").join([str(c).zfill(4) for center_crop in center_crops for c in center_crop])]
+        for center_str in dic["center_str"]:
             file_neg = [c for c in cochlea_files if all(x in c for x in [cochlea, center_str, "NegativeExcluded"])][0]
             file_pos = [c for c in cochlea_files if all(x in c for x in [cochlea, center_str, "WeakPositive"])][0]
             dic[center_str] = {"file_neg": file_neg, "file_pos": file_pos}
@@ -141,3 +144,24 @@ def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
     inbetween_ids = find_inbetween_ids(arr_negexc, arr_allweak, roi_seg)
     intensities = table.loc[table["label_id"].isin(inbetween_ids), table["mean"]]
     return np.median(list(intensities))
+
+
+def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure, table_block=None):
+    annotation_dic = find_annotations(annotation_dir, cochleae=[cochlea])
+    for key in annotation_dic.keys():
+        dic = annotation_dic[key]
+        for center_coord, center_str in zip(dic["center_coords"], dic["center_str"]):
+            file_pos = dic[center_str["file_pos"]]
+            file_neg = dic[center_str["file_neg"]]
+            median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg, table_measure)
+
+            annotation_dic[key][center_str]["median_intensity"] = median_intensity
+            if table_block is not None:
+                block_centers = table_block["crop_centers"]
+                for num, block_center in enumerate(block_centers):
+                    dist = math.dist(tuple(block_centers), center_coord)
+                    if dist < 5:
+                        annotation_dic[key][center_str]["block_index"] = num
+                        annotation_dic[key][center_str]["block_center"] = block_center
+
+    return annotation_dic[cochlea]
