@@ -180,7 +180,7 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=
         assert mask.shape == seg_extended.shape
         feature_set = "default_background_norm" if background_norm == "division" else "default_background_subtract"
     statistics = compute_object_measures_impl(
-        stain1, seg_extended, feature_set=feature_set, foreground_mask=mask, median_only=True
+        stain1, seg_extended, feature_set=feature_set, background_mask=mask, median_only=True
     )
 
     # Open the napari viewer.
