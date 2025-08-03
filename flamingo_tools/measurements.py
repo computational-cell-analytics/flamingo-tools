@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import trimesh
+from elf.io import open_file
 from elf.wrapper.resized_volume import ResizedVolume
 from nifty.tools import blocking
 from skimage.measure import marching_cubes, regionprops_table
@@ -261,6 +262,7 @@ def compute_object_measures_impl(
 
     # For debugging.
     # measure_function(seg_ids[0])
+    # breakpoint()
 
     with futures.ThreadPoolExecutor(n_threads) as pool:
         measures = list(tqdm(
@@ -352,6 +354,7 @@ def compute_sgn_background_mask(
     threshold_percentile: float = 35.0,
     scale_factor: Tuple[int, int, int] = (16, 16, 16),
     n_threads: Optional[int] = None,
+    cache_path: Optional[str] = None,
 ) -> np.typing.ArrayLike:
     """Compute the background mask for intensity measurements in the SGN segmentation.
 
@@ -368,6 +371,7 @@ def compute_sgn_background_mask(
         threshold_percentile: The percentile threshold for separating foreground and background in the PV signal.
         scale_factor: The scale factor for internally downsampling the mask.
         n_threads: The number of threads for parallelizing the computation.
+        cache_path: Optional path to save the downscaled background mask to zarr.
 
     Returns:
         The mask for determining the background values.
@@ -375,6 +379,13 @@ def compute_sgn_background_mask(
     image = read_image_data(image_path, image_key)
     segmentation = read_image_data(segmentation_path, segmentation_key)
     assert image.shape == segmentation.shape
+
+    if cache_path is not None and os.path.exists(cache_path):
+        with open_file(cache_path, "r") as f:
+            if "mask" in f:
+                low_res_mask = f["mask"][:]
+                mask = ResizedVolume(low_res_mask, shape=image.shape, order=0)
+                return mask
 
     original_shape = image.shape
     downsampled_shape = tuple(int(np.round(sh / sf)) for sh, sf in zip(original_shape, scale_factor))
@@ -406,10 +417,16 @@ def compute_sgn_background_mask(
         low_res_mask[bb] = this_mask
 
     n_threads = mp.cpu_count() if n_threads is None else n_threads
+    randomized_blocks = np.arange(0, n_blocks)
+    np.random.shuffle(randomized_blocks)
     with futures.ThreadPoolExecutor(n_threads) as tp:
         list(tqdm(
-            tp.map(_compute_block, range(n_blocks)), total=n_blocks, desc="Compute background mask"
+            tp.map(_compute_block, randomized_blocks), total=n_blocks, desc="Compute background mask"
         ))
+
+    if cache_path is not None:
+        with open_file(cache_path, "a") as f:
+            f.create_dataset("mask", data=low_res_mask, chunks=(64, 64, 64))
 
     mask = ResizedVolume(low_res_mask, shape=original_shape, order=0)
     return mask

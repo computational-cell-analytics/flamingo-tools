@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from multiprocessing import cpu_count
 from typing import Optional
 
 import flamingo_tools.s3_utils as s3_utils
@@ -49,6 +50,7 @@ def repro_object_measures(
             seg_path, fs = s3_utils.get_s3_path(seg_s3, bucket_name=s3_bucket_name,
                                                 service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
 
+            n_threads = int(os.environ.get("SLURM_CPUS_ON_NODE", cpu_count()))
             if os.path.isfile(output_table_path) and not force_overwrite:
                 print(f"Skipping creation of {output_table_path}. File already exists.")
 
@@ -62,11 +64,14 @@ def repro_object_measures(
                     feature_set = "default_background_subtract"
                     dilation = 4
                     median_only = True
+                    mask_cache_path = os.path.join(output_dir, f"{cochlea_str}_{img_str}_{seg_str}_bg-mask.zarr")
                     bg_mask = compute_sgn_background_mask(
                         image_path=img_path,
                         segmentation_path=seg_path,
                         image_key=input_key,
                         segmentation_key=input_key,
+                        n_threads=n_threads,
+                        cache_path=mask_cache_path,
                     )
 
                 compute_object_measures(
@@ -82,6 +87,7 @@ def repro_object_measures(
                     dilation=dilation,
                     median_only=median_only,
                     background_mask=bg_mask,
+                    n_threads=n_threads,
                 )
 
 
