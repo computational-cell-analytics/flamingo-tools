@@ -12,12 +12,17 @@ def coord_from_string(center_str):
     return tuple([int(c) for c in center_str.split("-")])
 
 
-def find_annotations(annotation_dir, cochlea) -> dict:
-    """Create dictionary for analysis of ChReef annotations.
+def find_annotations(annotation_dir: str, cochlea: str) -> dict:
+    """Create a dictionary for the analysis of ChReef annotations.
+
     Annotations should have format positive-negative_<cochlea>_crop_<coord>_allNegativeExcluded_thr<thr>.tif
 
     Args:
         annotation_dir: Directory containing annotations.
+        cochlea: The name of the cochlea to analyze.
+
+    Returns:
+        Dictionary with information about the intensity annotations.
     """
 
     def extract_center_string(cochlea, name):
@@ -58,7 +63,7 @@ def get_roi(coord: tuple, roi_halo: tuple, resolution: float = 0.38) -> Tuple[in
         resolution: Resolution of array in µm.
 
     Returns:
-        region of interest
+        The region of interest.
     """
     coords = list(coord)
     # reverse dimensions for correct extraction
@@ -124,6 +129,9 @@ def find_inbetween_ids(
         arr_negexc: Array with all negatives excluded.
         arr_allweak: Array with all weak positives.
         roi_sgn: Region of interest of segmentation.
+
+    Returns:
+        A list of the ids that are in between the respective thresholds.
     """
     # negative annotation == 1, positive annotation == 2
     negexc_negatives = find_overlapping_masks(arr_negexc, roi_seg, label_id_base=1)
