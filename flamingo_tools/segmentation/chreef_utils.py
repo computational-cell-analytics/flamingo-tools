@@ -1,5 +1,4 @@
 import os
-import math
 import multiprocessing as mp
 from concurrent import futures
 from typing import List, Tuple
@@ -9,7 +8,11 @@ import tifffile
 from tqdm import tqdm
 
 
-def find_annotations(annotation_dir, cochleae=None) -> dict:
+def coord_from_string(center_str):
+    return tuple([int(c) for c in center_str.split("-")])
+
+
+def find_annotations(annotation_dir, cochlea) -> dict:
     """Create dictionary for analysis of ChReef annotations.
     Annotations should have format positive-negative_<cochlea>_crop_<coord>_allNegativeExcluded_thr<thr>.tif
 
@@ -17,37 +20,33 @@ def find_annotations(annotation_dir, cochleae=None) -> dict:
         annotation_dir: Directory containing annotations.
     """
 
-    def extract_center_crop(cochlea, name):
+    def extract_center_string(cochlea, name):
         # Extract center crop coordinate from file name
         crop_suffix = name.split(f"{cochlea}_crop_")[1]
-        coord_str = crop_suffix.split("_")[0]
-        coord = tuple([int(c) for c in coord_str.split("-")])
-        return coord
+        center_str = crop_suffix.split("_")[0]
+        return center_str
 
-    def extract_cochlea_str(name):
-        # Extract cochlea str from annotation file name.
-        cochlea_suffix = name.split("negative_")[1]
-        cochlea = cochlea_suffix.split("_crop")[0]
-        return cochlea
+    cochlea_files = [entry.name for entry in os.scandir(annotation_dir) if cochlea in entry.name]
+    dic = {"cochlea": cochlea}
+    dic["cochlea_files"] = cochlea_files
+    center_strings = list(set([extract_center_string(cochlea, name=f) for f in cochlea_files]))
+    center_strings.sort()
+    dic["center_strings"] = center_strings
+    remove_strings = []
+    for center_str in center_strings:
+        files_neg = [c for c in cochlea_files if all(x in c for x in [cochlea, center_str, "NegativeExcluded"])]
+        files_pos = [c for c in cochlea_files if all(x in c for x in [cochlea, center_str, "WeakPositive"])]
+        if len(files_neg) != 1 or len(files_pos) != 1:
+            print(f"Skipping crop {center_str} for cochlea {cochlea}. "
+                  f"Missing or multiple annotation files in {annotation_dir}.")
+            remove_strings.append(center_str)
+        else:
+            dic[center_str] = {"file_neg": os.path.join(annotation_dir, files_neg[0]),
+                               "file_pos": os.path.join(annotation_dir, files_pos[0])}
+    for rm_str in remove_strings:
+        dic["center_strings"].remove(rm_str)
 
-    file_names = [entry.name for entry in os.scandir(annotation_dir)]
-    if cochleae is None:
-        cochleae = list(set([extract_cochlea_str(file_name) for file_name in file_names]))
-
-    annotation_dic = {}
-    for cochlea in cochleae:
-        cochlea_files = [entry.name for entry in os.scandir(annotation_dir) if cochlea in entry.name]
-        dic = {"cochlea": cochlea}
-        dic["cochlea_files"] = cochlea_files
-        center_crops = list(set([extract_center_crop(cochlea, name=file_name) for file_name in cochlea_files]))
-        dic["center_coords"] = center_crops
-        dic["center_str"] = [("-").join([str(c).zfill(4) for center_crop in center_crops for c in center_crop])]
-        for center_str in dic["center_str"]:
-            file_neg = [c for c in cochlea_files if all(x in c for x in [cochlea, center_str, "NegativeExcluded"])][0]
-            file_pos = [c for c in cochlea_files if all(x in c for x in [cochlea, center_str, "WeakPositive"])][0]
-            dic[center_str] = {"file_neg": file_neg, "file_pos": file_pos}
-        annotation_dic[cochlea] = dic
-    return annotation_dic
+    return dic
 
 
 def get_roi(coord: tuple, roi_halo: tuple, resolution: float = 0.38) -> Tuple[int]:
@@ -106,7 +105,7 @@ def find_overlapping_masks(
             return None
 
     n_threads = min(16, mp.cpu_count())
-    print(f"Parallelizing with {n_threads} Threads.")
+    print(f"Finding overlapping masks with {n_threads} Threads.")
     with futures.ThreadPoolExecutor(n_threads) as pool:
         results = list(tqdm(pool.map(check_overlap, ref_ids), total=len(ref_ids)))
 
@@ -129,7 +128,7 @@ def find_inbetween_ids(
     # negative annotation == 1, positive annotation == 2
     negexc_negatives = find_overlapping_masks(arr_negexc, roi_seg, label_id_base=1)
     allweak_positives = find_overlapping_masks(arr_allweak, roi_seg, label_id_base=2)
-    inbetween_ids = list(set(negexc_negatives) & set(allweak_positives))
+    inbetween_ids = [int(i) for i in set(negexc_negatives).intersection(set(allweak_positives))]
     return inbetween_ids
 
 
@@ -142,26 +141,24 @@ def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
 
     roi_seg = data_seg[roi]
     inbetween_ids = find_inbetween_ids(arr_negexc, arr_allweak, roi_seg)
-    intensities = table.loc[table["label_id"].isin(inbetween_ids), table["mean"]]
+    subset = table[table["label_id"].isin(inbetween_ids)]
+    intensities = list(subset["median"])
     return np.median(list(intensities))
 
 
-def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure, table_block=None):
-    annotation_dic = find_annotations(annotation_dir, cochleae=[cochlea])
-    for key in annotation_dic.keys():
-        dic = annotation_dic[key]
-        for center_coord, center_str in zip(dic["center_coords"], dic["center_str"]):
-            file_pos = dic[center_str["file_pos"]]
-            file_neg = dic[center_str["file_neg"]]
-            median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg, table_measure)
+def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure):
+    """Find median intensities in blocks and assign them to center positions of cropped block.
+    """
+    annotation_dic = find_annotations(annotation_dir, cochlea)
+    # center_keys = [key for key in annotation_dic["center_strings"] if key in annotation_dic.keys()]
 
-            annotation_dic[key][center_str]["median_intensity"] = median_intensity
-            if table_block is not None:
-                block_centers = table_block["crop_centers"]
-                for num, block_center in enumerate(block_centers):
-                    dist = math.dist(tuple(block_centers), center_coord)
-                    if dist < 5:
-                        annotation_dic[key][center_str]["block_index"] = num
-                        annotation_dic[key][center_str]["block_center"] = block_center
+    for center_str in annotation_dic["center_strings"]:
+        center_coord = coord_from_string(center_str)
+        print(f"Getting mean intensities for {center_coord}.")
+        file_pos = annotation_dic[center_str]["file_pos"]
+        file_neg = annotation_dic[center_str]["file_neg"]
+        median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg, table_measure)
 
-    return annotation_dic[cochlea]
+        annotation_dic[center_str]["median_intensity"] = median_intensity
+
+    return annotation_dic
