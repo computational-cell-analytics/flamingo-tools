@@ -4,3 +4,4 @@ converted/
 *.egg-info/
 checkpoints/
 logs/
+*.csv

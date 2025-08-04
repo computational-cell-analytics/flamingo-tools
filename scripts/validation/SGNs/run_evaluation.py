@@ -3,11 +3,16 @@ from glob import glob
 
 import pandas as pd
 from flamingo_tools.validation import (
-    fetch_data_for_evaluation, parse_annotation_path, compute_scores_for_annotated_slice
+    fetch_data_for_evaluation, _parse_annotation_path, compute_scores_for_annotated_slice
 )
 
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
-ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+# OLD EVALUATION FOR INITIAL ANNOTATIONS
+# ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs"
+# ANNOTATION_FOLDERS = ["AnnotationsEK", "AnnotationsAMD", "AnnotationsLR"]
+
+# NEW EVALUATION FOR FINAL ANNOTATIONS
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/AnnotatedImageCrops/F1ValidationSGNs/final_annotations"  # noqa
+ANNOTATION_FOLDERS = ["final_consensus_annotations"]
 
 
 def run_evaluation(root, annotation_folders, result_file, cache_folder):
@@ -27,11 +32,16 @@ def run_evaluation(root, annotation_folders, result_file, cache_folder):
         annotator = folder[len("Annotations"):]
         annotations = sorted(glob(os.path.join(root, folder, "*.csv")))
         for annotation_path in annotations:
-            cochlea, slice_id = parse_annotation_path(annotation_path)
+            cochlea, slice_id = _parse_annotation_path(annotation_path)
 
             print("Run evaluation for", annotator, cochlea, "z=", slice_id)
+            if cochlea == "M_LR_000169_R":
+                mobie_name = f"{cochlea}_fused"
+            else:
+                mobie_name = None
+
             segmentation, annotations = fetch_data_for_evaluation(
-                annotation_path, components_for_postprocessing=[1],
+                annotation_path, components_for_postprocessing=[1], cochlea=mobie_name,
                 cache_path=None if cache_folder is None else os.path.join(cache_folder, f"{cochlea}_{slice_id}.tif")
             )
             scores = compute_scores_for_annotated_slice(segmentation, annotations, matching_tolerance=5)
@@ -51,7 +61,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", default=ROOT)
-    parser.add_argument("--folders", default=ANNOTATION_FOLDERS)
+    parser.add_argument("--folders", default=ANNOTATION_FOLDERS, nargs="+")
     parser.add_argument("--result_file", default="results.csv")
     parser.add_argument("--cache_folder")
     args = parser.parse_args()

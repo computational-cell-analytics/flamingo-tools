@@ -10,6 +10,7 @@ import networkx as nx
 import pandas as pd
 
 from elf.io import open_file
+from scipy.ndimage import distance_transform_edt, binary_dilation, binary_closing
 from scipy.sparse import csr_matrix
 from scipy.spatial import distance
 from scipy.spatial import cKDTree, ConvexHull
@@ -248,7 +249,7 @@ def erode_subset(
     Returns:
         The dataframe containing elements left after the erosion.
     """
-    print("initial length", len(table))
+    print(f"Initial length: {len(table)}")
     n_neighbors = 100
     for i in range(iterations):
         table = table[table[keyword] < threshold]
@@ -267,27 +268,30 @@ def erode_subset(
 
 
 def downscaled_centroids(
-    table: pd.DataFrame,
+    centroids: np.ndarray,
     scale_factor: int,
     ref_dimensions: Optional[Tuple[float, float, float]] = None,
+    component_labels: Optional[List[int]] = None,
     downsample_mode: str = "accumulated",
 ) -> np.typing.NDArray:
     """Downscale centroids in dataframe.
 
     Args:
-        table: Dataframe of segmentation table.
+        centroids: Centroids of SGN segmentation, ndarray of shape (N, 3)
         scale_factor: Factor for downscaling coordinates.
         ref_dimensions: Reference dimensions for downscaling. Taken from centroids if not supplied.
+        component_labels: List of component labels, which has to be supplied for the downsampling mode 'components'
         downsample_mode: Flag for downsampling, either 'accumulated', 'capped', or 'components'.
 
     Returns:
         The downscaled array
     """
-    centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
     centroids_scaled = [(c[0] / scale_factor, c[1] / scale_factor, c[2] / scale_factor) for c in centroids]
 
     if ref_dimensions is None:
-        bounding_dimensions = (max(table["anchor_x"]), max(table["anchor_y"]), max(table["anchor_z"]))
+        bounding_dimensions = (max([c[0] for c in centroids]),
+                               max([c[1] for c in centroids]),
+                               max([c[2] for c in centroids]))
         bounding_dimensions_scaled = tuple([round(b // scale_factor + 1) for b in bounding_dimensions])
         new_array = np.zeros(bounding_dimensions_scaled)
 
@@ -304,9 +308,8 @@ def downscaled_centroids(
             new_array[int(c[0]), int(c[1]), int(c[2])] = 1
 
     elif downsample_mode == "components":
-        if "component_labels" not in table.columns:
-            raise KeyError("Dataframe must continue key 'component_labels' for downsampling with mode 'components'.")
-        component_labels = list(table["component_labels"])
+        if component_labels is None:
+            raise KeyError("Component labels must be supplied for downsampling with mode 'components'.")
         for comp, centr in zip(component_labels, centroids_scaled):
             if comp != 0:
                 new_array[int(centr[0]), int(centr[1]), int(centr[2])] = comp
@@ -319,27 +322,28 @@ def downscaled_centroids(
     return new_array
 
 
-def graph_connected_components(coords: dict, min_edge_distance: float, min_component_length: int):
+def graph_connected_components(coords: dict, max_edge_distance: float, min_component_length: int):
     """Create a list of IDs for each connected component of a graph.
 
     Args:
         coords: Dictionary containing label IDs as keys and their position as value.
-        min_edge_distance: Minimal edge distance between graph nodes to create an edge between nodes.
+        max_edge_distance: Maximal edge distance between graph nodes to create an edge between nodes.
         min_component_length: Minimal length of nodes of connected component. Filtered out if lower.
 
     Returns:
         List of dictionary keys of connected components.
+        Graph of connected components.
     """
     graph = nx.Graph()
     for num, pos in coords.items():
         graph.add_node(num, pos=pos)
 
-    # create edges between points whose distance is less than threshold min_edge_distance
+    # create edges between points whose distance is less than threshold max_edge_distance
     for num_i, pos_i in coords.items():
         for num_j, pos_j in coords.items():
             if num_i < num_j:
                 dist = math.dist(pos_i, pos_j)
-                if dist <= min_edge_distance:
+                if dist <= max_edge_distance:
                     graph.add_edge(num_i, num_j, weight=dist)
 
     components = list(nx.connected_components(graph))
@@ -351,7 +355,10 @@ def graph_connected_components(coords: dict, min_edge_distance: float, min_compo
                 graph.remove_node(c)
 
     components = [list(s) for s in nx.connected_components(graph)]
-    return components
+    length_components = [len(c) for c in components]
+    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
+
+    return components, graph
 
 
 def components_sgn(
@@ -359,7 +366,7 @@ def components_sgn(
     keyword: str = "distance_nn100",
     threshold_erode: Optional[float] = None,
     min_component_length: int = 50,
-    min_edge_distance: float = 30,
+    max_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
     postprocess_threshold: Optional[float] = None,
     postprocess_components: Optional[List[int]] = None,
@@ -371,7 +378,7 @@ def components_sgn(
         keyword: Keyword of the dataframe column for erosion.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
         postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
         postprocess_components: Post-process specific graph connected components ([0] for largest component only).
@@ -399,10 +406,12 @@ def components_sgn(
         min_cells = 20000
         threshold = threshold_erode if threshold_erode is not None else 40
 
-    print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
-
-    new_subset = erode_subset(table.copy(), iterations=iterations,
-                              threshold=threshold, min_cells=min_cells, keyword=keyword)
+    if iterations != 0:
+        print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
+        new_subset = erode_subset(table.copy(), iterations=iterations,
+                                  threshold=threshold, min_cells=min_cells, keyword=keyword)
+    else:
+        new_subset = table.copy()
 
     # create graph from coordinates of eroded subset
     centroids_subset = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
@@ -411,10 +420,7 @@ def components_sgn(
     for index, element in zip(labels_subset, centroids_subset):
         coords[index] = element
 
-    components = graph_connected_components(coords, min_edge_distance, min_component_length)
-
-    length_components = [len(c) for c in components]
-    length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
+    components, _ = graph_connected_components(coords, max_edge_distance, min_component_length)
 
     # add original coordinates closer to eroded component than threshold
     if postprocess_threshold is not None:
@@ -447,7 +453,7 @@ def label_components_sgn(
     min_size: int = 1000,
     threshold_erode: Optional[float] = None,
     min_component_length: int = 50,
-    min_edge_distance: float = 30,
+    max_edge_distance: float = 30,
     iterations_erode: Optional[int] = None,
     postprocess_threshold: Optional[float] = None,
     postprocess_components: Optional[List[int]] = None,
@@ -459,7 +465,7 @@ def label_components_sgn(
         min_size: Minimal number of pixels for filtering small instances.
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
         iterations_erode: Number of iterations for erosion, normally determined automatically.
         postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
         postprocess_components: Post-process specific graph connected components ([0] for largest component only).
@@ -473,7 +479,7 @@ def label_components_sgn(
     table = table[table.n_pixels >= min_size]
 
     components = components_sgn(table, threshold_erode=threshold_erode, min_component_length=min_component_length,
-                                min_edge_distance=min_edge_distance, iterations_erode=iterations_erode,
+                                max_edge_distance=max_edge_distance, iterations_erode=iterations_erode,
                                 postprocess_threshold=postprocess_threshold,
                                 postprocess_components=postprocess_components)
 
@@ -482,41 +488,10 @@ def label_components_sgn(
     table.sort_values("label_id")
 
     component_labels = [0 for _ in range(len(table))]
+    table.loc[:, "component_labels"] = component_labels
     # be aware of 'label_id' of dataframe starting at 1
     for lab, comp in enumerate(components):
-        for comp_index in comp:
-            component_labels[comp_index - 1] = lab + 1
-
-    return component_labels
-
-
-def postprocess_sgn_seg(
-    table: pd.DataFrame,
-    min_size: int = 1000,
-    threshold_erode: Optional[float] = None,
-    min_component_length: int = 50,
-    min_edge_distance: float = 30,
-    iterations_erode: Optional[int] = None,
-) -> pd.DataFrame:
-    """Postprocessing SGN segmentation of cochlea.
-
-    Args:
-        table: Dataframe of segmentation table.
-        min_size: Minimal number of pixels for filtering small instances.
-        threshold_erode: Threshold of column value after erosion step with spatial statistics.
-        min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
-        iterations_erode: Number of iterations for erosion, normally determined automatically.
-
-    Returns:
-        Dataframe with component labels.
-    """
-
-    comp_labels = label_components_sgn(table, min_size=min_size, threshold_erode=threshold_erode,
-                                       min_component_length=min_component_length,
-                                       min_edge_distance=min_edge_distance, iterations_erode=iterations_erode)
-
-    table.loc[:, "component_labels"] = comp_labels
+        table.loc[table["label_id"].isin(comp), "component_labels"] = lab + 1
 
     return table
 
@@ -524,14 +499,14 @@ def postprocess_sgn_seg(
 def components_ihc(
     table: pd.DataFrame,
     min_component_length: int = 50,
-    min_edge_distance: float = 30,
+    max_edge_distance: float = 30,
 ):
     """Create connected components for IHC segmentation.
 
     Args:
         table: Dataframe of segmentation table.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
 
     Returns:
         Subgraph components as lists of label_ids of dataframe.
@@ -542,7 +517,7 @@ def components_ihc(
     for index, element in zip(labels, centroids):
         coords[index] = element
 
-    components = graph_connected_components(coords, min_edge_distance, min_component_length)
+    components, _ = graph_connected_components(coords, max_edge_distance, min_component_length)
     return components
 
 
@@ -550,7 +525,7 @@ def label_components_ihc(
     table: pd.DataFrame,
     min_size: int = 1000,
     min_component_length: int = 50,
-    min_edge_distance: float = 30,
+    max_edge_distance: float = 30,
 ) -> List[int]:
     """Label components using graph connected components.
 
@@ -558,7 +533,7 @@ def label_components_ihc(
         table: Dataframe of segmentation table.
         min_size: Minimal number of pixels for filtering small instances.
         min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
+        max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
 
     Returns:
         List of component label for each point in dataframe. 0 - background, then in descending order of size
@@ -569,7 +544,7 @@ def label_components_ihc(
     table = table[table.n_pixels >= min_size]
 
     components = components_ihc(table, min_component_length=min_component_length,
-                                min_edge_distance=min_edge_distance)
+                                max_edge_distance=max_edge_distance)
 
     # add size-filtered objects to have same initial length
     table = pd.concat([table, entries_filtered], ignore_index=True)
@@ -579,36 +554,183 @@ def label_components_ihc(
     length_components, components = zip(*sorted(zip(length_components, components), reverse=True))
 
     component_labels = [0 for _ in range(len(table))]
+    table.loc[:, "component_labels"] = component_labels
     # be aware of 'label_id' of dataframe starting at 1
     for lab, comp in enumerate(components):
-        for comp_index in comp:
-            component_labels[comp_index - 1] = lab + 1
-
-    return component_labels
-
-
-def postprocess_ihc_seg(
-    table: pd.DataFrame,
-    min_size: int = 1000,
-    min_component_length: int = 50,
-    min_edge_distance: float = 30,
-) -> pd.DataFrame:
-    """Postprocessing IHC segmentation of cochlea.
-
-    Args:
-        table: Dataframe of segmentation table.
-        min_size: Minimal number of pixels for filtering small instances.
-        min_component_length: Minimal length for filtering out connected components.
-        min_edge_distance: Minimal distance in micrometer between points to create edges for connected components.
-
-    Returns:
-        Dataframe with component labels.
-    """
-
-    comp_labels = label_components_ihc(table, min_size=min_size,
-                                       min_component_length=min_component_length,
-                                       min_edge_distance=min_edge_distance)
-
-    table.loc[:, "component_labels"] = comp_labels
+        table.loc[table["label_id"].isin(comp), "component_labels"] = lab + 1
 
     return table
+
+
+def dilate_and_trim(
+    arr_orig: np.ndarray,
+    edt: np.ndarray,
+    iterations: int = 15,
+    offset: float = 0.4,
+) -> np.ndarray:
+    """Dilate and trim original binary array according to a
+    Euclidean Distance Trasform computed for a separate target array.
+
+    Args:
+        arr_orig: Original 3D binary array
+        edt: 3D array containing Euclidean Distance transform for guiding dilation
+        iterations: Number of iterations for dilations
+        offset: Offset for regulating dilation. value should be in range(0, 0.45)
+
+    Returns:
+        Dilated binary array
+    """
+    border_coords = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+    for _ in range(iterations):
+        arr_dilated = binary_dilation(arr_orig)
+        for x in range(arr_dilated.shape[0]):
+            for y in range(arr_dilated.shape[1]):
+                for z in range(arr_dilated.shape[2]):
+                    if arr_dilated[x, y, z] != 0:
+                        if arr_orig[x, y, z] == 0:
+                            min_dist = float('inf')
+                            for dx, dy, dz in border_coords:
+                                nx, ny, nz = x+dx, y+dy, z+dz
+                                if arr_orig[nx, ny, nz] == 1:
+                                    min_dist = min([min_dist, edt[nx, ny, nz]])
+                            if edt[x, y, z] >= min_dist - offset:
+                                arr_dilated[x, y, z] = 0
+        arr_orig = arr_dilated
+    return arr_dilated
+
+
+def filter_cochlea_volume_single(
+    table: pd.DataFrame,
+    components: Optional[List[int]] = [1],
+    scale_factor: int = 48,
+    resolution: float = 0.38,
+    dilation_iterations: int = 12,
+    padding: int = 1200,
+) -> np.ndarray:
+    """Filter cochlea volume based on a segmentation table.
+    Centroids contained in the segmentation table are used to create a down-scaled binary array.
+    The array can be dilated.
+
+    Args:
+        table: Segmentation table.
+        components: Component labels for filtering segmentation table.
+        scale_factor: Down-sampling factor for filtering.
+        resolution: Resolution of pixel in µm.
+        dilation_iterations: Iterations for dilating binary segmentation mask. A negative value omits binary closing.
+        padding: Padding in pixel to apply to guessed dimensions based on centroid coordinates.
+
+    Returns:
+        Binary 3D array of filtered cochlea.
+    """
+    # filter components
+    if components is not None:
+        table = table[table["component_labels"].isin(components)]
+
+    # identify approximate input dimensions for down-scaling
+    centroids = list(zip(table["anchor_x"] / resolution,
+                         table["anchor_y"] / resolution,
+                         table["anchor_z"] / resolution))
+
+    # padding the array allows for dilation without worrying about array borders
+    max_x = table["anchor_x"].max() / resolution + padding
+    max_y = table["anchor_y"].max() / resolution + padding
+    max_z = table["anchor_z"].max() / resolution + padding
+    ref_dimensions = (max_x, max_y, max_z)
+
+    # down-scale arrays
+    array_downscaled = downscaled_centroids(centroids, ref_dimensions=ref_dimensions,
+                                            scale_factor=scale_factor, downsample_mode="capped")
+
+    if dilation_iterations > 0:
+        array_dilated = binary_dilation(array_downscaled, np.ones((3, 3, 3)), iterations=dilation_iterations)
+        return binary_closing(array_dilated, np.ones((3, 3, 3)), iterations=1)
+
+    elif dilation_iterations == 0:
+        return binary_closing(array_downscaled, np.ones((3, 3, 3)), iterations=1)
+
+    else:
+        return array_downscaled
+
+
+def filter_cochlea_volume(
+    sgn_table: pd.DataFrame,
+    ihc_table: pd.DataFrame,
+    sgn_components: Optional[List[int]] = [1],
+    ihc_components: Optional[List[int]] = [1],
+    scale_factor: int = 48,
+    resolution: float = 0.38,
+    dilation_iterations: int = 12,
+    padding: int = 1200,
+    dilation_method: str = "individual",
+) -> np.ndarray:
+    """Filter cochlea volume with SGN and IHC segmentation.
+    Centroids contained in the segmentation tables are used to create down-scaled binary arrays.
+    The arrays are then dilated using guided dilation to fill the section inbetween SGNs and IHCs.
+
+    Args:
+        sgn_table: SGN segmentation table.
+        ihc_table: IHC segmentation table.
+        sgn_components: Component labels for filtering SGN segmentation table.
+        ihc_components: Component labels for filtering IHC segmentation table.
+        scale_factor: Down-sampling factor for filtering.
+        resolution: Resolution of pixel in µm.
+        dilation_iterations: Iterations for dilating binary segmentation mask.
+        padding: Padding in pixel to apply to guessed dimensions based on centroid coordinates.
+        dilation_method: Dilation style for SGN and IHC segmentation, either 'individual', 'combined' or no dilation.
+
+    Returns:
+        Binary 3D array of filtered cochlea.
+    """
+    # filter components
+    if sgn_components is not None:
+        sgn_table = sgn_table[sgn_table["component_labels"].isin(sgn_components)]
+    if ihc_components is not None:
+        ihc_table = ihc_table[ihc_table["component_labels"].isin(ihc_components)]
+
+    # identify approximate input dimensions for down-scaling
+    centroids_sgn = list(zip(sgn_table["anchor_x"] / resolution,
+                             sgn_table["anchor_y"] / resolution,
+                             sgn_table["anchor_z"] / resolution))
+    centroids_ihc = list(zip(ihc_table["anchor_x"] / resolution,
+                             ihc_table["anchor_y"] / resolution,
+                             ihc_table["anchor_z"] / resolution))
+
+    # padding the array allows for dilation without worrying about array borders
+    max_x = max([sgn_table["anchor_x"].max(), ihc_table["anchor_x"].max()]) / resolution + padding
+    max_y = max([sgn_table["anchor_y"].max(), ihc_table["anchor_y"].max()]) / resolution + padding
+    max_z = max([sgn_table["anchor_z"].max(), ihc_table["anchor_z"].max()]) / resolution + padding
+    ref_dimensions = (max_x, max_y, max_z)
+
+    # down-scale arrays
+    array_downscaled_sgn = downscaled_centroids(centroids_sgn, ref_dimensions=ref_dimensions,
+                                                scale_factor=scale_factor, downsample_mode="capped")
+
+    array_downscaled_ihc = downscaled_centroids(centroids_ihc, ref_dimensions=ref_dimensions,
+                                                scale_factor=scale_factor, downsample_mode="capped")
+
+    # dilate down-scaled SGN array in direction of IHC segmentation
+    distance_from_sgn = distance_transform_edt(~array_downscaled_sgn.astype(bool))
+    iterations = 20
+    arr_dilated = dilate_and_trim(array_downscaled_ihc.copy(), distance_from_sgn, iterations=iterations, offset=0.4)
+
+    # dilate single structures first
+    if dilation_method == "individual":
+        ihc_dilated = binary_dilation(array_downscaled_ihc, np.ones((3, 3, 3)), iterations=dilation_iterations)
+        sgn_dilated = binary_dilation(array_downscaled_sgn, np.ones((3, 3, 3)), iterations=dilation_iterations)
+        combined_dilated = arr_dilated + ihc_dilated + sgn_dilated
+        combined_dilated[combined_dilated > 0] = 1
+        combined_dilated = binary_dilation(combined_dilated, np.ones((3, 3, 3)), iterations=1)
+
+    # dilate combined structure
+    elif dilation_method == "combined":
+        # combine SGN, IHC, and region between both to form output mask
+        combined_structure = arr_dilated + array_downscaled_ihc + array_downscaled_sgn
+        combined_structure[combined_structure > 0] = 1
+        combined_dilated = binary_dilation(combined_structure, np.ones((3, 3, 3)), iterations=dilation_iterations)
+
+    # no dilation of combined structure
+    else:
+        combined_dilated = arr_dilated + ihc_dilated + sgn_dilated
+        combined_dilated[combined_dilated > 0] = 1
+
+    return combined_dilated
