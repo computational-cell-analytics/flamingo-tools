@@ -12,7 +12,7 @@ MARKER_DIR = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ChRe
 
 
 def get_length_fraction_from_center(table, center_str):
-    """ Get 'length_fraction' parameter for center coordinate by averaging nearby segmentation instances.
+    """Get 'length_fraction' parameter for center coordinate by averaging nearby segmentation instances.
     """
     center_coord = tuple([int(c) for c in center_str.split("-")])
     (cx, cy, cz) = center_coord
@@ -32,10 +32,10 @@ def get_length_fraction_from_center(table, center_str):
 
 def apply_nearest_threshold(intensity_dic, table_seg, table_measurement):
     """Apply threshold to nearest segmentation instances.
-    Crop centers are transformed into the 'length fraction' parameter of the segmentation table.
-    This avoids issues with the spiral shape of the cochlea and maps the assignment onto the Rosenthal's canal.
+    Crop centers are transformed into the "length fraction" parameter of the segmentation table.
+    This avoids issues with the spiral shape of the cochlea and maps the assignment onto the Rosenthal"s canal.
     """
-    # assign crop centers to length fraction of Rosenthal's canal
+    # assign crop centers to length fraction of Rosenthal"s canal
     lf_intensity = {}
     for key in intensity_dic.keys():
         length_fraction = get_length_fraction_from_center(table_seg, key)
@@ -91,7 +91,7 @@ def evaluate_marker_annotation(
 
     Args:
         cochleae: List of cochlea
-        output_dir: Output directory for segmentation table with 'marker_label' in format <cochlea>_<marker>_<seg>.tsv
+        output_dir: Output directory for segmentation table with "marker_label" in format <cochlea>_<marker>_<seg>.tsv
         annotation_dirs: List of directories containing marker annotations by annotator(s).
         seg_name: Identifier for segmentation.
         marker_name: Identifier for marker stain.
@@ -154,20 +154,19 @@ def evaluate_marker_annotation(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Assign each segmentation instance a marker based on annotation thresholds.")
+        description="Assign each segmentation instance a marker based on annotation thresholds."
+    )
 
-    parser.add_argument('-c', "--cochlea", type=str, nargs="+", required=True,
+    parser.add_argument("-c", "--cochlea", type=str, nargs="+", required=True,
                         help="Cochlea(e) to process.")
-    parser.add_argument('-o', "--output", type=str, required=True, help="Output directory.")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Output directory.")
 
-    parser.add_argument('-a', '--annotation_dirs', type=str, nargs="+", default=None,
+    parser.add_argument("-a", "--annotation_dirs", type=str, nargs="+", default=None,
                         help="Directories containing marker annotations.")
 
     args = parser.parse_args()
 
-    evaluate_marker_annotation(
-            args.cochlea, args.output, args.annotation_dirs,
-    )
+    evaluate_marker_annotation(args.cochlea, args.output, args.annotation_dirs,)
 
 
 if __name__ == "__main__":

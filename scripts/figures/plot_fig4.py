@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 
-from util import frequency_mapping
+from util import frequency_mapping, literature_reference_values
 
 INTENSITY_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet/tables/measurements"  # noqa
 
@@ -97,7 +97,7 @@ def group_lr(names_lr, values):
 
 
 def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
-    """Box plot showing the SGN counts of ChReef treated cochleae compared to untreated ones.
+    """Box plot showing the SGN counts of ChReef treated cochleae compared to healthy ones.
     """
     # Previous version with hard-coded values.
     # cochlea = ["M_LR_000144_L", "M_LR_000145_L", "M_LR_000151_R"]
@@ -141,10 +141,9 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
     xmin = -0.5
     xmax = len(alias) - 0.5
     plt.xlim(xmin, xmax)
-    upper_y = 12000
-    lower_y = 10000
+    lower_y, upper_y = literature_reference_values("SGN")
     plt.hlines([lower_y, upper_y], xmin, xmax)
-    plt.text(1, lower_y - 400, "literature reference (WIP)", color="C0", fontsize=main_tick_size, ha="center")
+    plt.text(1, lower_y - 400, "literature", color="C0", fontsize=main_tick_size, ha="center")
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
     sgn_values = [11153, 11398, 10333, 11820]
@@ -155,7 +154,7 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
     lower_y = sgn_value - 1.96 * sgn_std
 
     plt.hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
-    plt.text(1, upper_y + 100, "untreated cochleae (95% confidence interval)",
+    plt.text(1, upper_y + 100, "healthy cochleae (95% confidence interval)",
              color="C1", fontsize=main_tick_size, ha="center")
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
 
@@ -216,7 +215,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     plt.xticks(x, alias, fontsize=sub_label_size)
     plt.xlabel("Cochlea", fontsize=main_label_size)
     plt.yticks(fontsize=main_tick_size)
-    plt.ylabel("Transduction efficiency", fontsize=main_label_size)
+    plt.ylabel(label, fontsize=main_label_size)
     plt.legend(loc="best", fontsize=sub_label_size)
     plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.11),
                ncol=3, fancybox=True, shadow=False, framealpha=0.8, fontsize=legendsize)
@@ -256,21 +255,30 @@ def fig_04e(chreef_data, save_path, plot, intensity=False):
     band_to_x = {band: i for i, band in enumerate(bin_labels)}
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    for name, grp in result.groupby("cochlea"):
-        ax.scatter(grp["x_pos"], grp["value"], label=name, s=60, alpha=0.8)
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True)
+    for name_lr, grp in result.groupby("cochlea"):
+        name, side = name_lr[:-1], name_lr[-1]
+        ax, marker = (axes[0], "o") if side == "L" else (axes[1], "x")
+        ax.scatter(grp["x_pos"], grp["value"], label=name, s=60, alpha=0.8, marker=marker)
 
-    ax.set_xticks(range(len(bin_labels)))
-    ax.set_xticklabels(bin_labels)
-    ax.set_xlabel("Octave band (kHz)")
+    for ax in axes:
+        ax.set_xticks(range(len(bin_labels)))
+        ax.set_xticklabels(bin_labels)
+        ax.set_xlabel("Octave band (kHz)")
+
     if intensity:
-        ax.set_ylabel("Marker Intensity")
-        ax.set_title("Median intensity per octave band")
+        axes[0].set_ylabel("Marker Intensity")
+        for ax, side in zip(axes, ("Left", "Right")):
+            ax.set_title(f"Intensity per octave band ({side})")
     else:
-        ax.set_ylabel("Transduction Efficiency")
-        ax.set_ylim(0.5, 1.05)
-        ax.set_title("Transduction per octave band")
-    ax.legend(title="Cochlea")
+        axes[0].set_ylabel("Transduction Efficiency")
+        axes[0].set_ylim(0.5, 1.05)
+        for ax, side in zip(axes, ("Left", "Right")):
+            ax.set_title(f"Transduction efficiency per octave band ({side})")
+
+    # FIXME make this uniform across the plots!
+    axes[0].legend(title="Cochlea")
+    axes[1].legend(title="Cochlea")
     plt.tight_layout()
 
     plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -293,9 +301,13 @@ def main():
     # M_LR_00143_L is a complete outlier
     chreef_data.pop("M_LR_000143_L")
 
-    # Create the panels.
-    fig_04c(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04c"), plot=args.plot, plot_by_side=False)
+    # Create the panels:
 
+    # C: The SGN count compared to reference values from literature and healthy
+    # Maybe remove literature reference from plot?
+    fig_04c(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04c"), plot=args.plot, plot_by_side=True)
+
+    # D: The transduction efficiency. We also plot GFP intensities.
     fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_transduction"), plot=args.plot, plot_by_side=True)  # noqa
     fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_intensity"), plot=args.plot, plot_by_side=True, intensity=True)  # noqa
 

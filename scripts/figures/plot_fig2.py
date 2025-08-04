@@ -1,19 +1,20 @@
 import argparse
 import os
+from glob import glob
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from util import literature_reference_values
+
 png_dpi = 300
 
 
-def fig_02c(save_path, plot=False):
+def fig_02c(save_path, plot=False, all_versions=False):
     """Scatter plot showing the precision, recall, and F1-score of SGN (distance U-Net, manual),
     IHC (distance U-Net, manual), and synapse detection (U-Net).
     """
-    setting = ["U-Net", "manual", "U-Net", "manual", "U-Net"]
-
     # precision, recall, f1-score
     sgn_unet = [0.887, 0.88, 0.884]
     sgn_annotator = [0.95, 0.849, 0.9]
@@ -25,19 +26,32 @@ def fig_02c(save_path, plot=False):
     ihc_annotator = [0.958, 0.956, 0.957]
     syn_unet = [0.931, 0.905, 0.918]
 
+    # This is the version with IHC v4b segmentation:
+    # 4th version of the network with optimized segmentation params
     version_1 = [sgn_unet, sgn_annotator, ihc_v4b, ihc_annotator, syn_unet]
-    settings_1 = ["SGN_v2", "manual", "IHC_v4b", "manual", "U-Net"]
+    settings_1 = ["automatic", "manual", "automatic", "manual", "automatic"]
 
+    # This is the version with IHC v4c segmentation:
+    # 4th version of the network with optimized segmentation params and split of falsely merged IHCs
     version_2 = [sgn_unet, sgn_annotator, ihc_v4c, ihc_annotator, syn_unet]
-    settings_2 = ["SGN_v2", "manual", "IHC_v4c", "manual", "U-Net"]
+    settings_2 = ["automatic", "manual", "automatic", "manual", "automatic"]
 
+    # This is the version with IHC v4c + filter segmentation:
+    # 4th version of the network with optimized segmentation params and split of falsely merged IHCs
+    # + filtering out IHCs with zero mapped synapses.
     version_3 = [sgn_unet, sgn_annotator, ihc_v4c_filter, ihc_annotator, syn_unet]
-    settings_3 = ["SGN_v2", "manual", "IHC_v4c_filter", "manual", "U-Net"]
+    settings_3 = ["automatic", "manual", "automatic", "manual", "automatic"]
 
-    versions = [version_1, version_2, version_3]
-    settings = [settings_1, settings_2, settings_3]
-    save_suffix = ["v4b", "v4c", "v4c_filter"]
-    save_paths = [save_path + i for i in save_suffix]
+    if all_versions:
+        versions = [version_1, version_2, version_3]
+        settings = [settings_1, settings_2, settings_3]
+        save_suffix = ["_v4b", "_v4c", "_v4c_filter"]
+        save_paths = [save_path + i for i in save_suffix]
+    else:
+        versions = [version_2]
+        settings = [settings_2]
+        save_suffix = ["_v4c"]
+        save_paths = [save_path + i for i in save_suffix]
 
     for version, setting, save_path in zip(versions, settings, save_paths):
         precision = [i[0] for i in version]
@@ -84,22 +98,37 @@ def fig_02c(save_path, plot=False):
             plt.close()
 
 
-def fig_02d_01(save_path, plot=False):
+# Load the synapse counts for all IHCs from the relevant tables.
+def _load_ribbon_synapse_counts():
+    tables = glob("ihc_counts/*M_LR*.tsv")
+    syn_counts = []
+    for tab in tables:
+        x = pd.read_csv(tab, sep="\t")
+        syn_counts.extend(x["synapse_count"].values.tolist())
+    return syn_counts
+
+
+def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_synapses=False):
     """Box plot showing the counts for SGN and IHC per (mouse) cochlea in comparison to literature values.
     """
     main_tick_size = 16
     main_label_size = 24
 
     rows = 1
-    columns = 2
+    columns = 3 if plot_average_ribbon_synapses else 2
 
     sgn_values = [11153, 11398, 10333, 11820]
     ihc_v4b_values = [836, 808, 796, 901]
     ihc_v4c_values = [712, 710, 721, 675]
     ihc_v4c_filtered_values = [562, 647, 626, 628]
 
-    ihc_list = [ihc_v4b_values, ihc_v4c_values, ihc_v4c_filtered_values]
-    suffixes = ["_v4b", "_v4c", "_v4c_filtered"]
+    if all_versions:
+        ihc_list = [ihc_v4b_values, ihc_v4c_values, ihc_v4c_filtered_values]
+        suffixes = ["_v4b", "_v4c", "_v4c_filtered"]
+        assert not plot_average_ribbon_synapses
+    else:
+        ihc_list = [ihc_v4c_values]
+        suffixes = ["_v4c"]
 
     for (ihc_values, suffix) in zip(ihc_list, suffixes):
         fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
@@ -126,10 +155,9 @@ def fig_02d_01(save_path, plot=False):
         xmin = 0.5
         xmax = 1.5
         ax[0].set_xlim(xmin, xmax)
-        upper_y = 12000
-        lower_y = 10000
+        lower_y, upper_y = literature_reference_values("SGN")
         ax[0].hlines([lower_y, upper_y], xmin, xmax)
-        ax[0].text(1, upper_y + 100, "literature reference (WIP)", color="C0", fontsize=main_tick_size, ha="center")
+        ax[0].text(1, upper_y + 100, "literature", color="C0", fontsize=main_tick_size, ha="center")
         ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         ylim0 = 500
@@ -137,22 +165,35 @@ def fig_02d_01(save_path, plot=False):
         y_ticks = [i for i in range(500, 900 + 1, 100)]
 
         ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
-
         ax[1].set_yticks(y_ticks)
         ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
         ax[1].set_ylim(ylim0, ylim1)
-        ax[1].yaxis.tick_right()
-        ax[1].yaxis.set_ticks_position("right")
+        if not plot_average_ribbon_synapses:
+            ax[1].yaxis.tick_right()
+            ax[1].yaxis.set_ticks_position("right")
 
         # set range of literature values
         xmin = 0.5
         xmax = 1.5
+        lower_y, upper_y = literature_reference_values("IHC")
         ax[1].set_xlim(xmin, xmax)
-        upper_y = 850
-        lower_y = 780
         ax[1].hlines([lower_y, upper_y], xmin, xmax)
-        ax[1].text(1, lower_y - 10, "literature reference (WIP)", color="C0", fontsize=main_tick_size, ha="center")
+        ax[1].text(1, upper_y + 20, "literature", color="C0", fontsize=main_tick_size, ha="center")
         ax[1].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
+
+        if plot_average_ribbon_synapses:
+            ribbon_synapse_counts = _load_ribbon_synapse_counts()
+            # ylim0 = 4.9
+            # ylim1 = 25.1
+            y_ticks = [0, 10, 20, 30, 40, 50]
+
+            ax[2].boxplot(ribbon_synapse_counts)
+            ax[2].set_xticklabels(["Ribbon Syn. per IHC"], fontsize=main_label_size)
+            ax[2].set_yticks(y_ticks)
+            ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+            # ax[2].set_ylim(ylim0, ylim1)
+
+            # TODO range of values from literature.
 
         plt.tight_layout()
         plt.savefig(save_path_new, dpi=png_dpi)
@@ -249,12 +290,17 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    fig_02c(save_path=os.path.join(args.figure_dir, "fig_02c"), plot=args.plot)
-    fig_02d_01(save_path=os.path.join(args.figure_dir, "fig_02d_01"), plot=args.plot)
-    fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02"), plot=args.plot)
+    # Panel C: Evaluation of the segmentation results:
+    fig_02c(save_path=os.path.join(args.figure_dir, "fig_02c"), plot=args.plot, all_versions=False)
+
+    # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
+    fig_02d_01(save_path=os.path.join(args.figure_dir, "fig_02d"), plot=args.plot, plot_average_ribbon_synapses=True)
+
+    # Alternative version of synapse distribution for panel D.
+    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02"), plot=args.plot)
     # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4c"), filter_zeros=False, plot=plot)
     # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4c_filtered"), filter_zeros=True, plot=plot)
-    fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4b"), filter_zeros=True, plot=args.plot)
+    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4b"), filter_zeros=True, plot=args.plot)
 
 
 if __name__ == "__main__":

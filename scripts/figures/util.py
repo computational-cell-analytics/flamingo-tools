@@ -16,7 +16,7 @@ def _get_mapping(animal):
         ]
     else:
         raise ValueError
-    assert len(bin_edges) == len(bin_labels)
+    assert len(bin_edges) == len(bin_labels) + 1
     return bin_edges, bin_labels
 
 
@@ -42,10 +42,32 @@ def frequency_mapping(frequencies, values, animal="mouse", transduction_efficien
         )
     return value_by_band
 
-# mean_by_band.plot.bar()
-# plt.ylabel("Mean value")
-# plt.xlabel("Octave band (kHz)")
-# plt.title("Mouse data binned by octave")
-# plt.tight_layout()
-# plt.show()
-#
+
+def sliding_runlength_sum(run_length, values, width):
+    assert len(run_length) == len(values)
+    # Create data frame and sort it.
+    df = pd.DataFrame({"run_length": run_length, "value": values})
+    df = df.sort_values("run_length").reset_index(drop=True).copy()
+
+    x = df["run_length"].to_numpy()
+    y = df["value"].to_numpy()
+
+    cumsum = np.cumsum(y)
+    start_idx = np.searchsorted(x, x - width, side="left")
+    window_sum = cumsum - np.concatenate(([0], cumsum[:-1]))[start_idx]
+    assert len(window_sum) == len(x)
+
+    return x, window_sum
+
+
+# TODO determine these from Aleyna's table!
+def literature_reference_values(structure):
+    if structure == "SGN":
+        lower_bound, upper_bound = 10000, 12000
+    elif structure == "IHC":
+        lower_bound, upper_bound = 780, 850
+    elif structure == "synapse":
+        raise NotImplementedError
+    else:
+        raise ValueError
+    return lower_bound, upper_bound
