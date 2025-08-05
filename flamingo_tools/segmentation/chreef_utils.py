@@ -128,7 +128,7 @@ def find_inbetween_ids(
     Args:
         arr_negexc: Array with all negatives excluded.
         arr_allweak: Array with all weak positives.
-        roi_sgn: Region of interest of segmentation.
+        roi_seg: Region of interest of segmentation.
 
     Returns:
         A list of the ids that are in between the respective thresholds.

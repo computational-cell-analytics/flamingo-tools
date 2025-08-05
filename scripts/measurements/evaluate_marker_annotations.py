@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from typing import List, Optional
 
@@ -9,6 +10,22 @@ from flamingo_tools.file_utils import read_image_data
 from flamingo_tools.segmentation.chreef_utils import localize_median_intensities, find_annotations
 
 MARKER_DIR = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/ChReef_PV-GFP/2025-07_PV_GFP_SGN"
+# The cochlea for the CHReef analysis.
+COCHLEAE = [
+    "M_LR_000143_L",
+    "M_LR_000144_L",
+    "M_LR_000145_L",
+    "M_LR_000153_L",
+    "M_LR_000155_L",
+    "M_LR_000189_L",
+    "M_LR_000143_R",
+    "M_LR_000144_R",
+    "M_LR_000145_R",
+    "M_LR_000153_R",
+    "M_LR_000155_R",
+    "M_LR_000189_L",
+    "M_LR_000189_R",
+]
 
 
 def get_length_fraction_from_center(table, center_str):
@@ -76,13 +93,40 @@ def apply_nearest_threshold(intensity_dic, table_seg, table_measurement):
     return table_seg
 
 
+def find_thresholds(cochlea_annotations, cochlea, data_seg, table_measurement):
+    # Find the median intensities by averaging  th individual annotations for specific crops
+    annotation_dics = {}
+    annotated_centers = []
+    for annotation_dir in cochlea_annotations:
+        annotation_dic = localize_median_intensities(annotation_dir, cochlea, data_seg, table_measurement)
+        annotated_centers.extend(annotation_dic["center_strings"])
+        annotation_dics[annotation_dir] = annotation_dic
+
+    annotated_centers = list(set(annotated_centers))
+    intensity_dic = {}
+    # loop over all annotated blocks
+    for annotated_center in annotated_centers:
+        intensities = []
+        # loop over annotated block from single user
+        for annotator_key in annotation_dics.keys():
+            if annotated_center not in annotation_dics[annotator_key]["center_strings"]:
+                continue
+            else:
+                intensities.append(annotation_dics[annotator_key][annotated_center]["median_intensity"])
+        intensity_dic[annotated_center] = {"median_intensity": float(sum(intensities) / len(intensities))}
+
+    return intensity_dic
+
+
 def evaluate_marker_annotation(
     cochleae,
     output_dir: str,
     annotation_dirs: Optional[List[str]] = None,
     seg_name: str = "SGN_v2",
     marker_name: str = "GFP",
-):
+    threshold_save_dir: Optional[str] = None,
+    force: bool = False,
+) -> None:
     """Evaluate marker annotations of a single or multiple annotators.
     Segmentation instances are assigned a positive (1) or negative label (2)
     in form of the "marker_label" component of the output segmentation table.
@@ -95,6 +139,8 @@ def evaluate_marker_annotation(
         annotation_dirs: List of directories containing marker annotations by annotator(s).
         seg_name: Identifier for segmentation.
         marker_name: Identifier for marker stain.
+        threshold_save_dir: Optional directory for saving the thresholds.
+        force: Whether to overwrite already existing results.
     """
     input_key = "s0"
 
@@ -104,11 +150,17 @@ def evaluate_marker_annotation(
             annotation_dirs = [entry.path for entry in os.scandir(marker_dir)
                                if os.path.isdir(entry) and "Results" in entry.name]
 
+    seg_string = "-".join(seg_name.split("_"))
     for cochlea in cochleae:
+        cochlea_str = "-".join(cochlea.split("_"))
+        out_path = os.path.join(output_dir, f"{cochlea_str}_{marker_name}_{seg_string}.tsv")
+        if os.path.exists(out_path) and not force:
+            continue
+
         cochlea_annotations = [a for a in annotation_dirs if len(find_annotations(a, cochlea)["center_strings"]) != 0]
         print(f"Evaluating data for cochlea {cochlea} in {cochlea_annotations}.")
 
-        # get segmentation data
+        # Get the segmentation data and table.
         input_path = f"{cochlea}/images/ome-zarr/{seg_name}.ome.zarr"
         input_path, fs = get_s3_path(input_path)
         data_seg = read_image_data(input_path, input_key)
@@ -118,37 +170,24 @@ def evaluate_marker_annotation(
         with fs.open(table_path_s3, "r") as f:
             table_seg = pd.read_csv(f, sep="\t")
 
-        seg_string = "-".join(seg_name.split("_"))
         table_measurement_path = f"{cochlea}/tables/{seg_name}/{marker_name}_{seg_string}_object-measures.tsv"
         table_path_s3, fs = get_s3_path(table_measurement_path)
         with fs.open(table_path_s3, "r") as f:
             table_measurement = pd.read_csv(f, sep="\t")
 
-        # find median intensities by averaging all individual annotations for specific crops
-        annotation_dics = {}
-        annotated_centers = []
-        for annotation_dir in cochlea_annotations:
+        # Find the threholds from the annotated blocks and save it if specified.
+        intensity_dic = find_thresholds(cochlea_annotations, cochlea, data_seg, table_measurement)
+        if threshold_save_dir is not None:
+            os.makedirs(threshold_save_dir, exist_ok=True)
+            threshold_out_path = os.path.join(threshold_save_dir, f"{cochlea_str}_{marker_name}_{seg_string}.json")
+            with open(threshold_out_path, "w") as f:
+                json.dump(intensity_dic, f, sort_keys=True, indent=4)
 
-            annotation_dic = localize_median_intensities(annotation_dir, cochlea, data_seg, table_measurement)
-            annotated_centers.extend(annotation_dic["center_strings"])
-            annotation_dics[annotation_dir] = annotation_dic
-
-        annotated_centers = list(set(annotated_centers))
-        intensity_dic = {}
-        # loop over all annotated blocks
-        for annotated_center in annotated_centers:
-            intensities = []
-            # loop over annotated block from single user
-            for annotator_key in annotation_dics.keys():
-                if annotated_center not in annotation_dics[annotator_key]["center_strings"]:
-                    continue
-                else:
-                    intensities.append(annotation_dics[annotator_key][annotated_center]["median_intensity"])
-            intensity_dic[annotated_center] = {"median_intensity": float(sum(intensities) / len(intensities))}
-
+        # Apply the threshold to all SGNs.
         table_seg = apply_nearest_threshold(intensity_dic, table_seg, table_measurement)
-        cochlea_str = "-".join(cochlea.split("_"))
-        out_path = os.path.join(output_dir, f"{cochlea_str}_{marker_name}_{seg_string}.tsv")
+
+        # Save the table with positives / negatives for all SGNs.
+        os.makedirs(output_dir, exist_ok=True)
         table_seg.to_csv(out_path, sep="\t", index=False)
 
 
@@ -157,18 +196,18 @@ def main():
         description="Assign each segmentation instance a marker based on annotation thresholds."
     )
 
-    parser.add_argument("-c", "--cochlea", type=str, nargs="+", required=True,
-                        help="Cochlea(e) to process.")
+    parser.add_argument("-c", "--cochlea", type=str, nargs="+", default=COCHLEAE, help="Cochlea(e) to process.")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output directory.")
-
     parser.add_argument("-a", "--annotation_dirs", type=str, nargs="+", default=None,
                         help="Directories containing marker annotations.")
+    parser.add_argument("--threshold_save_dir", "-t")
+    parser.add_argument("-f", "--force", action="store_true")
 
     args = parser.parse_args()
-
-    evaluate_marker_annotation(args.cochlea, args.output, args.annotation_dirs,)
+    evaluate_marker_annotation(
+        args.cochlea, args.output, args.annotation_dirs, threshold_save_dir=args.threshold_save_dir, force=args.force
+    )
 
 
 if __name__ == "__main__":
-
     main()
