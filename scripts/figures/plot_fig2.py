@@ -193,7 +193,14 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
             # ax[2].set_ylim(ylim0, ylim1)
 
-            # TODO range of values from literature.
+            # set range of literature values
+            xmin = 0.5
+            xmax = 1.5
+            lower_y, upper_y = literature_reference_values("synapse")
+            ax[2].set_xlim(xmin, xmax)
+            ax[2].hlines([lower_y, upper_y], xmin, xmax)
+            ax[2].text(1, upper_y + 2, "literature", color="C0", fontsize=main_tick_size, ha="center")
+            ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         plt.tight_layout()
         plt.savefig(save_path_new, dpi=png_dpi)

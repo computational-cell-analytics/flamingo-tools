@@ -67,7 +67,7 @@ def literature_reference_values(structure):
     elif structure == "IHC":
         lower_bound, upper_bound = 780, 850
     elif structure == "synapse":
-        raise NotImplementedError
+        lower_bound, upper_bound = 10, 25
     else:
         raise ValueError
     return lower_bound, upper_bound
