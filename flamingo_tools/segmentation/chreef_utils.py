@@ -149,8 +149,12 @@ def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
 
     roi_seg = data_seg[roi]
     inbetween_ids = find_inbetween_ids(arr_negexc, arr_allweak, roi_seg)
+    if len(inbetween_ids) == 0:
+        return None
+
     subset = table[table["label_id"].isin(inbetween_ids)]
     intensities = list(subset["median"])
+
     return np.median(list(intensities))
 
 
@@ -162,10 +166,13 @@ def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure
 
     for center_str in annotation_dic["center_strings"]:
         center_coord = coord_from_string(center_str)
-        print(f"Getting mean intensities for {center_coord}.")
+        print(f"Getting median intensities for {center_coord}.")
         file_pos = annotation_dic[center_str]["file_pos"]
         file_neg = annotation_dic[center_str]["file_neg"]
         median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg, table_measure)
+
+        if median_intensity is None:
+            print(f"No inbetween IDs found for {center_str}.")
 
         annotation_dic[center_str]["median_intensity"] = median_intensity
 

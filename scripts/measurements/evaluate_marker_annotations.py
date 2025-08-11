@@ -23,7 +23,6 @@ COCHLEAE = [
     "M_LR_000145_R",
     "M_LR_000153_R",
     "M_LR_000155_R",
-    "M_LR_000189_L",
     "M_LR_000189_R",
 ]
 
@@ -94,10 +93,11 @@ def apply_nearest_threshold(intensity_dic, table_seg, table_measurement):
 
 
 def find_thresholds(cochlea_annotations, cochlea, data_seg, table_measurement):
-    # Find the median intensities by averaging  th individual annotations for specific crops
+    # Find the median intensities by averaging the individual annotations for specific crops
     annotation_dics = {}
     annotated_centers = []
     for annotation_dir in cochlea_annotations:
+        print(f"Localizing threshold with median intensities for {os.path.basename(annotation_dir)}.")
         annotation_dic = localize_median_intensities(annotation_dir, cochlea, data_seg, table_measurement)
         annotated_centers.extend(annotation_dic["center_strings"])
         annotation_dics[annotation_dir] = annotation_dic
@@ -112,14 +112,21 @@ def find_thresholds(cochlea_annotations, cochlea, data_seg, table_measurement):
             if annotated_center not in annotation_dics[annotator_key]["center_strings"]:
                 continue
             else:
-                intensities.append(annotation_dics[annotator_key][annotated_center]["median_intensity"])
-        intensity_dic[annotated_center] = {"median_intensity": float(sum(intensities) / len(intensities))}
+                median_intensity = annotation_dics[annotator_key][annotated_center]["median_intensity"]
+                if median_intensity is None:
+                    print(f"No threshold for {os.path.basename(annotator_key)} and crop {annotated_center}.")
+                else:
+                    intensities.append(median_intensity)
+        if len(intensities) == 0:
+            print(f"No viable annotation for cochlea {cochlea} and crop {annotated_center}.")
+        else:
+            intensity_dic[annotated_center] = {"median_intensity": float(sum(intensities) / len(intensities))}
 
     return intensity_dic
 
 
 def evaluate_marker_annotation(
-    cochleae,
+    cochleae: List[str],
     output_dir: str,
     annotation_dirs: Optional[List[str]] = None,
     seg_name: str = "SGN_v2",
