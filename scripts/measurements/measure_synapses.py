@@ -11,7 +11,8 @@ OUTPUT_FOLDER = "./ihc_counts"
 
 def check_project(plot=False, save_ihc_table=False, max_dist=None):
     s3 = create_s3_target()
-    cochleae = ['M_LR_000226_L', 'M_LR_000226_R', 'M_LR_000227_L', 'M_LR_000227_R', 'M_AMD_OTOF1_L']
+    # cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R", "M_AMD_OTOF1_L"]
+    cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R"]
 
     results = {}
     for cochlea in cochleae:
@@ -19,7 +20,7 @@ def check_project(plot=False, save_ihc_table=False, max_dist=None):
         ihc_table_name = "IHC_v4c"
         component_id = [1]
 
-        if cochlea == 'M_AMD_OTOF1_L':
+        if cochlea == "M_AMD_OTOF1_L":
             synapse_table_name = "synapse_v3_ihc_v4b"
             ihc_table_name = "IHC_v4b"
             component_id = [3, 11]
@@ -61,6 +62,13 @@ def check_project(plot=False, save_ihc_table=False, max_dist=None):
         print("@ max dist:", max_dist)
         print()
 
+        run_length_dict = {
+            ihc_id: run_length for ihc_id, run_length in zip(ihc_table.label_id.values, ihc_table["length[µm]"].values)
+        }
+        frequency_dict = {
+            ihc_id: freq for ihc_id, freq in zip(ihc_table.label_id.values, ihc_table["frequency[kHz]"].values)
+        }
+
         if save_ihc_table:
             ihc_to_count = {ihc_id: count for ihc_id, count in zip(ihc_ids, syn_per_ihc)}
             unmatched_ihcs = np.setdiff1d(valid_ihcs, ihc_ids)
@@ -71,6 +79,8 @@ def check_project(plot=False, save_ihc_table=False, max_dist=None):
                 "snyapse_table": [synapse_table_name for _ in list(ihc_to_count.values())],
                 "ihc_table": [ihc_table_name for _ in list(ihc_to_count.values())],
                 "max_dist": [max_dist for _ in list(ihc_to_count.values())],
+                "run_length": [run_length_dict[ihc_id] for ihc_id in ihc_to_count.keys()],
+                "frequency": [frequency_dict[ihc_id] for ihc_id in ihc_to_count.keys()]
             })
             os.makedirs(OUTPUT_FOLDER, exist_ok=True)
             output_path = os.path.join(OUTPUT_FOLDER, f"ihc_count_{cochlea}.tsv")
