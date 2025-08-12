@@ -5,7 +5,7 @@ import zarr
 
 import flamingo_tools.s3_utils as s3_utils
 
-OUTPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet/tables/measurements/"  # noqa
+OUTPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet/tables/measurements2"  # noqa
 JSON_ROOT = "/user/pape41/u12086/Work/my_projects/flamingo-tools/reproducibility/object_measures"
 COCHLEAE = [
     "M_LR_000143_L",
@@ -65,7 +65,7 @@ def process_cochlea(cochlea, start_slurm):
 
 
 def main():
-    start_slurm = False
+    start_slurm = True
     for cochlea in COCHLEAE:
         process_cochlea(cochlea, start_slurm)
 

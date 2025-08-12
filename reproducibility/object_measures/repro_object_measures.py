@@ -21,7 +21,7 @@ def repro_object_measures(
     default_component_list = [1]
     default_bg_mask = None
 
-    with open(json_file, 'r') as myfile:
+    with open(json_file, "r") as myfile:
         data = myfile.read()
     param_dicts = json.loads(data)
 
