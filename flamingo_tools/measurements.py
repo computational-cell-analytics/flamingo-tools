@@ -9,8 +9,11 @@ import pandas as pd
 import trimesh
 from elf.io import open_file
 from elf.wrapper.resized_volume import ResizedVolume
+from elf.wrapper.base import WrapperBase
+from elf.util import normalize_index, squeeze_singletons
 from nifty.tools import blocking
 from skimage.measure import marching_cubes, regionprops_table
+from skimage.transform import downscale_local_mean
 from scipy.ndimage import binary_dilation
 from tqdm import tqdm
 
@@ -346,12 +349,35 @@ def compute_object_measures(
     measures.to_csv(output_table_path, sep="\t", index=False)
 
 
+# Refactor to elf?
+class ResizedVolumeLocalMean(WrapperBase):
+    def __init__(self, volume, factors):
+        super().__init__(volume)
+        self._scale = factors
+        self._shape = tuple(int(np.ceil(s / f)) for s, f in zip(volume.shape, self._scale))
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def scale(self):
+        return self._scale
+
+    def __getitem__(self, key):
+        index, to_squeeze = normalize_index(key, self.shape)
+        index = tuple(slice(s.start * f, s.stop * f) for s, f in zip(index, self._scale))
+        out = self.volume[index]
+        out = downscale_local_mean(out, self._scale)
+        return squeeze_singletons(out, to_squeeze)
+
+
 def compute_sgn_background_mask(
     image_path: str,
     segmentation_path: str,
     image_key: Optional[str] = None,
     segmentation_key: Optional[str] = None,
-    threshold_percentile: float = 35.0,
+    threshold_percentile: int = 35,
     scale_factor: Tuple[int, int, int] = (16, 16, 16),
     n_threads: Optional[int] = None,
     cache_path: Optional[str] = None,
@@ -388,7 +414,7 @@ def compute_sgn_background_mask(
                 return mask
 
     original_shape = image.shape
-    downsampled_shape = tuple(int(np.round(sh / sf)) for sh, sf in zip(original_shape, scale_factor))
+    downsampled_shape = tuple(int(np.ceil(sh / sf)) for sh, sf in zip(original_shape, scale_factor))
 
     low_res_mask = np.zeros(downsampled_shape, dtype="bool")
 
@@ -399,7 +425,7 @@ def compute_sgn_background_mask(
     blocks = blocking((0, 0, 0), downsampled_shape, chunk_shape)
     n_blocks = blocks.numberOfBlocks
 
-    img_resized = ResizedVolume(image, downsampled_shape)
+    img_resized = ResizedVolumeLocalMean(image, scale_factor)
     seg_resized = ResizedVolume(segmentation, downsampled_shape, order=0)
 
     def _compute_block(block_id):
