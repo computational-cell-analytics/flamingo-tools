@@ -107,20 +107,35 @@ def find_thresholds(cochlea_annotations, cochlea, data_seg, table_measurement):
     # loop over all annotated blocks
     for annotated_center in annotated_centers:
         intensities = []
+        annotator_success = []
+        annotator_failure = []
+        annotator_missing = []
         # loop over annotated block from single user
         for annotator_key in annotation_dics.keys():
             if annotated_center not in annotation_dics[annotator_key]["center_strings"]:
+                annotator_missing.append(os.path.basename(annotator_key))
                 continue
             else:
                 median_intensity = annotation_dics[annotator_key][annotated_center]["median_intensity"]
                 if median_intensity is None:
                     print(f"No threshold for {os.path.basename(annotator_key)} and crop {annotated_center}.")
+                    annotator_failure.append(os.path.basename(annotator_key))
                 else:
                     intensities.append(median_intensity)
+                    annotator_success.append(os.path.basename(annotator_key))
+
         if len(intensities) == 0:
             print(f"No viable annotation for cochlea {cochlea} and crop {annotated_center}.")
+            median_int_avg = None
         else:
-            intensity_dic[annotated_center] = {"median_intensity": float(sum(intensities) / len(intensities))}
+            median_int_avg = float(sum(intensities) / len(intensities)),
+
+        intensity_dic[annotated_center] = {
+            "median_intensity": median_int_avg,
+            "annotation_success": annotator_success,
+            "annotation_failure": annotator_failure,
+            "annotation_missing": annotator_missing,
+        }
 
     return intensity_dic
 
