@@ -96,6 +96,31 @@ def filter_cochlea(
                                      dilation_iterations=dilation_iterations)
 
 
+def filter_marker_instances(cochlea, segmentation, seg_name):
+    """Filter segmentation with marker labels.
+    Positive segmentation instances are set to 1, negative to 2.
+    """
+    internal_path = os.path.join(cochlea, "tables",  seg_name, "default.tsv")
+    tsv_path, fs = get_s3_path(internal_path, bucket_name=BUCKET_NAME, service_endpoint=SERVICE_ENDPOINT)
+    with fs.open(tsv_path, "r") as f:
+        table_seg = pd.read_csv(f, sep="\t")
+
+    label_ids_positive = list(table_seg.loc[table_seg["marker_labels"] == 1, "label_id"])
+    label_ids_negative = list(table_seg.loc[table_seg["marker_labels"] == 2, "label_id"])
+
+    label_ids_marker = label_ids_positive + label_ids_negative
+    filter_mask = ~np.isin(segmentation, label_ids_marker)
+    segmentation[filter_mask] = 0
+
+    filter_mask = np.isin(segmentation, label_ids_positive)
+    segmentation[filter_mask] = 1
+    filter_mask = np.isin(segmentation, label_ids_negative)
+    segmentation[filter_mask] = 2
+
+    segmentation = segmentation.astype("uint16")
+    return segmentation
+
+
 def upscale_volume(
     target_data: np.ndarray,
     downscaled_volume: np.ndarray,
@@ -146,6 +171,9 @@ def export_lower_resolution(args):
         input_key = f"s{scale}"
         for channel in args.channels:
             out_path = os.path.join(output_folder, f"{channel}.tif")
+            if args.filter_marker_labels:
+                out_path = os.path.join(output_folder, f"{channel}_marker.tif")
+
             if os.path.exists(out_path):
                 continue
 
@@ -156,7 +184,11 @@ def export_lower_resolution(args):
                 data = f[input_key][:]
             print("Data shape", data.shape)
             if args.filter_by_components is not None:
+                print(f"Filtering channel {channel} by components {args.filter_by_components}.")
                 data = filter_component(fs, data, args.cochlea, channel, args.filter_by_components)
+            if args.filter_marker_labels:
+                print(f"Filtering marker instances for channel {channel}.")
+                data = filter_marker_instances(args.cochlea, data, channel)
             if args.filter_cochlea_channels is not None:
                 us_factor = ds_factor // (2 ** scale)
                 upscaled_filter = upscale_volume(data, filter_volume, upscale_factor=us_factor)
@@ -181,6 +213,7 @@ def main():
     parser.add_argument("--filter_ihc_components", nargs="+", type=int, default=[1])
     parser.add_argument("--binarize", action="store_true")
     parser.add_argument("--filter_cochlea_channels", nargs="+", type=str, default=None)
+    parser.add_argument("--filter_marker_labels", action="store_true")
     parser.add_argument("--filter_dilation_iterations", type=int, default=8)
     args = parser.parse_args()
 

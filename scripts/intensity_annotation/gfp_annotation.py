@@ -4,6 +4,7 @@ import os
 import imageio.v3 as imageio
 import napari
 import numpy as np
+import pandas as pd
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,7 +15,8 @@ from magicgui import magicgui
 from elf.parallel.distance_transform import distance_transform
 from elf.parallel.seeded_watershed import seeded_watershed
 
-from flamingo_tools.measurements import compute_object_measures_impl
+from flamingo_tools.measurements import compute_object_measures_impl, get_object_measures_from_table
+from flamingo_tools.s3_utils import get_s3_path
 
 
 class HistogramWidget(QWidget):
@@ -132,7 +134,7 @@ def _create_mask(seg_extended, stain):
     return mask
 
 
-def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=False):
+def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=False, seg_version=None):
     assert background_norm in (None, "division", "subtraction")
 
     direc = os.path.dirname(os.path.abspath(prefix))
@@ -179,9 +181,22 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=
         mask = _create_mask(seg_extended, stain1)
         assert mask.shape == seg_extended.shape
         feature_set = "default_background_norm" if background_norm == "division" else "default_background_subtract"
-    statistics = compute_object_measures_impl(
-        stain1, seg_extended, feature_set=feature_set, background_mask=mask, median_only=True
-    )
+
+    if seg_version is not None:
+        seg_string = "-".join(seg_version.split("_"))
+        cochlea = os.path.basename(prefix).split("_crop_")[0]
+
+        table_measurement_path = f"{cochlea}/tables/{seg_version}/{stain1_name}_{seg_string}_object-measures.tsv"
+        table_path_s3, fs = get_s3_path(table_measurement_path)
+        with fs.open(table_path_s3, "r") as f:
+            table_measurement = pd.read_csv(f, sep="\t")
+
+        statistics = get_object_measures_from_table(seg, table=table_measurement)
+
+    else:
+        statistics = compute_object_measures_impl(
+            stain1, seg_extended, feature_set=feature_set, background_mask=mask, median_only=True
+        )
 
     # Open the napari viewer.
     v = napari.Viewer()
@@ -281,9 +296,11 @@ def main():
     parser.add_argument("--otof", action="store_true",
                         help="Whether to run the annotation tool for otof samples with VGlut3, "
                         "Alphatag and IHC segmentation.")  # noqa
+    parser.add_argument("--seg_version", type=str, default=None,
+                        help="Supply segmentation version, e.g. SGN_v2, to use intensities from object measure table.")
     args = parser.parse_args()
 
-    gfp_annotation(args.prefix, background_norm=args.background_norm, is_otof=args.otof)
+    gfp_annotation(args.prefix, background_norm=args.background_norm, is_otof=args.otof, seg_version=args.seg_version)
 
 
 if __name__ == "__main__":
