@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import warnings
 from concurrent import futures
 from functools import partial
 from typing import List, Optional, Tuple
@@ -188,14 +189,22 @@ def _regionprops_features(seg_id, table, image, segmentation, resolution, backgr
     return features
 
 
-def get_object_measures_from_table(arr_seg, table_measures):
+def get_object_measures_from_table(arr_seg, table):
     """Return object measurements for label IDs wthin array.
     """
     # iterate through segmentation ids in reference mask
     ref_ids = list(np.unique(arr_seg)[1:])
-    measure_ids = list(table_measures["label_id"])
+    measure_ids = list(table["label_id"])
     object_ids = [id for id in ref_ids if id in measure_ids]
-    measures = pd.DataFrame({k: float(table_measures[table_measures["label_id"] == id, "median"]) for k in object_ids})
+    if len(object_ids) < len(ref_ids):
+        warnings.warn(f"Not all IDs were found in measurement table. Using {len(object_ids)}/{len(ref_ids)}.")
+
+    median_values = [table.at[table.index[table["label_id"] == label_id][0], "median"] for label_id in object_ids]
+
+    measures = pd.DataFrame({
+        "label_id": object_ids,
+        "median": median_values,
+    })
     return measures
 
 
