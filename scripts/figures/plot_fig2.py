@@ -1,6 +1,5 @@
 import argparse
 import os
-from glob import glob
 
 import numpy as np
 import pandas as pd
@@ -100,7 +99,9 @@ def fig_02c(save_path, plot=False, all_versions=False):
 
 # Load the synapse counts for all IHCs from the relevant tables.
 def _load_ribbon_synapse_counts():
-    tables = glob("ihc_counts/*M_LR*.tsv")
+    ihc_version = "ihc_counts_v4c"
+    synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
+    tables = [entry.path for entry in os.scandir(synapse_dir) if "ihc_count_M_LR" in entry.name]
     syn_counts = []
     for tab in tables:
         x = pd.read_csv(tab, sep="\t")
@@ -141,9 +142,9 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         # Labels and formatting
         ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
 
-        ylim0 = 9500
+        ylim0 = 8500
         ylim1 = 12500
-        y_ticks = [i for i in range(10000, 12000 + 1, 1000)]
+        y_ticks = [i for i in range(9000, 12000 + 1, 1000)]
 
         ax[0].set_ylabel("Count per cochlea", fontsize=main_label_size)
         ax[0].set_yticks(y_ticks)
@@ -157,12 +158,12 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         ax[0].set_xlim(xmin, xmax)
         lower_y, upper_y = literature_reference_values("SGN")
         ax[0].hlines([lower_y, upper_y], xmin, xmax)
-        ax[0].text(1, upper_y + 100, "literature", color="C0", fontsize=main_tick_size, ha="center")
+        ax[0].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
         ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
-        ylim0 = 500
-        ylim1 = 950
-        y_ticks = [i for i in range(500, 900 + 1, 100)]
+        ylim0 = 600
+        ylim1 = 800
+        y_ticks = [i for i in range(600, 800 + 1, 100)]
 
         ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
         ax[1].set_yticks(y_ticks)
@@ -178,20 +179,20 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         lower_y, upper_y = literature_reference_values("IHC")
         ax[1].set_xlim(xmin, xmax)
         ax[1].hlines([lower_y, upper_y], xmin, xmax)
-        ax[1].text(1, upper_y + 20, "literature", color="C0", fontsize=main_tick_size, ha="center")
+        ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
         ax[1].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         if plot_average_ribbon_synapses:
             ribbon_synapse_counts = _load_ribbon_synapse_counts()
-            # ylim0 = 4.9
-            # ylim1 = 25.1
+            ylim0 = -1
+            ylim1 = 41
             y_ticks = [0, 10, 20, 30, 40, 50]
 
             ax[2].boxplot(ribbon_synapse_counts)
             ax[2].set_xticklabels(["Ribbon Syn. per IHC"], fontsize=main_label_size)
             ax[2].set_yticks(y_ticks)
             ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-            # ax[2].set_ylim(ylim0, ylim1)
+            ax[2].set_ylim(ylim0, ylim1)
 
             # set range of literature values
             xmin = 0.5
@@ -199,7 +200,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             lower_y, upper_y = literature_reference_values("synapse")
             ax[2].set_xlim(xmin, xmax)
             ax[2].hlines([lower_y, upper_y], xmin, xmax)
-            ax[2].text(1, upper_y + 2, "literature", color="C0", fontsize=main_tick_size, ha="center")
+            ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
             ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         plt.tight_layout()

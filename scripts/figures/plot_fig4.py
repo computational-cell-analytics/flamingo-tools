@@ -71,8 +71,9 @@ def get_chreef_data():
         chreef_data[cochlea] = values
 
     with open(cache_path, "wb") as f:
-        chreef_data = pickle.dump(chreef_data, f)
-    return chreef_data
+        pickle.dump(chreef_data, f)
+    with open(cache_path, "rb") as f:
+        return pickle.load(f)
 
 
 def group_lr(names_lr, values):
@@ -143,7 +144,7 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
     plt.xlim(xmin, xmax)
     lower_y, upper_y = literature_reference_values("SGN")
     plt.hlines([lower_y, upper_y], xmin, xmax)
-    plt.text(1, lower_y - 400, "literature", color="C0", fontsize=main_tick_size, ha="center")
+    plt.text(1.5, lower_y - 400, "literature", color="C0", fontsize=main_tick_size, ha="center")
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
     sgn_values = [11153, 11398, 10333, 11820]
@@ -154,12 +155,12 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
     lower_y = sgn_value - 1.96 * sgn_std
 
     plt.hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
-    plt.text(1, upper_y + 100, "healthy cochleae (95% confidence interval)",
+    plt.text(1.5, upper_y + 100, "healthy cochleae (95% confidence interval)",
              color="C1", fontsize=main_tick_size, ha="center")
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
 
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     plt.tight_layout()
+    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
 
     if plot:
         plt.show()
@@ -179,12 +180,10 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
             intensities = vals["median"].values
             values.append(intensities.mean())
         else:
-            # The marker labels don't make sense yet, they are in
-            # 0: unlabeled
+            # marker labels
+            # 0: unlabeled - no median intensity in object_measures table
             # 1: positive
             # 2: negative
-            # but they should all be either positive or negative.
-            # Or am I missing something?
             marker_labels = vals["marker_labels"].values
             n_pos = (marker_labels == 1).sum()
             n_neg = (marker_labels == 2).sum()
@@ -222,8 +221,8 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     if not intensity:
         plt.ylim(0.5, 1.05)
 
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     plt.tight_layout()
+    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
 
     if plot:
         plt.show()
@@ -255,30 +254,76 @@ def fig_04e(chreef_data, save_path, plot, intensity=False):
     band_to_x = {band: i for i, band in enumerate(bin_labels)}
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
-    fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True)
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    sub_tick_label_size = 8
+    tick_label_size = 12
+    label_size = 12
+    legend_size = 8
+    if intensity:
+        band_label_offset_y = 0.09
+    else:
+        band_label_offset_y = 0.07
+        ax.set_ylim(0.45, 1.05)
+
+    # Offsets within each octave band
+    offset_map = {"L": -0.15, "R": 0.15}
+    sublabels = {"L": "L", "R": "R"}
+
+    # Assign a color to each cochlea (ignoring side)
+    cochleas = sorted({name_lr[:-1] for name_lr in result["cochlea"].unique()})
+    colors = plt.cm.tab10.colors  # pick a colormap
+    color_map = {cochlea: colors[i % len(colors)] for i, cochlea in enumerate(cochleas)}
+
+    # Track which cochlea names we have already added to the legend
+    legend_added = set()
+
+    all_x_positions = []
+    all_x_labels = []
+
     for name_lr, grp in result.groupby("cochlea"):
         name, side = name_lr[:-1], name_lr[-1]
-        ax, marker = (axes[0], "o") if side == "L" else (axes[1], "x")
-        ax.scatter(grp["x_pos"], grp["value"], label=name, s=60, alpha=0.8, marker=marker)
+        x_positions = grp["x_pos"] + offset_map[side]
+        ax.scatter(
+            x_positions,
+            grp["value"],
+            label=name if name not in legend_added else None,
+            s=60,
+            alpha=0.8,
+            marker="o" if side == "L" else "x",
+            color=color_map[name]
+        )
+        if name not in legend_added:
+            legend_added.add(name)
 
-    for ax in axes:
-        ax.set_xticks(range(len(bin_labels)))
-        ax.set_xticklabels(bin_labels)
-        ax.set_xlabel("Octave band (kHz)")
+        # Store for sublabel ticks
+        all_x_positions.extend(x_positions)
+        all_x_labels.extend([sublabels[side]] * len(x_positions))
+
+    # Create combined tick positions & labels
+    main_ticks = range(len(bin_labels))
+    # add a final tick for label '>64k'
+    ax.set_xticks([pos + offset_map["L"] for pos in main_ticks[:-1]] +
+                  [pos + offset_map["R"] for pos in main_ticks[:-1]] +
+                  [pos for pos in main_ticks[-1:]])
+    ax.set_xticklabels(["L"] * len(main_ticks[:-1]) + ["R"] * len(main_ticks[:-1]) + [""], fontsize=sub_tick_label_size)
+
+    # Add main octave band labels above sublabels
+    for i, label in enumerate(bin_labels):
+        ax.text(i, ax.get_ylim()[0] - band_label_offset_y*(ax.get_ylim()[1]-ax.get_ylim()[0]),
+                label, ha='center', va='top', fontsize=tick_label_size, fontweight='bold')
+
+    ax.set_xlabel("Octave band (kHz)", fontsize=label_size)
+    ax.xaxis.set_label_coords(.5, -.16)
 
     if intensity:
-        axes[0].set_ylabel("Marker Intensity")
-        for ax, side in zip(axes, ("Left", "Right")):
-            ax.set_title(f"Intensity per octave band ({side})")
+        ax.set_ylabel("Marker Intensity", fontsize=label_size)
+        ax.set_title("Intensity per octave band (Left/Right)")
     else:
-        axes[0].set_ylabel("Transduction Efficiency")
-        axes[0].set_ylim(0.5, 1.05)
-        for ax, side in zip(axes, ("Left", "Right")):
-            ax.set_title(f"Transduction efficiency per octave band ({side})")
+        ax.set_ylabel("Transduction Efficiency", fontsize=label_size)
+        ax.set_title("Transduction efficiency per octave band (Left/Right)")
 
-    # FIXME make this uniform across the plots!
-    axes[0].legend(title="Cochlea")
-    axes[1].legend(title="Cochlea")
+    ax.legend(title="Cochlea", fontsize=legend_size)
     plt.tight_layout()
 
     plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
