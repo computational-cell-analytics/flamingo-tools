@@ -137,7 +137,7 @@ def find_inbetween_ids(
     negexc_negatives = find_overlapping_masks(arr_negexc, roi_seg, label_id_base=1)
     allweak_positives = find_overlapping_masks(arr_allweak, roi_seg, label_id_base=2)
     inbetween_ids = [int(i) for i in set(negexc_negatives).intersection(set(allweak_positives))]
-    return inbetween_ids
+    return inbetween_ids, allweak_positives, negexc_negatives
 
 
 def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
@@ -148,9 +148,19 @@ def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
     roi = get_roi(center, roi_halo)
 
     roi_seg = data_seg[roi]
-    inbetween_ids = find_inbetween_ids(arr_negexc, arr_allweak, roi_seg)
+    inbetween_ids, allweak_positives, negexc_negatives = find_inbetween_ids(arr_negexc, arr_allweak, roi_seg)
     if len(inbetween_ids) == 0:
-        return None
+        if len(allweak_positives) == 0 and len(negexc_negatives) == 0:
+            return None
+
+        subset_positive = table[table["label_id"].isin(allweak_positives)]
+        subset_negative = table[table["label_id"].isin(negexc_negatives)]
+        lowest_positive = float(subset_positive["median"].min())
+        highest_negative = float(subset_negative["median"].max())
+        if np.isnan(lowest_positive) or np.isnan(highest_negative):
+            return None
+
+        return np.average([lowest_positive, highest_negative])
 
     subset = table[table["label_id"].isin(inbetween_ids)]
     intensities = list(subset["median"])
@@ -172,7 +182,7 @@ def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure
         median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg, table_measure)
 
         if median_intensity is None:
-            print(f"No inbetween IDs found for {center_str}.")
+            print(f"No threshold identified for {center_str}.")
 
         annotation_dic[center_str]["median_intensity"] = median_intensity
 
