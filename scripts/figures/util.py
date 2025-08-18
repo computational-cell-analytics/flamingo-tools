@@ -60,10 +60,9 @@ def sliding_runlength_sum(run_length, values, width):
     return x, window_sum
 
 
-# TODO determine these from Aleyna's table!
 def literature_reference_values(structure):
     if structure == "SGN":
-        lower_bound, upper_bound = 8728, 10325
+        lower_bound, upper_bound = 9141, 11736
     elif structure == "IHC":
         lower_bound, upper_bound = 656, 681
     elif structure == "synapse":
