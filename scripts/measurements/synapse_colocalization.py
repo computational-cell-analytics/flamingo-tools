@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
+from flamingo_tools.s3_utils import BUCKET_NAME, SERVICE_ENDPOINT, create_s3_target, get_s3_path
 from flamingo_tools.validation import match_detections
 
 COCHLEA = "M_LR_000215_R"
@@ -53,7 +53,7 @@ def _run_colocalization(riba_table, ctbp2_table, max_dist=2.0):
     return matches_riba, unmatched_riba, unmatched_ctbp2
 
 
-def check_and_filter_synapses():
+def _get_synapse_tables():
     name_ctbp2 = "CTBP2_synapse_v3_ihc_v4b"
     name_riba = "RibA_synapse_v3_ihc_v4b"
 
@@ -62,12 +62,19 @@ def check_and_filter_synapses():
     info = json.loads(content.read())
     sources = info["sources"]
 
-    # TODO load from S3 instead
-    ihc_labels = pd.read_csv("./ihc_counts/ihc-annotation.tsv", sep="\t")
-    valid_ihcs = ihc_labels.label_id[ihc_labels.ihc == "is_ihc"].values
+    ihc_table_path = sources["IHC_v4b"]["segmentation"]["tableData"]["tsv"]["relativePath"]
+    table_content = s3.open(os.path.join(BUCKET_NAME, COCHLEA, ihc_table_path, "default.tsv"), mode="rb")
+    ihc_table = pd.read_csv(table_content, sep="\t")
+    valid_ihcs = ihc_table.label_id[ihc_table.is_ihc == 1].values
 
     riba_table = _load_table(s3, sources[name_riba], valid_ihcs)
     ctbp2_table = _load_table(s3, sources[name_ctbp2], valid_ihcs)
+
+    return riba_table, ctbp2_table, valid_ihcs
+
+
+def check_and_filter_synapses():
+    riba_table, ctbp2_table, valid_ihcs = _get_synapse_tables()
 
     # Save the single synapse marker tables.
     _save_ihc_table(riba_table, "RibA")
@@ -91,8 +98,57 @@ def check_and_filter_synapses():
     _save_ihc_table(coloc_table, "coloc")
 
 
+def check_synapse_predictions():
+    import napari
+    import z5py
+    import zarr
+
+    pred_path_ctbp2 = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/M_LR_000215_R/CTBP2_synapses_v3/predictions.zarr"  # noqa
+    # pred_path_riba = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/M_LR_000215_R/RibA_synapses_v3"  # noqa
+
+    location_mobie = [836.654754589637, 1255.8010489404858, 677.1537312920972]
+    resolution = 0.38
+    location = [int(loc / resolution) for loc in location_mobie[::-1]]
+
+    halo = (32, 256, 256)
+    start = np.array([loc - ha for loc, ha in zip(location, halo)])
+    stop = np.array([loc + ha for loc, ha in zip(location, halo)])
+    bb = tuple(slice(sta, sto) for sta, sto in zip(start, stop))
+
+    print("Loading tables ...")
+    _, ctbp2_table, _ = _get_synapse_tables()
+    ids = ctbp2_table.spot_id.values
+    coords = ctbp2_table[["z", "y", "x"]].values / resolution
+    mask = np.logical_and(
+        (coords > start[None, :]).all(axis=1),
+        (coords < stop[None, :]).all(axis=1),
+    )
+    ids = ids[mask]
+    det_ctbp2 = coords[mask]
+    det_ctbp2 -= start[None, :]
+    print("Found", len(det_ctbp2), "detection in the crop")
+
+    print("Loading image data ...")
+    s3_store, fs = get_s3_path(
+        f"{COCHLEA}/images/ome-zarr/CTBP2.ome.zarr", bucket_name=BUCKET_NAME, service_endpoint=SERVICE_ENDPOINT
+    )
+    f = zarr.open(s3_store, mode="r")
+    ctbp2 = f["s0"][bb]
+
+    print("Loading prediction ...")
+    with z5py.File(pred_path_ctbp2, "r") as f:
+        pred_ctbp2 = f["prediction"][bb]
+
+    v = napari.Viewer()
+    v.add_image(ctbp2)
+    v.add_image(pred_ctbp2)
+    v.add_points(det_ctbp2)
+    napari.run()
+
+
 def main():
-    check_and_filter_synapses()
+    # check_and_filter_synapses()
+    check_synapse_predictions()
 
 
 if __name__ == "__main__":
