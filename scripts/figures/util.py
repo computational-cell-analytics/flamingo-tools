@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
 
+# Directory with synapse measurement tables
+SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
+# SYNAPSE_DIR_ROOT = "./synapses"
+
 
 # Define the animal specific octave bands.
 def _get_mapping(animal):

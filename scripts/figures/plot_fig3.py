@@ -3,72 +3,72 @@ import os
 import imageio.v3 as imageio
 from glob import glob
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import cm, colors
 
-from util import sliding_runlength_sum, frequency_mapping
+from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT
 
 INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3/frequency_mapping"
 
 png_dpi = 300
 
 
-def fig_03a(save_path):
-    import napari
+def _plot_colormap(vol, title, plot, save_path):
+    # before creating the figure:
+    matplotlib.rcParams.update({
+        "font.size": 14,          # base font size
+        "axes.titlesize": 18,     # for plt.title / ax.set_title
+        "figure.titlesize": 18,   # for fig.suptitle (if you use it)
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
+    })
 
+    # Create the colormap
+    fig, ax = plt.subplots(figsize=(6, 1.3))
+    fig.subplots_adjust(bottom=0.5)
+
+    freq_min = np.min(np.nonzero(vol))
+    freq_max = vol.max()
+    norm = colors.Normalize(vmin=freq_min, vmax=freq_max, clip=True)
+    cmap = plt.get_cmap("viridis")
+
+    cb = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax, orientation="horizontal")
+    cb.set_label("Frequency [kHz]")
+    plt.title(title)
+    plt.tight_layout()
+    if plot:
+        plt.show()
+    plt.savefig(save_path)
+    plt.close()
+
+
+def fig_03a(save_path, plot, plot_napari):
     path = os.path.join(INPUT_ROOT, "frequencies_IHC_v4c.tif")
     vol = imageio.imread(path)
-
-    # Create the colormap
-    fig, ax = plt.subplots(figsize=(6, 1.3))
-    fig.subplots_adjust(bottom=0.5)
-
-    freq_min = np.min(np.nonzero(vol))
-    freq_max = vol.max()
-    norm = colors.Normalize(vmin=freq_min, vmax=freq_max, clip=True)
-    cmap = plt.get_cmap("viridis")
-
-    cb = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax, orientation="horizontal")
-    cb.set_label("Frequency [kHz]")
-    plt.title("Tonotopic Mapping: IHCs")
-    plt.tight_layout()
-    out_path = os.path.join(save_path)
-    plt.savefig(out_path)
+    _plot_colormap(vol, title="Tonotopic Mapping: IHCs", plot=plot, save_path=save_path)
 
     # Show the image in napari for rendering.
-    v = napari.Viewer()
-    v.add_image(vol, colormap="viridis")
-    napari.run()
+    if plot_napari:
+        import napari
+        v = napari.Viewer()
+        v.add_image(vol, colormap="viridis")
+        napari.run()
 
 
-def fig_03b(save_path):
-    import napari
-
+def fig_03b(save_path, plot, plot_napari):
     path = os.path.join(INPUT_ROOT, "frequencies_SGN_v2.tif")
     vol = imageio.imread(path)
-
-    # Create the colormap
-    fig, ax = plt.subplots(figsize=(6, 1.3))
-    fig.subplots_adjust(bottom=0.5)
-
-    freq_min = np.min(np.nonzero(vol))
-    freq_max = vol.max()
-    norm = colors.Normalize(vmin=freq_min, vmax=freq_max, clip=True)
-    cmap = plt.get_cmap("viridis")
-
-    cb = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax, orientation="horizontal")
-    cb.set_label("Frequency [kHz]")
-    plt.title("Tonotopic Mapping: SGNs")
-    plt.tight_layout()
-    out_path = os.path.join(save_path)
-    plt.savefig(out_path)
+    _plot_colormap(vol, title="Tonotopic Mapping: SGNs", plot=plot, save_path=save_path)
 
     # Show the image in napari for rendering.
-    v = napari.Viewer()
-    v.add_image(vol, colormap="viridis")
-    napari.run()
+    if plot_napari:
+        import napari
+        v = napari.Viewer()
+        v.add_image(vol, colormap="viridis")
 
 
 def fig_03c_rl(save_path, plot=False):
@@ -102,7 +102,9 @@ def fig_03c_rl(save_path, plot=False):
 
 
 def fig_03c_octave(save_path, plot=False):
-    tables = glob("./ihc_counts/ihc_count_M_LR*.tsv")
+    # TODO update this table
+    ihc_version = "ihc_counts_v4c"
+    tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for tab_path in tables:
@@ -152,14 +154,14 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panel A: Tonotopic mapping of IHCs (rendering in napari)
-    # fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a.png"))
+    fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a.png"), plot=args.plot, plot_napari=False)
 
     # Panel B: Tonotopic mapping of SGNs (rendering in napari)
-    # fig_03b(save_path=os.path.join(args.figure_dir, "fig_03b.png"))
+    fig_03b(save_path=os.path.join(args.figure_dir, "fig_03b.png"), plot=args.plot, plot_napari=False)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
-    fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
+    # fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
     fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
 
     # TODO: Panel D: Spatial distribution of SGN sub-types.
