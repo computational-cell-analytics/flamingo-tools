@@ -36,17 +36,17 @@ COCHLEAE_GERBIL = [
 
 COCHLEAE_ALIAS = {
     "M_LR_000143_L": "M0L",
-    "M_LR_000144_L": "M1L",
-    "M_LR_000145_L": "M2L",
-    "M_LR_000153_L": "M3L",
-    "M_LR_000155_L": "M4L",
-    "M_LR_000189_L": "M5L",
+    "M_LR_000144_L": "M05L",
+    "M_LR_000145_L": "M06L",
+    "M_LR_000153_L": "M07L",
+    "M_LR_000155_L": "M08L",
+    "M_LR_000189_L": "M09L",
     "M_LR_000143_R": "M0R",
-    "M_LR_000144_R": "M1R",
-    "M_LR_000145_R": "M2R",
-    "M_LR_000153_R": "M3R",
-    "M_LR_000155_R": "M4R",
-    "M_LR_000189_R": "M5R",
+    "M_LR_000144_R": "M05R",
+    "M_LR_000145_R": "M06R",
+    "M_LR_000153_R": "M07R",
+    "M_LR_000155_R": "M08R",
+    "M_LR_000189_R": "M09R",
     "G_EK_000049_L": "G1L",
     "G_EK_000049_R": "G1R",
 }
@@ -126,7 +126,7 @@ def group_lr(names_lr, values):
     return names, values_left, values_right
 
 
-def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
+def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=True):
     """Box plot showing the SGN counts of ChReef treated cochleae compared to healthy ones.
     """
     # Previous version with hard-coded values.
@@ -134,9 +134,12 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
     # alias = ["c01", "c02", "c03"]
     # sgns = [7796, 6119, 9225]
 
-    # TODO map the cochlea name to its alias
-    # alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
-    alias = [COCHLEAE_ALIAS[k] for k in chreef_data.keys()]
+    # TODO have central function for alias for all plots?
+    if use_alias:
+        alias = [COCHLEAE_ALIAS[k] for k in chreef_data.keys()]
+    else:
+        alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
+
     sgns = [len(vals) for vals in chreef_data.values()]
 
     if plot_by_side:
@@ -199,12 +202,13 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False):
         plt.close()
 
 
-def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=False, gerbil=False):
+def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=False, gerbil=False, use_alias=True):
     """Transduction efficiency per cochlea.
     """
-    # TODO map the cochlea name to its alias
-    # alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
-    alias = [COCHLEAE_ALIAS[k] for k in chreef_data.keys()]
+    if use_alias:
+        alias = [COCHLEAE_ALIAS[k] for k in chreef_data.keys()]
+    else:
+        alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
 
     values = []
     for vals in chreef_data.values():
@@ -265,13 +269,14 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
         plt.close()
 
 
-def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False):
+def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_alias=True):
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for name, values in chreef_data.items():
-        # TODO map name to alias
-        # alias = name.replace("_", "").replace("0", "")
-        alias = COCHLEAE_ALIAS[name]
+        if use_alias:
+            alias = COCHLEAE_ALIAS[name]
+        else:
+            alias = name.replace("_", "").replace("0", "")
 
         freq = values["frequency[kHz]"].values
         if intensity:
@@ -375,9 +380,11 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False):
 def main():
     parser = argparse.ArgumentParser(description="Generate plots for Fig 4 of the cochlea paper.")
     parser.add_argument("--figure_dir", "-f", type=str, help="Output directory for plots.", default="./panels/fig4")
+    parser.add_argument("--no_alias", action="store_true")
     parser.add_argument("--plot", action="store_true")
     args = parser.parse_args()
 
+    use_alias = not args.no_alias
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Get the chreef data as a dictionary of cochlea name to measurements.
@@ -391,21 +398,30 @@ def main():
 
     # C: The SGN count compared to reference values from literature and healthy
     # Maybe remove literature reference from plot?
-    fig_04c(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04c"), plot=args.plot, plot_by_side=True)
+    fig_04c(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04c"),
+            plot=args.plot, plot_by_side=True, use_alias=use_alias)
 
     # D: The transduction efficiency. We also plot GFP intensities.
-    fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_transduction"), plot=args.plot, plot_by_side=True)  # noqa
-    fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_intensity"), plot=args.plot, plot_by_side=True, intensity=True)  # noqa
+    fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_transduction"),
+            plot=args.plot, plot_by_side=True, use_alias=use_alias)
+    fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_intensity"),
+            plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
-    fig_04e(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04e_transduction"), plot=args.plot)
-    fig_04e(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04e_intensity"), plot=args.plot, intensity=True)
+    fig_04e(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04e_transduction"),
+            plot=args.plot, use_alias=use_alias)
+    fig_04e(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04e_intensity"),
+            plot=args.plot, intensity=True, use_alias=use_alias)
 
     chreef_data_gerbil = get_chreef_data(animal="gerbil")
-    fig_04d(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04d_gerbil_transduction"), plot=args.plot, plot_by_side=True, gerbil=True)  # noqa
-    fig_04d(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04d_gerbil_intensity"), plot=args.plot, plot_by_side=True, intensity=True)  # noqa
+    fig_04d(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04d_gerbil_transduction"),
+            plot=args.plot, plot_by_side=True, gerbil=True, use_alias=use_alias)
+    fig_04d(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04d_gerbil_intensity"),
+            plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
-    fig_04e(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04e_gerbil_transduction"), plot=args.plot, gerbil=True) # noqa
-    fig_04e(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04e_gerbil_intensity"), plot=args.plot, intensity=True) # noqa
+    fig_04e(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04e_gerbil_transduction"),
+            plot=args.plot, gerbil=True, use_alias=use_alias)
+    fig_04e(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04e_gerbil_intensity"),
+            plot=args.plot, intensity=True, use_alias=use_alias)
 
 
 if __name__ == "__main__":
