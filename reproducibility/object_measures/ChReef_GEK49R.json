@@ -7,7 +7,8 @@
 		"segmentation_channel": "SGN_v2",
 		"background_mask": "yes",
 		"component_list": [
-			1
+			1,
+			2
 		]
 	}
 ]
