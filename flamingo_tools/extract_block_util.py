@@ -43,6 +43,9 @@ def extract_block(
     coord_string = "-".join([str(c).zfill(4) for c in coords])
 
     # Dimensions are inversed to view in MoBIE (x y z) -> (z y x)
+    # Make sure the coords / roi_halo are not modified in-place.
+    coords = coords.copy()
+    roi_halo = roi_halo.copy()
     coords.reverse()
     roi_halo.reverse()
 
