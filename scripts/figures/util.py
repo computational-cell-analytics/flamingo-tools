@@ -74,3 +74,14 @@ def literature_reference_values(structure):
     else:
         raise ValueError
     return lower_bound, upper_bound
+
+
+def to_alias(cochlea_name):
+    name_short = cochlea_name.replace("_", "").replace("0", "")
+    name_to_alias = {
+        "MLR226L": "M01L",
+        "MLR226R": "M01R",
+        "MLR227L": "M02L",
+        "MLR227R": "M02R",
+    }
+    return name_to_alias[name_short]

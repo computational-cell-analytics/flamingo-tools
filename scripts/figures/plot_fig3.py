@@ -2,6 +2,7 @@ import argparse
 import os
 import imageio.v3 as imageio
 from glob import glob
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -9,7 +10,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import cm, colors
 
-from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT
+from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT, to_alias
 
 INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
 
@@ -103,12 +104,12 @@ def fig_03c_rl(save_path, plot=False):
 def fig_03c_octave(save_path, plot=False):
     ihc_version = "ihc_counts_v4c"
     tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
-    assert len(tables) == 4
+    assert len(tables) == 4, len(tables)
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for tab_path in tables:
-        # TODO map to alias
-        alias = os.path.basename(tab_path)[10:-4].replace("_", "").replace("0", "")
+        cochlea = Path(tab_path).stem.lstrip("ihc_count")
+        alias = to_alias(cochlea)
         tab = pd.read_csv(tab_path, sep="\t")
         freq = tab["frequency"].values
         syn_count = tab["synapse_count"].values
@@ -143,33 +144,67 @@ def fig_03c_octave(save_path, plot=False):
         plt.close()
 
 
-def fig_03d(save_path, plot, print_stats=True):
+def fig_03d_fraction(save_path, plot):
     result_folder = "../measurements/subtype_analysis"
     files = glob(os.path.join(result_folder, "*.tsv"))
 
+    # FIXME
+    analysis = {
+        "M_AMD_N62_L": ["CR", "Calb1"],
+        "M_LR_000214_L": ["CR"],
+    }
+
+    results = {"type": [], "fraction": [], "cochlea": []}
     for ff in files:
         fname = os.path.basename(ff)
         cochlea = fname[:-len("_subtype_analysis.tsv")]
+
+        if cochlea not in analysis:
+            continue
+
         table = pd.read_csv(ff, sep="\t")
 
         subtype_table = table[[col for col in table.columns if col.startswith("is_")]]
         assert subtype_table.shape[1] == 2
         n_sgns = len(subtype_table)
 
-        if print_stats:
-            print(cochlea)
-            for col in subtype_table.columns:
-                vals = table[col].values
-                subtype = col[3:]
-                n_subtype = vals.sum()
-                channel = TYPE_TO_CHANNEL[subtype]
-                print(
-                    f"{subtype} ({channel}):", n_subtype, "/", n_sgns,
-                    f"({np.round(float(n_subtype) / n_sgns * 100, 2)} %)"
-                )
+        print(cochlea)
+        for col in subtype_table.columns:
+            vals = table[col].values
+            subtype = col[3:]
+            channel = TYPE_TO_CHANNEL[subtype]
+            if channel not in analysis[cochlea]:
+                continue
+            n_subtype = vals.sum()
+            subtype_fraction = np.round(float(n_subtype) / n_sgns * 100, 2)
+            name = f"{subtype} ({channel})"
+            print("{name}:", n_subtype, "/", n_sgns, f"({subtype_fraction} %)")
 
-            coexpr = np.logical_and(subtype_table.iloc[:, 0].values, subtype_table.iloc[:, 1].values)
-            print("Co-expression:", coexpr.sum())
+            results["type"].append(name)
+            results["fraction"].append(subtype_fraction)
+            results["cochlea"].append(cochlea)
+
+        # coexpr = np.logical_and(subtype_table.iloc[:, 0].values, subtype_table.iloc[:, 1].values)
+        # print("Co-expression:", coexpr.sum())
+
+    results = pd.DataFrame(results)
+    fig, ax = plt.subplots()
+    for cochlea, group in results.groupby("cochlea"):
+        ax.scatter(group["type"], group["fraction"], label=cochlea)
+    ax.set_ylabel("Fraction")
+    ax.set_xlabel("Type")
+    ax.legend(title="Cochlea ID")
+
+    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if plot:
+        plt.show()
+    else:
+        plt.close()
+
+
+# TODO
+def fig_03d_octave(save_path, plot):
+    pass
 
 
 def main():
@@ -181,15 +216,16 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
-    # fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a_cmap.png"), plot=args.plot, plot_napari=True)
+    fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a_cmap.png"), plot=args.plot, plot_napari=True)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
-    # fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
+    fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
     fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
 
     # Panel D: Spatial distribution of SGN sub-types.
-    fig_03d(save_path=os.path.join(args.figure_dir, "fig_03d.png"), plot=args.plot)
+    fig_03d_fraction(save_path=os.path.join(args.figure_dir, "fig_03d_fraction.png"), plot=args.plot)
+    fig_03d_octave(save_path=os.path.join(args.figure_dir, "fig_03d_octave.png"), plot=args.plot)
 
 
 if __name__ == "__main__":
