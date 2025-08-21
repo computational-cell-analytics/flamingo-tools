@@ -583,6 +583,7 @@ def equidistant_centers(
 def tonotopic_mapping(
     table: pd.DataFrame,
     component_label: List[int] = [1],
+    component_mapping: Optional[List[int]] = None,
     cell_type: str = "ihc",
     animal: str = "mouse",
 ) -> pd.DataFrame:
@@ -592,6 +593,7 @@ def tonotopic_mapping(
     Args:
         table: Dataframe of segmentation table.
         component_label: List of component labels to evaluate.
+        components_mapping: Components to use for tonotopic mapping. Ignore components torn parallel to main canal.
         cell_type: Cell type of segmentation.
 
     Returns:
@@ -602,16 +604,19 @@ def tonotopic_mapping(
     centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
     label_ids = [int(i) for i in list(new_subset["label_id"])]
 
+    if component_mapping is None:
+        component_mapping = component_label
+
     if cell_type == "ihc":
         total_distance, _, path_dict = measure_run_length_ihcs(centroids, component_label=component_label)
 
     else:
-        if len(component_label) == 1:
+        if len(component_mapping) == 1:
             total_distance, _, path_dict = measure_run_length_sgns(centroids)
 
         else:
             centroids_components = []
-            for label in component_label:
+            for label in component_mapping:
                 subset = table[table["component_labels"] == label]
                 subset_centroids = list(zip(subset["anchor_x"], subset["anchor_y"], subset["anchor_z"]))
                 centroids_components.append(subset_centroids)
