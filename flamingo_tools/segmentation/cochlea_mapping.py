@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -34,7 +34,7 @@ def find_most_distant_nodes(G: nx.classes.graph.Graph, weight: str = 'weight') -
     return u, v
 
 
-def central_path_edt_graph(mask: np.ndarray, start: Tuple[int], end: Tuple[int]):
+def central_path_edt_graph(mask: np.ndarray, start: Tuple[int], end: Tuple[int]) -> np.ndarray:
     """Find the central path within a binary mask between a start and an end coordinate.
 
     Args:
@@ -93,6 +93,118 @@ def moving_average_3d(path: np.ndarray, window: int = 5) -> np.ndarray:
     return smooth_path
 
 
+def measure_run_length_sgns_multi_component(
+        centroids_components: List[np.ndarray],
+        scale_factor: int = 10,
+        apex_higher: bool = True,
+) -> Tuple[float, np.ndarray, dict]:
+    """Measure the run lengths of the SGN segmentation by finding a central path through Rosenthal's canal.
+    This function handles the case were the cochlea has been torn into multiple components.
+    The List of centroids has to be in order of neighboring components.
+    For each component:
+    1) Process centroids of each component:
+        a) Create a binary mask based on down-scaled centroids.
+        b) Dilate the mask and close holes to ensure a filled structure.
+        c) Determine the endpoints of the structure using the principal axis.
+        d) Identify a central path based on the 3D Euclidean distance transform.
+        e) The path is up-scaled and smoothed using a moving average filter.
+    2) Order paths to have consistent start/end points, e.g.
+        [[start_c1, ..., end_c1], [end_c2, ..., start_c2]] --> [[start_c1, ..., end_c1], [start_c2, ..., end_c2]]
+    3) Assign base/apex position to path.
+    4) Assign distance of nodes by skipping intermediate space between separate components.
+        Points of path wit their position and fractional length are stored in a dictionary.
+    5) Concatenate individual paths to form total path
+
+    Args:
+        centroids_components: List of centroids of the SGN segmentation, ndarray of shape (N, 3).
+        scale_factor: Downscaling factor for finding the central path.
+        apex_higher: Flag for identifying apex and base. Apex is set to node with higher y-value if True.
+
+    Returns:
+        Total distance of the path.
+        Path as an nd.array of positions.
+        A dictionary containing the position and the length fraction of each point in the path.
+    """
+    total_path = []
+    print(f"Evaluating {len(centroids_components)} components.")
+    # 1) Process centroids for each component
+    for centroids in centroids_components:
+        mask = downscaled_centroids(centroids, scale_factor=scale_factor, downsample_mode="capped")
+        mask = binary_dilation(mask, np.ones((3, 3, 3)), iterations=1)
+        mask = binary_closing(mask, np.ones((3, 3, 3)), iterations=1)
+        pts = np.argwhere(mask == 1)
+
+        # find two endpoints: min/max along principal axis
+        c_mean = pts.mean(axis=0)
+        cov = np.cov((pts-c_mean).T)
+        evals, evecs = np.linalg.eigh(cov)
+        axis = evecs[:, np.argmax(evals)]
+        proj = (pts - c_mean) @ axis
+        start_voxel = tuple(pts[proj.argmin()])
+        end_voxel = tuple(pts[proj.argmax()])
+
+        # get central path and total distance
+        path = central_path_edt_graph(mask, start_voxel, end_voxel)
+        path = path * scale_factor
+        path = moving_average_3d(path, window=5)
+        total_path.append(path)
+
+    # 2) Order paths to have consistent start/end points
+    # Find starting order of first two components
+    c1a = total_path[0][0, :]
+    c1b = total_path[0][-1, :]
+
+    c2a = total_path[1][0, :]
+    c2b = total_path[1][-1, :]
+
+    distances = [math.dist(c1a, c2a), math.dist(c1a, c2b), math.dist(c1b, c2a), math.dist(c1b, c2b)]
+    min_index = distances.index(min(distances))
+    if min_index in [0, 1]:
+        total_path[0] = np.flip(total_path[0], axis=0)
+
+    # Order other components from start to end
+    for num in range(0, len(total_path) - 1):
+        dist_connecting_nodes_1 = math.dist(total_path[num][-1, :], total_path[num+1][0, :])
+        dist_connecting_nodes_2 = math.dist(total_path[num][-1, :], total_path[num+1][-1, :])
+        if dist_connecting_nodes_2 < dist_connecting_nodes_1:
+            total_path[num+1] = np.flip(total_path[num+1], axis=0)
+
+    # 3) Assign base/apex position to path
+    # compare y-value to not get into confusion with MoBIE dimensions
+    if total_path[0][0, 1] > total_path[-1][-1, 1]:
+        if not apex_higher:
+            total_path.reverse()
+            total_path = [np.flip(t) for t in total_path]
+    elif apex_higher:
+        total_path.reverse()
+        total_path = [np.flip(t) for t in total_path]
+
+    # 4) Assign distance of nodes by skipping intermediate space between separate components
+    total_distance = sum([math.dist(p[num + 1], p[num]) for p in total_path for num in range(len(p) - 1)])
+    path_dict = {}
+    accumulated = 0
+    index = 0
+    for num, pa in enumerate(total_path):
+        if num == 0:
+            path_dict[0] = {"pos": total_path[0][0], "length_fraction": 0}
+        else:
+            path_dict[index] = {"pos": total_path[num][0], "length_fraction": path_dict[index-1]["length_fraction"]}
+
+        index += 1
+        for enum, p in enumerate(pa[1:]):
+            distance = math.dist(total_path[num][enum], p)
+            accumulated += distance
+            rel_dist = accumulated / total_distance
+            path_dict[index] = {"pos": p, "length_fraction": rel_dist}
+            index += 1
+    path_dict[index-1] = {"pos": total_path[-1][-1, :], "length_fraction": 1}
+
+    # 5) Concatenate individual paths to form total path
+    path = np.concatenate(total_path, axis=0)
+
+    return total_distance, path, path_dict
+
+
 def measure_run_length_sgns(
         centroids: np.ndarray,
         scale_factor: int = 10,
@@ -102,9 +214,10 @@ def measure_run_length_sgns(
     1) Create a binary mask based on down-scaled centroids.
     2) Dilate the mask and close holes to ensure a filled structure.
     3) Determine the endpoints of the structure using the principal axis.
-    4) Identify a central path based on the 3D Euclidean distance transform.
-    5) The path is up-scaled and smoothed using a moving average filter.
-    6) The points of the path are fed into a dictionary along with the fractional length.
+    4) Assign base/apex position to path.
+    5) Identify a central path based on the 3D Euclidean distance transform.
+    6) The path is up-scaled and smoothed using a moving average filter.
+    7) The points of the path are fed into a dictionary along with the fractional length.
 
     Args:
         centroids: Centroids of the SGN segmentation, ndarray of shape (N, 3).
@@ -116,12 +229,14 @@ def measure_run_length_sgns(
         Path as an nd.array of positions.
         A dictionary containing the position and the length fraction of each point in the path.
     """
+    # 1) Create a binary mask based on down-scaled centroids.
     mask = downscaled_centroids(centroids, scale_factor=scale_factor, downsample_mode="capped")
+    # 2) Dilate the mask and close holes to ensure a filled structure.
     mask = binary_dilation(mask, np.ones((3, 3, 3)), iterations=1)
     mask = binary_closing(mask, np.ones((3, 3, 3)), iterations=1)
     pts = np.argwhere(mask == 1)
 
-    # find two endpoints: min/max along principal axis
+    # 3) Find two endpoints: min/max along principal axis.
     c_mean = pts.mean(axis=0)
     cov = np.cov((pts-c_mean).T)
     evals, evecs = np.linalg.eigh(cov)
@@ -130,6 +245,7 @@ def measure_run_length_sgns(
     start_voxel = tuple(pts[proj.argmin()])
     end_voxel = tuple(pts[proj.argmax()])
 
+    # 4) Assign base/apex position to path.
     # compare y-value to not get into confusion with MoBIE dimensions
     if start_voxel[1] > end_voxel[1]:
         apex = start_voxel if apex_higher else end_voxel
@@ -138,13 +254,14 @@ def measure_run_length_sgns(
         apex = end_voxel if apex_higher else start_voxel
         base = start_voxel if apex_higher else end_voxel
 
-    # get central path and total distance
+    # 5) Identify a central path based on the 3D Euclidean distance transform.
     path = central_path_edt_graph(mask, apex, base)
+    # 6) The path is up-scaled and smoothed using a moving average filter.
     path = path * scale_factor
     path = moving_average_3d(path, window=5)
     total_distance = sum([math.dist(path[num + 1], path[num]) for num in range(len(path) - 1)])
 
-    # assign relative distance to points on path
+    # 7) The points of the path are fed into a dictionary along with the fractional length.
     path_dict = {}
     path_dict[0] = {"pos": path[0], "length_fraction": 0}
     accumulated = 0
@@ -160,22 +277,24 @@ def measure_run_length_sgns(
 
 def measure_run_length_ihcs(
     centroids: np.ndarray,
-    max_edge_distance: float = 50,
+    max_edge_distance: float = 30,
     apex_higher: bool = True,
+    component_label: List[int] = [1],
 ) -> Tuple[float, np.ndarray, dict]:
     """Measure the run lengths of the IHC segmentation
     by determining the shortest path between the most distant nodes of a graph.
     The graph is created based on a maximal edge distance between nodes.
-    However, this value may not correspond to the max_edge_distance parameter used to process the IHC segmentation,
-    which may consist of more than one component.
-    That's why a large max_edge_distance is used to connect different components and identify
-    the two most distant nodes and the shortest path between them.
-    The path is then edited using a moving average filter.
+    Take care, that this value should be identical to the one used to initially process the IHC segmentation.
+
+    If the graph consists of more than one connected components, a list of component labels must be supplied.
+    The components are then connected with edges between nodes of neighboring components which are closest together.
+    Gaps between individual components are ignored and do not count towards the path length.
 
     Args:
-        centroids: Centroids of SGN segmentation.
+        centroids: Centroids of IHC segmentation.
         max_edge_distance: Maximal edge distance between graph nodes to create an edge between nodes.
         apex_higher: Flag for identifying apex and base. Apex is set to node with higher y-value if True.
+        component_label: List of component labels. Determines the order of components to connect.
 
     Returns:
         Total distance of the path.
@@ -191,9 +310,6 @@ def measure_run_length_ihcs(
     for num, pos in coords.items():
         graph.add_node(num, pos=pos)
 
-    # TODO: Find cleaner option than the creation of a new graph with edges
-    # to identify start / end point and shortest path.
-
     # create edges between points whose distance is less than threshold max_edge_distance
     for num_i, pos_i in coords.items():
         for num_j, pos_j in coords.items():
@@ -201,6 +317,41 @@ def measure_run_length_ihcs(
                 dist = math.dist(pos_i, pos_j)
                 if dist <= max_edge_distance:
                     graph.add_edge(num_i, num_j, weight=dist)
+
+    components = [list(c) for c in nx.connected_components(graph)]
+    len_c = [len(c) for c in components]
+    len_c, components = zip(*sorted(zip(len_c, components), reverse=True))
+
+    # combine separate connected components by adding edges between nodes which are closest together
+    if len(components) > 1:
+        print(f"Graph consists of {len(components)} connected components.")
+        if len(component_label) != len(components):
+            raise ValueError(f"Length of graph components {len(components)} "
+                             f"does not match number of component labels {len(component_label)}. "
+                             "Check max_edge_distance and post-processing.")
+
+        # Order connected components in order of component labels
+        # e.g. component_labels = [7, 4, 1, 11] and len_c = [600, 400, 300, 55]
+        # get re-ordered to [300, 400, 600, 55]
+        components_sorted = [
+            c[1] for _, c in sorted(zip(sorted(range(len(component_label)), key=lambda i: component_label[i]),
+                                        sorted(zip(len_c, components), key=lambda x: x[0], reverse=True)))]
+
+        # Connect nodes of neighboring components that are closest together
+        for num in range(0, len(components_sorted) - 1):
+            min_dist = float("inf")
+            closest_pair = None
+
+            # Compare only nodes between two neighboring components
+            for node_a in components_sorted[num]:
+                for node_b in components_sorted[num + 1]:
+                    dist = math.dist(graph.nodes[node_a]["pos"], graph.nodes[node_b]["pos"])
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_pair = (node_a, node_b)
+            graph.add_edge(closest_pair[0], closest_pair[1], weight=min_dist)
+
+        print("Connect components in order of component labels.")
 
     start_node, end_node = find_most_distant_nodes(graph)
 
@@ -232,7 +383,7 @@ def measure_run_length_ihcs(
     return total_distance, path, path_dict
 
 
-def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse"):
+def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse") -> pd.DataFrame:
     """Map the frequency range of SGNs in the cochlea
     using Greenwood function f(x) = A * (10 **(ax) - K).
     Values for humans: a=2.1, k=0.88, A = 165.4 [kHz].
@@ -245,37 +396,20 @@ def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse"):
         Dataframe containing frequency in an additional column 'frequency[kHz]'.
     """
     if animal == "mouse":
-        if cell_type == "ihc":
-            # freq_min = 5.16 kHz
-            # freq_max = 81.38 kHz
-            var_A = 4.232
-            var_a = 1.279
-            var_k = -0.22
-        if cell_type == "sgn":
-            # freq_min = 0.0095 kHz
-            # freq_max = 47.47 kHz
-            var_A = 0.38
-            var_a = 2.1
-            var_k = 0.975
+        # freq_min = 1.5 kHz
+        # freq_max = 86 kHz
+        # ou bohne 2000 Hear res, "EDGES"
+        var_A = 1.46
+        var_a = 1.77
+        var_k = 0
 
     elif animal == "gerbil":
-        if cell_type == "ihc":
-            # freq_min = 0.0105 kHz
-            # freq_max = 43.82 kHz
-            var_A = 0.35
-            var_a = 2.1
-            var_k = 0.7
-        if cell_type == "sgn":
-            # freq_min = 0.0105 kHz
-            # freq_max = 43.82 kHz
-            var_A = 0.35
-            var_a = 2.1
-            var_k = 0.7
+        # freq_min = 0.0105 kHz
+        # freq_max = 43.82 kHz
+        var_A = 0.35
+        var_a = 2.1
+        var_k = 0.7
 
-        # alternative Gerbil Greenwood function according to Mueller1995
-        # var_A = 0.398
-        # var_a = 2.2
-        # var_k = 0.631
     else:
         raise ValueError("Animal not supported. Use either 'mouse' or 'gerbil'.")
 
@@ -283,6 +417,108 @@ def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse"):
     table.loc[table['offset'] < 0, 'frequency[kHz]'] = 0
 
     return table
+
+
+def get_centers_from_path(
+    path: np.ndarray,
+    total_distance: float,
+    n_blocks: int = 10,
+    offset_blocks: bool = True,
+) -> List[float]:
+    """Get equidistant centers from the central path (not restricted to node location).
+
+    Args:
+        path: Central path through Rosenthal's canal.
+        total_distance: Length of the path.
+        n_blocks: Number of equidistant centers for block creation.
+        offset_blocks: Centers are shifted by half a length if True. Avoid centers at the start/end of the path.
+
+    Returns:
+        Equidistant centers.
+    """
+    diffs = np.diff(path, axis=0)
+    seg_lens = np.linalg.norm(diffs, axis=1)
+    cum_len = np.insert(np.cumsum(seg_lens), 0, 0)
+    if offset_blocks:
+        target_s = np.linspace(0, total_distance, n_blocks * 2 + 1)
+        target_s = [s for num, s in enumerate(target_s) if num % 2 == 1]
+    else:
+        target_s = np.linspace(0, total_distance, n_blocks)
+    f = interp1d(cum_len, path, axis=0)  # fill_value="extrapolate"
+    centers = f(target_s)
+    return centers
+
+
+def get_centers_from_path_dict(
+    path_dict: dict,
+    n_blocks: int = 10,
+    offset_blocks: bool = True,
+) -> List[float]:
+    """Get equidistant centers from a dictionary of nodes on the central path.
+
+    Args:
+        path_dict: Dictionary containing position and length fraction of nodes on the central path.
+        n_blocks: Number of equidistant centers for block creation.
+        offset_blocks: Centers are shifted by half a length if True. Avoid centers at the start/end of the path.
+
+    Returns:
+        Equidistant centers.
+    """
+    if offset_blocks:
+        target_s = np.linspace(0, 1, n_blocks * 2 + 1)
+        target_s = [s for num, s in enumerate(target_s) if num % 2 == 1]
+    else:
+        target_s = np.linspace(0, 1, n_blocks)
+
+    # find node on path with length fraction closest to target value
+    centers = []
+    for target in target_s:
+        min_dist = float('inf')
+        nearest_node = None
+        for key in list(path_dict.keys()):
+            dist = abs(target - path_dict[key]["length_fraction"])
+            if dist < min_dist:
+                min_dist = dist
+                nearest_node = key
+        centers.append(path_dict[nearest_node]["pos"])
+
+    return centers
+
+
+def node_dict_from_path_dict(
+    path_dict: dict,
+    label_ids: List[int],
+    centroids: np.ndarray,
+) -> dict:
+    """Get dictionary for all nodes from dictionary of nodes on the central path.
+
+    Args:
+        path_dict: Dictionary containing position and length fraction of nodes on the central path.
+        label_ids: Label IDs of all nodes/instance segmentations.
+        centroids: Position of nodes/instance segmentations.
+
+    Returns:
+        Dictionary containing all nodes from the graph.
+    """
+    # add missing nodes from component and compute distance to path
+    node_dict = {}
+    for num, c in enumerate(label_ids):
+        min_dist = float('inf')
+        nearest_node = None
+
+        for key in path_dict.keys():
+            dist = math.dist(centroids[num], path_dict[key]["pos"])
+            if dist < min_dist:
+                min_dist = dist
+                nearest_node = key
+
+        node_dict[c] = {
+            "label_id": c,
+            "length_fraction": path_dict[nearest_node]["length_fraction"],
+            "pos": path_dict[nearest_node]["length_fraction"],
+            "offset": min_dist,
+            }
+    return node_dict
 
 
 def equidistant_centers(
@@ -299,7 +535,7 @@ def equidistant_centers(
         component_label: List of components for centroid subset.
         cell_type: Cell type of the segmentation.
         n_blocks: Number of equidistant centers for block creation.
-        offset_block: Centers are shifted by half a length if True. Avoid centers at the start/end of the path.
+        offset_blocks: Centers are shifted by half a length if True. Avoid centers at the start/end of the path.
 
     Returns:
         Equidistant centers as float values
@@ -309,27 +545,28 @@ def equidistant_centers(
     centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
 
     if cell_type == "ihc":
-        total_distance, path, _ = measure_run_length_ihcs(centroids)
+        total_distance, path, _ = measure_run_length_ihcs(centroids, component_label=component_label)
+        return get_centers_from_path(path,  total_distance, n_blocks=n_blocks, offset_blocks=offset_blocks)
 
     else:
-        total_distance, path, _ = measure_run_length_sgns(centroids)
+        if len(component_label) == 1:
+            total_distance, path, _ = measure_run_length_sgns(centroids)
+            return get_centers_from_path(path,  total_distance, n_blocks=n_blocks, offset_blocks=offset_blocks)
 
-    diffs = np.diff(path, axis=0)
-    seg_lens = np.linalg.norm(diffs, axis=1)
-    cum_len = np.insert(np.cumsum(seg_lens), 0, 0)
-    if offset_blocks:
-        target_s = np.linspace(0, total_distance, n_blocks * 2 + 1)
-        target_s = [s for num, s in enumerate(target_s) if num % 2 == 1]
-    else:
-        target_s = np.linspace(0, total_distance, n_blocks)
-    f = interp1d(cum_len, path, axis=0)
-    centers = f(target_s)
-    return centers
+        else:
+            centroids_components = []
+            for label in component_label:
+                subset = table[table["component_labels"] == label]
+                subset_centroids = list(zip(subset["anchor_x"], subset["anchor_y"], subset["anchor_z"]))
+                centroids_components.append(subset_centroids)
+            total_distance, path, path_dict = measure_run_length_sgns_multi_component(centroids_components)
+            return get_centers_from_path_dict(path_dict, n_blocks=n_blocks, offset_blocks=offset_blocks)
 
 
 def tonotopic_mapping(
     table: pd.DataFrame,
     component_label: List[int] = [1],
+    component_mapping: Optional[List[int]] = None,
     cell_type: str = "ihc",
     animal: str = "mouse",
 ) -> pd.DataFrame:
@@ -339,6 +576,7 @@ def tonotopic_mapping(
     Args:
         table: Dataframe of segmentation table.
         component_label: List of component labels to evaluate.
+        components_mapping: Components to use for tonotopic mapping. Ignore components torn parallel to main canal.
         cell_type: Cell type of segmentation.
 
     Returns:
@@ -346,41 +584,28 @@ def tonotopic_mapping(
     """
     # subset of centroids for given component label(s)
     new_subset = table[table["component_labels"].isin(component_label)]
-
-    # option for filtering IHC instances without synapses
-    # leaving it commented for now because it would have little effect
-
-    # if "syn_per_IHC" in new_subset.columns:
-    #    syn_limit = 0
-    #    print(f"Keeping IHC instances with more than {syn_limit} synapses.")
-    #    new_subset = new_subset[new_subset["syn_per_IHC"] > syn_limit]
-
     centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
     label_ids = [int(i) for i in list(new_subset["label_id"])]
 
+    if component_mapping is None:
+        component_mapping = component_label
+
     if cell_type == "ihc":
-        total_distance, _, path_dict = measure_run_length_ihcs(centroids)
+        total_distance, _, path_dict = measure_run_length_ihcs(centroids, component_label=component_label)
 
     else:
-        total_distance, _, path_dict = measure_run_length_sgns(centroids)
+        if len(component_mapping) == 1:
+            total_distance, _, path_dict = measure_run_length_sgns(centroids)
 
-    # add missing nodes from component and compute distance to path
-    node_dict = {}
-    for num, c in enumerate(label_ids):
-        min_dist = float('inf')
-        nearest_node = None
+        else:
+            centroids_components = []
+            for label in component_mapping:
+                subset = table[table["component_labels"] == label]
+                subset_centroids = list(zip(subset["anchor_x"], subset["anchor_y"], subset["anchor_z"]))
+                centroids_components.append(subset_centroids)
+            total_distance, _, path_dict = measure_run_length_sgns_multi_component(centroids_components)
 
-        for key in path_dict.keys():
-            dist = math.dist(centroids[num], path_dict[key]["pos"])
-            if dist < min_dist:
-                min_dist = dist
-                nearest_node = key
-
-        node_dict[c] = {
-            "label_id": c,
-            "length_fraction": path_dict[nearest_node]["length_fraction"],
-            "offset": min_dist,
-            }
+    node_dict = node_dict_from_path_dict(path_dict, label_ids, centroids)
 
     offset = [-1 for _ in range(len(table))]
     offset = list(np.float64(offset))
