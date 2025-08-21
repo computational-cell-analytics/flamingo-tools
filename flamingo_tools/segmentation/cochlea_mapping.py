@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -396,37 +396,20 @@ def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse") ->
         Dataframe containing frequency in an additional column 'frequency[kHz]'.
     """
     if animal == "mouse":
-        if cell_type == "ihc":
-            # freq_min = 5.16 kHz
-            # freq_max = 81.38 kHz
-            var_A = 4.232
-            var_a = 1.279
-            var_k = -0.22
-        if cell_type == "sgn":
-            # freq_min = 0.0095 kHz
-            # freq_max = 47.47 kHz
-            var_A = 0.38
-            var_a = 2.1
-            var_k = 0.975
+        # freq_min = 1.5 kHz
+        # freq_max = 86 kHz
+        # ou bohne 2000 Hear res, "EDGES"
+        var_A = 1.46
+        var_a = 0.0177
+        var_k = 0
 
     elif animal == "gerbil":
-        if cell_type == "ihc":
-            # freq_min = 0.0105 kHz
-            # freq_max = 43.82 kHz
-            var_A = 0.35
-            var_a = 2.1
-            var_k = 0.7
-        if cell_type == "sgn":
-            # freq_min = 0.0105 kHz
-            # freq_max = 43.82 kHz
-            var_A = 0.35
-            var_a = 2.1
-            var_k = 0.7
+        # freq_min = 0.0105 kHz
+        # freq_max = 43.82 kHz
+        var_A = 0.35
+        var_a = 2.1
+        var_k = 0.7
 
-        # alternative Gerbil Greenwood function according to Mueller1995
-        # var_A = 0.398
-        # var_a = 2.2
-        # var_k = 0.631
     else:
         raise ValueError("Animal not supported. Use either 'mouse' or 'gerbil'.")
 
