@@ -5,9 +5,6 @@
 			1,
 			2
 		],
-		"component_mapping" :[
-			1
-		],
 		"segmentation_channel": "SGN_v2",
 		"type": "sgn"
 	}
