@@ -54,13 +54,15 @@ def repro_tonotopic_mapping(
 
         cell_type = dic["type"] if "type" in dic else default_cell_type
         component_list = dic["component_list"] if "component_list" in dic else default_component_list
+        component_mapping = dic["component_mapping"] if "component_mapping" in dic else component_list
 
         for column in remove_columns:
             if column in list(table.columns):
                 table = table.drop(column, axis=1)
 
         if not os.path.isfile(output_table_path) or force_overwrite:
-            table = tonotopic_mapping(table, component_label=component_list, animal=animal, cell_type=cell_type)
+            table = tonotopic_mapping(table, component_label=component_list, animal=animal,
+                                      cell_type=cell_type, component_mapping=component_mapping)
 
             table.to_csv(output_table_path, sep="\t", index=False)
 

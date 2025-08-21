@@ -9,9 +9,9 @@ SYNAPSE_DIR_ROOT = "./synapses"
 # Define the animal specific octave bands.
 def _get_mapping(animal):
     if animal == "mouse":
-        bin_edges = [0, 1, 2, 4, 8, 16, 32, 64, np.inf]
+        bin_edges = [0, 2, 4, 8, 16, 32, 64, np.inf]
         bin_labels = [
-            "<1 k", "1–2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", "32–64 k", ">64 k"
+            "<2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", "32–64 k", ">64 k"
         ]
     elif animal == "gerbil":
         bin_edges = [0, 0.5, 1, 2, 4, 8, 16, 32, np.inf]
