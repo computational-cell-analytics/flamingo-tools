@@ -10,7 +10,8 @@ COCHLEAE_FOR_SUBTYPES = {
     "M_LR_000099_L": ["PV", "Calb1", "Lypd1"],
     "M_LR_000214_L": ["PV", "CR", "Calb1"],
     "M_AMD_N62_L": ["PV", "CR", "Calb1"],
-    "M_AMD_Runx1_L": ["PV", "Lypd1", "Calb1"],
+    # Mutant / some stuff is weird.
+    # "M_AMD_Runx1_L": ["PV", "Lypd1", "Calb1"],
     # This one still has to be stitched:
     # "M_LR_000184_R": {"PV", "Prph"},
     # We don't have PV here, so we exclude these two for now.
@@ -30,6 +31,15 @@ CHANNEL_TO_TYPE = {
     "Calb1": "Type-Ib",
     "Lypd1": "Type-Ic",
     "Prph": "Type-II",
+}
+
+# TODO
+THRESHOLDS = {
+    "M_LR_000214_L": {
+    },
+    "M_AMD_N62_L": {
+        "Calb1": 380,
+    },
 }
 
 
@@ -83,10 +93,6 @@ def analyze_subtypes_intensity_based():
         # Remove the PV channel, which we don't need for analysis.
         channels = channels[1:]
 
-        # FIXME
-        if cochlea != "M_LR_000099_L":
-            continue
-
         content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
         info = json.loads(content.read())
         sources = info["sources"]
@@ -110,7 +116,11 @@ def analyze_subtypes_intensity_based():
         for channel in channels:
             # Load the intensity table.
             intensity_path = os.path.join(table_folder, f"{channel}_PV-SGN-v2_object-measures.tsv")
-            table_content = s3.open(intensity_path, mode="rb")
+            try:
+                table_content = s3.open(intensity_path, mode="rb")
+            except FileNotFoundError:
+                print(intensity_path, "is missing")
+                continue
             intensities = pd.read_csv(table_content, sep="\t")
             intensities = intensities[intensities.label_id.isin(valid_sgns)]
             assert len(table) == len(intensities)
@@ -120,7 +130,10 @@ def analyze_subtypes_intensity_based():
             medians = intensities["median"].values
 
             # TODO: we need to determine the threshold in a better way / validate it in MoBIE.
-            intensity_threshold = float(threshold_otsu(medians))
+            intensity_threshold = THRESHOLDS.get(cochlea, {}).get(channel, None)
+            if intensity_threshold is None:
+                print("Could not find a threshold for", cochlea, channel, "falling back to OTSU")
+                intensity_threshold = float(threshold_otsu(medians))
             threshold_dict[cochlea][channel] = intensity_threshold
 
             subtype = CHANNEL_TO_TYPE[channel]

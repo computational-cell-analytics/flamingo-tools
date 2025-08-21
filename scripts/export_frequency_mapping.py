@@ -36,8 +36,8 @@ def export_frequency_mapping(cochlea, scale, output_folder, source_name, colorma
     seg_path = os.path.join(cochlea, source["imageData"]["ome.zarr"]["relativePath"])
     s3_store, _ = get_s3_path(seg_path, bucket_name=BUCKET_NAME, service_endpoint=SERVICE_ENDPOINT)
     input_key = f"s{scale}"
-    with zarr.open(s3_store, mode="r") as f:
-        seg = f[input_key][:]
+    f = zarr.open(s3_store, mode="r")
+    seg = f[input_key][:]
 
     mapping = {int(seg_id): freq for seg_id, freq in zip(table.label_id, frequencies)}
     lut = np.zeros(max_id + 1, dtype="float32")

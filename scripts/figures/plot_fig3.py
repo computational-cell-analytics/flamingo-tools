@@ -11,7 +11,14 @@ from matplotlib import cm, colors
 
 from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT
 
-INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3/frequency_mapping"
+INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+
+TYPE_TO_CHANNEL = {
+    "Type-Ia": "CR",
+    "Type-Ib": "Calb1",
+    "Type-Ic": "Lypd1",
+    "Type-II": "Prph",
+}
 
 png_dpi = 300
 
@@ -42,33 +49,25 @@ def _plot_colormap(vol, title, plot, save_path):
     plt.tight_layout()
     if plot:
         plt.show()
+
     plt.savefig(save_path)
     plt.close()
 
 
 def fig_03a(save_path, plot, plot_napari):
-    path = os.path.join(INPUT_ROOT, "frequencies_IHC_v4c.tif")
-    vol = imageio.imread(path)
-    _plot_colormap(vol, title="Tonotopic Mapping: IHCs", plot=plot, save_path=save_path)
+    path_ihc = os.path.join(INPUT_ROOT, "frequencies_IHC_v4c.tif")
+    path_sgn = os.path.join(INPUT_ROOT, "frequencies_SGN_v2.tif")
+    sgn = imageio.imread(path_sgn)
+    ihc = imageio.imread(path_ihc)
+    _plot_colormap(sgn, title="Tonotopic Mapping", plot=plot, save_path=save_path)
 
     # Show the image in napari for rendering.
     if plot_napari:
         import napari
         v = napari.Viewer()
-        v.add_image(vol, colormap="viridis")
+        v.add_image(ihc, colormap="viridis")
+        v.add_image(sgn, colormap="viridis")
         napari.run()
-
-
-def fig_03b(save_path, plot, plot_napari):
-    path = os.path.join(INPUT_ROOT, "frequencies_SGN_v2.tif")
-    vol = imageio.imread(path)
-    _plot_colormap(vol, title="Tonotopic Mapping: SGNs", plot=plot, save_path=save_path)
-
-    # Show the image in napari for rendering.
-    if plot_napari:
-        import napari
-        v = napari.Viewer()
-        v.add_image(vol, colormap="viridis")
 
 
 def fig_03c_rl(save_path, plot=False):
@@ -102,9 +101,9 @@ def fig_03c_rl(save_path, plot=False):
 
 
 def fig_03c_octave(save_path, plot=False):
-    # TODO update this table
     ihc_version = "ihc_counts_v4c"
     tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
+    assert len(tables) == 4
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for tab_path in tables:
@@ -114,7 +113,6 @@ def fig_03c_octave(save_path, plot=False):
         freq = tab["frequency"].values
         syn_count = tab["synapse_count"].values
 
-        # Compute the running sum of 10 micron.
         octave_binned = frequency_mapping(freq, syn_count, animal="mouse")
 
         result["cochlea"].extend([alias] * len(octave_binned))
@@ -164,7 +162,11 @@ def fig_03d(save_path, plot, print_stats=True):
                 vals = table[col].values
                 subtype = col[3:]
                 n_subtype = vals.sum()
-                print(subtype, ":", n_subtype, "/", n_sgns, f"({np.round(float(n_subtype) / n_sgns * 100, 2)} %)")
+                channel = TYPE_TO_CHANNEL[subtype]
+                print(
+                    f"{subtype} ({channel}):", n_subtype, "/", n_sgns,
+                    f"({np.round(float(n_subtype) / n_sgns * 100, 2)} %)"
+                )
 
             coexpr = np.logical_and(subtype_table.iloc[:, 0].values, subtype_table.iloc[:, 1].values)
             print("Co-expression:", coexpr.sum())
@@ -178,16 +180,13 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    # Panel A: Tonotopic mapping of IHCs (rendering in napari)
-    # fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a.png"), plot=args.plot, plot_napari=False)
-
-    # Panel B: Tonotopic mapping of SGNs (rendering in napari)
-    # fig_03b(save_path=os.path.join(args.figure_dir, "fig_03b.png"), plot=args.plot, plot_napari=False)
+    # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
+    # fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a_cmap.png"), plot=args.plot, plot_napari=True)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
     # fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
-    # fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
+    fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
 
     # Panel D: Spatial distribution of SGN sub-types.
     fig_03d(save_path=os.path.join(args.figure_dir, "fig_03d.png"), plot=args.plot)
