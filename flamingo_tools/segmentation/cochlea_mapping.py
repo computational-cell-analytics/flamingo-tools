@@ -400,7 +400,7 @@ def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse") ->
         # freq_max = 86 kHz
         # ou bohne 2000 Hear res, "EDGES"
         var_A = 1.46
-        var_a = 0.0177
+        var_a = 1.77
         var_k = 0
 
     elif animal == "gerbil":
