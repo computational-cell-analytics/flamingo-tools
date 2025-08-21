@@ -1,0 +1,22 @@
+[
+	{
+		"cochlea": "M_AMD_N62_L",
+		"segmentation_channel": "PV_SGN_v2",
+		"type": "sgn"
+	},
+	{
+		"cochlea": "M_AMD_Runx1_L",
+		"segmentation_channel": "PV_SGN_v2",
+		"type": "sgn"
+	},
+	{
+		"cochlea": "M_LR_000099_L",
+		"segmentation_channel": "PV_SGN_v2",
+		"type": "sgn"
+	},
+    {
+        "cochlea": "M_LR_000214_L",
+        "segmentation_channel": "PV_SGN_v2",
+        "type": "sgn"
+    }
+]

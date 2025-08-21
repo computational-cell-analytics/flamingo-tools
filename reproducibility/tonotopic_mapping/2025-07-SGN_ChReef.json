@@ -14,6 +14,16 @@
 		"segmentation_channel": "SGN_v2",
 		"type": "sgn"
 	},
+    {
+        "cochlea": "M_LR_000153_L",
+        "component_list": [
+            1,
+            2,
+            3
+        ],
+        "segmentation_channel": "SGN_v2",
+        "type": "sgn"
+    },
 	{
 		"cochlea": "M_LR_000155_L",
 		"segmentation_channel": "SGN_v2",
