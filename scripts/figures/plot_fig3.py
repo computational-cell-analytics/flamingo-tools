@@ -145,6 +145,31 @@ def fig_03c_octave(save_path, plot=False):
         plt.close()
 
 
+def fig_03d(save_path, plot, print_stats=True):
+    result_folder = "../measurements/subtype_analysis"
+    files = glob(os.path.join(result_folder, "*.tsv"))
+
+    for ff in files:
+        fname = os.path.basename(ff)
+        cochlea = fname[:-len("_subtype_analysis.tsv")]
+        table = pd.read_csv(ff, sep="\t")
+
+        subtype_table = table[[col for col in table.columns if col.startswith("is_")]]
+        assert subtype_table.shape[1] == 2
+        n_sgns = len(subtype_table)
+
+        if print_stats:
+            print(cochlea)
+            for col in subtype_table.columns:
+                vals = table[col].values
+                subtype = col[3:]
+                n_subtype = vals.sum()
+                print(subtype, ":", n_subtype, "/", n_sgns, f"({np.round(float(n_subtype) / n_sgns * 100, 2)} %)")
+
+            coexpr = np.logical_and(subtype_table.iloc[:, 0].values, subtype_table.iloc[:, 1].values)
+            print("Co-expression:", coexpr.sum())
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate plots for Fig 3 of the cochlea paper.")
     parser.add_argument("--figure_dir", "-f", type=str, help="Output directory for plots.", default="./panels/fig3")
@@ -154,17 +179,18 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panel A: Tonotopic mapping of IHCs (rendering in napari)
-    fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a.png"), plot=args.plot, plot_napari=False)
+    # fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a.png"), plot=args.plot, plot_napari=False)
 
     # Panel B: Tonotopic mapping of SGNs (rendering in napari)
-    fig_03b(save_path=os.path.join(args.figure_dir, "fig_03b.png"), plot=args.plot, plot_napari=False)
+    # fig_03b(save_path=os.path.join(args.figure_dir, "fig_03b.png"), plot=args.plot, plot_napari=False)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
     # fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
-    fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
+    # fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
 
-    # TODO: Panel D: Spatial distribution of SGN sub-types.
+    # Panel D: Spatial distribution of SGN sub-types.
+    fig_03d(save_path=os.path.join(args.figure_dir, "fig_03d.png"), plot=args.plot)
 
 
 if __name__ == "__main__":
