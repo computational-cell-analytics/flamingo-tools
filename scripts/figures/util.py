@@ -70,3 +70,15 @@ def literature_reference_values(structure):
     else:
         raise ValueError
     return lower_bound, upper_bound
+
+
+def literature_reference_values_gerbil(structure):
+    if structure == "SGN":
+        lower_bound, upper_bound = 24700, 28450
+    elif structure == "IHC":
+        lower_bound, upper_bound = 1081, 1081
+    elif structure == "synapse":
+        lower_bound, upper_bound = 9.1, 20.7
+    else:
+        raise ValueError
+    return lower_bound, upper_bound

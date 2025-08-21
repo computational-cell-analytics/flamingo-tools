@@ -4,10 +4,114 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import tifffile
+from matplotlib import colors
 
 from util import literature_reference_values
 
 png_dpi = 300
+
+
+def fig_02b_sgn(save_dir, plot=False):
+    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
+    val_sgn_dir = f"{cochlea_dir}/predictions/val_sgn"
+    image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationSGNs/for_consensus_annotation"
+
+    crop_name = "MLR169R_PV_z3420_allturns_full"
+    image_name = os.path.join(image_dir, f"{crop_name}.tif")
+
+    xlim1 = 2000
+    xlim2 = 2500
+    ylim1 = 3100
+    ylim2 = 3600
+
+    for seg_net in ["distance_unet", "cellpose-sam", "micro-sam"]:
+        save_path = os.path.join(save_dir, f"fig_02b_sgn_{seg_net}.png")
+
+        seg_dir = os.path.join(val_sgn_dir, seg_net)
+
+        in_path = os.path.join(seg_dir, f"{crop_name}_seg.tif")
+        seg = tifffile.imread(in_path)
+        if len(seg.shape) == 3:
+            seg = seg[10, xlim1:xlim2, ylim1:ylim2]
+        else:
+            seg = seg[xlim1:xlim2, ylim1:ylim2]
+
+        in_path = os.path.join(seg_dir, image_name)
+        img = tifffile.imread(in_path)
+        img = img[10, xlim1:xlim2, ylim1:ylim2]
+
+        # create color map with random distribution for coloring instance segmentation
+        unique = list(np.unique(seg)[1:])
+        n_instances = len(unique)
+        rng = np.random.default_rng(seed=42)   # fixed seed for reproducibility
+        colors_array = rng.uniform(0, 1, size=(n_instances, 4))  # RGBA values in [0,1]
+        colors_array[:, 3] = 1.0  # full alpha
+        colors_array[0, 3] = 0.0  # make label 0 transparent (background)
+        rand_cmap = colors.ListedColormap(colors_array)
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(img, cmap="gray")
+        ax.imshow(seg, cmap=rand_cmap, alpha=0.5, interpolation="nearest")
+        ax.axis("off")
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+
+        if plot:
+            plt.show()
+        else:
+            plt.close()
+
+
+def fig_02b_ihc(save_dir, plot=False):
+    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
+    val_sgn_dir = f"{cochlea_dir}/predictions/val_ihc"
+    image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationIHCs"
+
+    crop_name = "MLR226L_VGlut3_z1200_3turns_full"
+    image_name = os.path.join(image_dir, f"{crop_name}.tif")
+
+    xlim1 = 1900
+    xlim2 = 2400
+    ylim1 = 2000
+    ylim2 = 2500
+
+    for seg_net in ["distance_unet_v3", "cellpose-sam", "micro-sam"]:
+        save_path = os.path.join(save_dir, f"fig_02b_ihc_{seg_net}.png")
+
+        seg_dir = os.path.join(val_sgn_dir, seg_net)
+
+        in_path = os.path.join(seg_dir, f"{crop_name}_seg.tif")
+        seg = tifffile.imread(in_path)
+        if len(seg.shape) == 3:
+            seg = seg[10, xlim1:xlim2, ylim1:ylim2]
+        else:
+            seg = seg[xlim1:xlim2, ylim1:ylim2]
+
+        in_path = os.path.join(seg_dir, image_name)
+        img = tifffile.imread(in_path)
+        img = img[10, xlim1:xlim2, ylim1:ylim2]
+
+        # create color map with random distribution for coloring instance segmentation
+        unique = list(np.unique(seg)[1:])
+        n_instances = len(unique)
+        rng = np.random.default_rng(seed=42)   # fixed seed for reproducibility
+        colors_array = rng.uniform(0, 1, size=(n_instances, 4))  # RGBA values in [0,1]
+        colors_array[:, 3] = 1.0  # full alpha
+        colors_array[0, 3] = 0.0  # make label 0 transparent (background)
+        rand_cmap = colors.ListedColormap(colors_array)
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(img, cmap="gray")
+        ax.imshow(seg, cmap=rand_cmap, alpha=0.5, interpolation="nearest")
+        ax.axis("off")
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+
+        if plot:
+            plt.show()
+        else:
+            plt.close()
 
 
 def fig_02c(save_path, plot=False, all_versions=False):
@@ -299,6 +403,8 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panel C: Evaluation of the segmentation results:
+    fig_02b_sgn(save_dir=args.figure_dir, plot=args.plot)
+    fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
     fig_02c(save_path=os.path.join(args.figure_dir, "fig_02c"), plot=args.plot, all_versions=False)
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
