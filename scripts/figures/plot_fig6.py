@@ -3,6 +3,8 @@ import os
 
 import matplotlib.pyplot as plt
 
+from util import literature_reference_values_gerbil
+
 png_dpi = 300
 
 
@@ -27,9 +29,10 @@ def fig_06a(save_path, plot=False):
     # Labels and formatting
     ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
 
-    ylim0 = 12000
-    ylim1 = 22500
-    y_ticks = [i for i in range(ylim0, ylim1 + 1, 2000)]
+    ylim0 = 14000
+    ylim1 = 30000
+    ytick_gap = 4000
+    y_ticks = [i for i in range((((ylim0 - 1) // ytick_gap) + 1) * ytick_gap, ylim1 + 1, ytick_gap)]
 
     ax[0].set_ylabel('Count per cochlea', fontsize=main_label_size)
     ax[0].set_yticks(y_ticks)
@@ -40,19 +43,18 @@ def fig_06a(save_path, plot=False):
     xmin = 0.5
     xmax = 1.5
     ax[0].set_xlim(xmin, xmax)
-    upper_y = 15000
-    lower_y = 13000
+    lower_y, upper_y = literature_reference_values_gerbil("SGN")
     ax[0].hlines([lower_y, upper_y], xmin, xmax)
-    ax[0].text(1, upper_y + 100, "literature reference (WIP)", color='C0', fontsize=main_tick_size, ha="center")
+    ax[0].text(1, upper_y + 100, "literature reference", color='C0', fontsize=main_tick_size, ha="center")
     ax[0].fill_between([xmin, xmax], lower_y, upper_y, color='C0', alpha=0.05, interpolate=True)
 
-    ylim0 = 800
+    ylim0 = 900
     ylim1 = 1400
-    y_ticks = [i for i in range(ylim0, ylim1 + 1, 100)]
+    ytick_gap = 200
+    y_ticks = [i for i in range((((ylim0 - 1) // ytick_gap) + 1) * ytick_gap, ylim1 + 1, ytick_gap)]
 
     ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
 
-    ax[1].set_ylabel('Count per cochlea', fontsize=main_label_size)
     ax[1].set_yticks(y_ticks)
     ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
     ax[1].set_ylim(ylim0, ylim1)
@@ -61,10 +63,9 @@ def fig_06a(save_path, plot=False):
     xmin = 0.5
     xmax = 1.5
     ax[1].set_xlim(xmin, xmax)
-    upper_y = 1200
-    lower_y = 1000
+    lower_y, upper_y = literature_reference_values_gerbil("IHC")
     ax[1].hlines([lower_y, upper_y], xmin, xmax)
-    ax[1].text(1, upper_y + 10, "literature reference (WIP)", color='C0', fontsize=main_tick_size, ha="center")
+    ax[1].text(1, upper_y + 10, "literature reference", color='C0', fontsize=main_tick_size, ha="center")
     ax[1].fill_between([xmin, xmax], lower_y, upper_y, color='C0', alpha=0.05, interpolate=True)
 
     plt.tight_layout()

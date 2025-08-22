@@ -37,6 +37,8 @@ def main():
                         in which case the boundary distances are not used for the seeds.")
     parser.add_argument("--fg_threshold", default=0.5, type=float,
                         help="The threshold applied to the foreground prediction for deriving the watershed mask.")
+    parser.add_argument("--distance_smoothing", default=0, type=float,
+                        help="The sigma value for smoothing the distance predictions with a gaussian kernel.")
 
     args = parser.parse_args()
 
@@ -78,7 +80,7 @@ def main():
             seg_class=args.seg_class,
             center_distance_threshold=args.center_distance_threshold,
             boundary_distance_threshold=args.boundary_distance_threshold,
-            fg_threshold=args.fg_threshold,
+            fg_threshold=args.fg_threshold, distance_smoothing=args.distance_smoothing,
         )
 
         abs_path = os.path.abspath(args.input)
@@ -95,7 +97,7 @@ def main():
             seg_class=args.seg_class,
             center_distance_threshold=args.center_distance_threshold,
             boundary_distance_threshold=args.boundary_distance_threshold,
-            fg_threshold=args.fg_threshold,
+            fg_threshold=args.fg_threshold, distance_smoothing=args.distance_smoothing,
         )
         timer_output = os.path.join(args.output_folder, "timer.json")
 
