@@ -64,6 +64,7 @@ def extract_block(
 
     if output_dir == "":
         output_dir = input_dir
+    os.makedirs(output_dir, exist_ok=True)
 
     if tif:
         if output_key is None:

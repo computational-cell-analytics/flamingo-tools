@@ -66,7 +66,7 @@ def plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, bou
         plt.close()
 
 
-def fig_02b_sgn(save_dir, plot=False):
+def fig_02a_sgn(save_dir, plot=False):
     """Plot crops of SGN segmentation of CochleaNet, Cellpose and micro-sam.
     """
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
@@ -402,9 +402,12 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    # Panel C: Evaluation of the segmentation results:
-    fig_02b_sgn(save_dir=args.figure_dir, plot=args.plot)
+    # Panes A and B: Qualitative comparison of visualization results.
+    fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
+    return
     fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
+
+    # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, "fig_02c"), plot=args.plot, all_versions=False)
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
