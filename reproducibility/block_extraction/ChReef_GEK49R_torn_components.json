@@ -1,0 +1,27 @@
+[
+	{
+		"cochlea": "G_EK_000049_R",
+		"image_channel": [
+			"GFP",
+			"PV",
+			"SGN_v2"
+		],
+		"segmentation_channel": "SGN_v2",
+		"component_list": [
+			2
+		],
+		"type": "sgn",
+		"halo_size": [
+			256,
+			256,
+			50
+		],
+		"crop_centers": [
+			[
+				645,
+				435,
+				815
+			]
+		]
+	}
+]

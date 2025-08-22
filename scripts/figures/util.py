@@ -1,13 +1,17 @@
 import pandas as pd
 import numpy as np
 
+# Directory with synapse measurement tables
+# SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
+SYNAPSE_DIR_ROOT = "./synapses"
+
 
 # Define the animal specific octave bands.
 def _get_mapping(animal):
     if animal == "mouse":
-        bin_edges = [0, 1, 2, 4, 8, 16, 32, 64, np.inf]
+        bin_edges = [0, 2, 4, 8, 16, 32, 64, np.inf]
         bin_labels = [
-            "<1 k", "1–2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", "32–64 k", ">64 k"
+            "<2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", "32–64 k", ">64 k"
         ]
     elif animal == "gerbil":
         bin_edges = [0, 0.5, 1, 2, 4, 8, 16, 32, np.inf]
@@ -70,3 +74,14 @@ def literature_reference_values(structure):
     else:
         raise ValueError
     return lower_bound, upper_bound
+
+
+def to_alias(cochlea_name):
+    name_short = cochlea_name.replace("_", "").replace("0", "")
+    name_to_alias = {
+        "MLR226L": "M01L",
+        "MLR226R": "M01R",
+        "MLR227L": "M02L",
+        "MLR227R": "M02R",
+    }
+    return name_to_alias[name_short]

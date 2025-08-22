@@ -146,9 +146,6 @@ def export_lower_resolution(args):
         input_key = f"s{scale}"
         for channel in args.channels:
             out_path = os.path.join(output_folder, f"{channel}.tif")
-            if args.filter_marker_labels:
-                out_path = os.path.join(output_folder, f"{channel}_marker.tif")
-
             if os.path.exists(out_path):
                 continue
 
