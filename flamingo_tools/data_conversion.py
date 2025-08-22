@@ -10,7 +10,11 @@ from typing import Optional, List, Dict, Tuple
 import numpy as np
 import pybdv
 
-from cluster_tools.utils.volume_utils import write_format_metadata
+try:
+    from cluster_tools.utils.volume_utils import write_format_metadata
+except ImportError:
+    write_format_metadata = None
+
 from elf.io import open_file
 from skimage.transform import rescale
 

@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=segment-unet-SGN
-#SBATCH --time 10:00:00             # for gerbil up to ~30 hours
+#SBATCH --time 35:00:00             # for gerbil up to ~30 hours
 
 #SBATCH -p standard96s:shared         # the partition
 #SBATCH -A nim00007
-#SBATCH -c 8
+#SBATCH -c 12
 #SBATCH --mem 400G
 
 source ~/.bashrc

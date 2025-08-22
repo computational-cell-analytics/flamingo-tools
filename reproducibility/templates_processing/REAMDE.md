@@ -12,6 +12,7 @@ For IHC segmentation run:
 - apply_unet_IHC_template.sbatch
 - segment_unet_IHC_template.sbatch
 
-For ribbon synapse detection run:
-- detect_synapse_marker_template.sbatch
+For ribbon synapse detection without associated IHC segmentation run
 - detect_synapse_template.sbatch
+For ribbon synapse detection with associated IHC segmentation run
+- detect_synapse_marker_template.sbatch

@@ -8,11 +8,13 @@
 #SBATCH --mem 128G
 
 source ~/.bashrc
-micromamba activate flamingo13
+# micromamba activate flamingo13
+micromamba activate sam
 
 # Run the script
 
-SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+# SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+SCRIPT_REPO=/user/pape41/u12086/Work/my_projects/flamingo-tools
 cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
