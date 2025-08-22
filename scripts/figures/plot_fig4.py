@@ -13,42 +13,21 @@ from util import frequency_mapping  # , literature_reference_values
 INTENSITY_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet/tables/measurements2"  # noqa
 
 # The cochlea for the CHReef analysis.
-COCHLEAE = [
-    "M_LR_000143_L",
-    "M_LR_000144_L",
-    "M_LR_000145_L",
-    "M_LR_000153_L",
-    "M_LR_000155_L",
-    "M_LR_000189_L",
-    "M_LR_000143_R",
-    "M_LR_000144_R",
-    "M_LR_000145_R",
-    "M_LR_000153_R",
-    "M_LR_000155_R",
-    "M_LR_000189_R",
-]
-
-COCHLEAE_GERBIL = [
-    "G_EK_000049_L",
-    "G_EK_000049_R",
-]
-
-
-COCHLEAE_ALIAS = {
-    "M_LR_000143_L": "M0L",
-    "M_LR_000144_L": "M05L",
-    "M_LR_000145_L": "M06L",
-    "M_LR_000153_L": "M07L",
-    "M_LR_000155_L": "M08L",
-    "M_LR_000189_L": "M09L",
-    "M_LR_000143_R": "M0R",
-    "M_LR_000144_R": "M05R",
-    "M_LR_000145_R": "M06R",
-    "M_LR_000153_R": "M07R",
-    "M_LR_000155_R": "M08R",
-    "M_LR_000189_R": "M09R",
-    "G_EK_000049_L": "G1L",
-    "G_EK_000049_R": "G1R",
+COCHLEAE_DICT = {
+    "M_LR_000143_L": {"alias": "M0L", "component": [1]},
+    "M_LR_000144_L": {"alias": "M05L", "component": [1]},
+    "M_LR_000145_L": {"alias": "M06L", "component": [1]},
+    "M_LR_000153_L": {"alias": "M07L", "component": [1]},
+    "M_LR_000155_L": {"alias": "M08L", "component": [1, 2, 3]},
+    "M_LR_000189_L": {"alias": "M09L", "component": [1]},
+    "M_LR_000143_R": {"alias": "M0R", "component": [1]},
+    "M_LR_000144_R": {"alias": "M05R", "component": [1]},
+    "M_LR_000145_R": {"alias": "M06R", "component": [1]},
+    "M_LR_000153_R": {"alias": "M07R", "component": [1]},
+    "M_LR_000155_R": {"alias": "M08R", "component": [1]},
+    "M_LR_000189_R": {"alias": "M09R", "component": [1]},
+    "G_EK_000049_L": {"alias": "G1L", "component": [1, 3, 4, 5]},
+    "G_EK_000049_R": {"alias": "G1R", "component": [1, 2]},
 }
 
 png_dpi = 300
@@ -60,10 +39,10 @@ def get_chreef_data(animal="mouse"):
 
     if animal == "mouse":
         cache_path = "./chreef_data.pkl"
-        cochleae = COCHLEAE
+        cochleae = [key for key in COCHLEAE_DICT.keys() if "M_" in key]
     else:
         cache_path = "./chreef_data_gerbil.pkl"
-        cochleae = COCHLEAE_GERBIL
+        cochleae = [key for key in COCHLEAE_DICT.keys() if "G_" in key]
 
     if os.path.exists(cache_path):
         with open(cache_path, "rb") as f:
@@ -83,7 +62,9 @@ def get_chreef_data(animal="mouse"):
         table = pd.read_csv(table_content, sep="\t")
 
         # May need to be adjusted for some cochleae.
-        table = table[table.component_labels == 1]
+        component_labels = COCHLEAE_DICT[cochlea]["component"]
+        print(cochlea, component_labels)
+        table = table[table.component_labels.isin(component_labels)]
         # The relevant values for analysis.
         try:
             values = table[["label_id", "length[µm]", "frequency[kHz]", "marker_labels"]]
@@ -136,7 +117,7 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
 
     # TODO have central function for alias for all plots?
     if use_alias:
-        alias = [COCHLEAE_ALIAS[k] for k in chreef_data.keys()]
+        alias = [COCHLEAE_DICT[k]["alias"] for k in chreef_data.keys()]
     else:
         alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
 
@@ -206,7 +187,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     """Transduction efficiency per cochlea.
     """
     if use_alias:
-        alias = [COCHLEAE_ALIAS[k] for k in chreef_data.keys()]
+        alias = [COCHLEAE_DICT[k]["alias"] for k in chreef_data.keys()]
     else:
         alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
 
@@ -237,7 +218,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     main_label_size = 20
     sub_label_size = 16
     main_tick_size = 12
-    legendsize = 16
+    legendsize = 16 if intensity else 12
 
     label = "Intensity" if intensity else "Transduction efficiency"
     if plot_by_side:
@@ -274,7 +255,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     result = {"cochlea": [], "octave_band": [], "value": []}
     for name, values in chreef_data.items():
         if use_alias:
-            alias = COCHLEAE_ALIAS[name]
+            alias = COCHLEAE_DICT[name]["alias"]
         else:
             alias = name.replace("_", "").replace("0", "")
 

@@ -72,7 +72,10 @@ def fig_03a(save_path, plot, plot_napari):
 
 
 def fig_03c_rl(save_path, plot=False):
-    tables = glob("./ihc_counts/ihc_count_M_LR*.tsv")
+    ihc_version = "ihc_counts_v4c"
+    synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
+    tables = [entry.path for entry in os.scandir(synapse_dir) if "ihc_count_M_LR" in entry.name]
+
     fig, ax = plt.subplots(figsize=(8, 4))
 
     width = 50  # micron
@@ -135,7 +138,7 @@ def fig_03c_octave(save_path, plot=False):
 
     ax.set_ylabel("Average Ribbon Synapse Count per IHC")
     ax.set_title("Ribbon synapse count per octave band")
-    ax.legend(title="Cochlea")
+    plt.legend(title="Cochlea")
 
     plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     if plot:

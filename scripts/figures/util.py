@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 
 # Directory with synapse measurement tables
-# SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
-SYNAPSE_DIR_ROOT = "./synapses"
+SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
+# SYNAPSE_DIR_ROOT = "./synapses"
 
 
 # Define the animal specific octave bands.
@@ -64,11 +64,25 @@ def sliding_runlength_sum(run_length, values, width):
     return x, window_sum
 
 
+# For mouse
 def literature_reference_values(structure):
     if structure == "SGN":
         lower_bound, upper_bound = 9141, 11736
     elif structure == "IHC":
         lower_bound, upper_bound = 656, 681
+    elif structure == "synapse":
+        lower_bound, upper_bound = 9.1, 20.7
+    else:
+        raise ValueError
+    return lower_bound, upper_bound
+
+
+# For gerbil
+def literature_reference_values_gerbil(structure):
+    if structure == "SGN":
+        lower_bound, upper_bound = 24700, 28450
+    elif structure == "IHC":
+        lower_bound, upper_bound = 1081, 1081
     elif structure == "synapse":
         lower_bound, upper_bound = 9.1, 20.7
     else:
