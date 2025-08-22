@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=segment-unet-SGN_M-LR-000214-L
-#SBATCH --time 10:00:00             # estimated time, adapt to your needs
+#SBATCH --job-name=segment-unet-SGN
+#SBATCH --time 10:00:00             # for gerbil up to ~30 hours
 
 #SBATCH -p standard96s:shared         # the partition
 #SBATCH -A nim00007
@@ -22,12 +22,24 @@ echo "Current node: ${SLURM_NODELIST}"
 SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
 cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
+# name of cochlea, as it appears in MoBIE and the NHR
 COCHLEA=$1
+# segmentation name, as it appears in MoBIE, e.g. IHC_v4
+SEG_NAME=$2
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
-export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/SGN_v2
+export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
 export MIN_SIZE=1000
-export BOUNDARY_DISTANCE_THRESHOLD=0.5
+
+# v4a
+# export CENTER_DISTANCE_THRESHOLD=0.4
+# export BOUNDARY_DISTANCE_THRESHOLD=0.5
+# export DISTANCE_SMOOTHING=0
+
+# v4b
+export CENTER_DISTANCE_THRESHOLD=0.5
+export BOUNDARY_DISTANCE_THRESHOLD=0.6
+export DISTANCE_SMOOTHING=0.6
 
 echo "Output directory: ${OUTPUT_FOLDER}"
 

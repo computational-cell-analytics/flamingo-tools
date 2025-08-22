@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=apply-unet-SGN
-#SBATCH -t 01:00:00             # estimated time, adapt to your needs
+#SBATCH --job-name=apply-unet-IHC
+#SBATCH -t 02:00:00             # for gerbil up to ~3 hours
 
 #SBATCH -p grete:shared         # the partition
 #SBATCH -G A100:1               # For requesting 1 A100 GPU.
@@ -24,15 +24,22 @@ cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
 
+# name of cochlea, as it appears in MoBIE and the NHR
 COCHLEA=$1
+# data in n5 format, e.g. GEK11L_PV_GFP_01_fused.n5
+DATA=$2
+# channel in n5 folder, e.g. 0, 1, or 2
+STAIN_CHANNEL=$3
+# segmentation name, as it appears in MoBIE, e.g. IHC_v4
+SEG_NAME=$4
 
-export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/MLR214L_Calb1_PV_CR_012_fused.n5
+export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/"$DATA"
 
-export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/SGN_v2
+export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
 
-export MODEL=/mnt/lustre-grete/usr/u15000/checkpoints/cochlea_distance_unet_SGN_supervised_2025-05-27/
+export MODEL=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/IHC/v4_cochlea_distance_unet_IHC_supervised_2025-07-14
 export PREDICTION_INSTANCES=10
-export INPUT_KEY="setup1/timepoint0/s0"
+export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
 
 echo "Input directory: ${INPUT}"
 echo "Output directory: ${OUTPUT_FOLDER}"

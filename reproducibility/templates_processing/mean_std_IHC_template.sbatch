@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=mean-std-SGN
-#SBATCH -t 02:00:00             # estimated time, adapt to your needs
+#SBATCH --job-name=mean-std-IHC
+#SBATCH -t 01:00:00             # usually takes ~20 min
 
 #SBATCH -p standard96s:shared         # the partition
 #SBATCH -A nim00007
@@ -17,12 +17,19 @@ cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
 
+# name of cochlea, as it appears in MoBIE and the NHR
 COCHLEA=$1
+# data in n5 format, e.g. GEK11L_PV_GFP_01_fused.n5
+DATA=$2
+# channel in n5 folder, e.g. 0, 1, or 2
+STAIN_CHANNEL=$3
+# segmentation name, as it appears in MoBIE, e.g. IHC_v4
+SEG_NAME=$4
 
-export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/GEK11L_PV_GFP_01_fused.n5
-export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/SGN_v2
-export SEG_CLASS="sgn"
-export INPUT_KEY="setup0/timepoint0/s0"
+export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/"$DATA"
+export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
+export SEG_CLASS="ihc"
+export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
 
 if ! [[ -f $OUTPUT_FOLDER ]] ; then
 	mkdir -p "$OUTPUT_FOLDER"
