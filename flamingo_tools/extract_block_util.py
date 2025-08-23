@@ -1,5 +1,5 @@
 import os
-from typing import Optional, List
+from typing import Optional, List, Union, Tuple
 
 import imageio.v3 as imageio
 import numpy as np
@@ -15,7 +15,7 @@ def extract_block(
     output_dir: Optional[str] = None,
     input_key: Optional[str] = None,
     output_key: Optional[str] = None,
-    resolution: float = 0.38,
+    resolution: Union[float, Tuple[float, float, float]] = 0.38,
     roi_halo: List[int] = [128, 128, 64],
     tif: bool = False,
     s3: Optional[bool] = False,
@@ -39,8 +39,7 @@ def extract_block(
         s3_service_endpoint: S3 service endpoint.
         s3_credentials: File path to credentials for S3 bucket.
     """
-    coords = [int(round(c)) for c in coords]
-    coord_string = "-".join([str(c).zfill(4) for c in coords])
+    coord_string = "-".join([str(int(round(c))).zfill(4) for c in coords])
 
     # Dimensions are inversed to view in MoBIE (x y z) -> (z y x)
     # Make sure the coords / roi_halo are not modified in-place.
@@ -77,15 +76,20 @@ def extract_block(
         output_key = "raw" if output_key is None else output_key
         output_file = os.path.join(output_dir, basename + "_crop_" + coord_string + ".n5")
 
-    coords = np.array(coords)
+    coords = np.array(coords).astype("float")
+    if not isinstance(resolution, float):
+        assert len(resolution) == 3
+        resolution = np.array(resolution)[::-1]
     coords = coords / resolution
     coords = np.round(coords).astype(np.int32)
 
     roi = tuple(slice(co - rh, co + rh) for co, rh in zip(coords, roi_halo))
 
     if s3:
-        input_path, fs = s3_utils.get_s3_path(input_path, bucket_name=s3_bucket_name,
-                                              service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
+        input_path, fs = s3_utils.get_s3_path(
+            input_path, bucket_name=s3_bucket_name,
+            service_endpoint=s3_service_endpoint, credential_file=s3_credentials
+        )
 
     data_ = read_image_data(input_path, input_key)
     data_roi = data_[roi]

@@ -26,7 +26,12 @@ STAIN_CHANNEL=$3
 # segmentation name, as it appears in MoBIE, e.g. SGN_v2 or Calb1_SGN_v2
 SEG_NAME=$4
 
+# TODO update model to
+# /mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/v2_domain_adaptation_mlr99l
+# and download the PV channel again
+
 export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/"$DATA"
+
 export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
 export SEG_CLASS="sgn"
 export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
