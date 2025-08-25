@@ -1,29 +1,34 @@
 import argparse
+import json
 import os
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from util import literature_reference_values
+from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
+
+from util import SYNAPSE_DIR_ROOT
+from plot_fig4 import get_chreef_data
 
 png_dpi = 300
 
 
 def _load_ribbon_synapse_counts():
+    # TODO update the version!
     ihc_version = "ihc_counts_v4b"
-    synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
-    tables = [entry.path for entry in os.scandir(synapse_dir) if "ihc_count_M_AMD" in entry.name]
-    syn_counts = []
-    for tab in tables:
-        x = pd.read_csv(tab, sep="\t")
-        syn_counts.extend(x["synapse_count"].values.tolist())
+    table_path = os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_AMD_OTOF1_L.tsv")
+    x = pd.read_csv(table_path, sep="\t")
+    syn_counts = x.synapse_count.values.tolist()
     return syn_counts
 
 
 def fig_05c(save_path, plot=False):
-    """Bar plot showing the distribution of synapse markers per IHC segmentation average over OTOF cochlea.
+    """Bar plot showing the IHC count and distribution of synapse markers per IHC segmentation over OTOF cochlea.
     """
+    # TODO update the alias.
+    # For MOTOF1L
+    alias = "M10L"
 
     main_label_size = 20
     main_tick_size = 12
@@ -31,43 +36,79 @@ def fig_05c(save_path, plot=False):
 
     ribbon_synapse_counts = _load_ribbon_synapse_counts()
 
-    fig, ax = plt.subplots(figsize=(8, 4))
+    rows, columns = 1, 2
+    fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
 
-    ylim0 = -1
-    ylim1 = 24
-    y_ticks = [i for i in range(0, 25, 5)]
+    #
+    # Create the plot for IHCs.
+    #
+    ihc_values = [len(ribbon_synapse_counts)]
 
-    ax.set_ylabel("Ribbon Syn. per IHC", fontsize=main_label_size)
-    ax.set_yticks(y_ticks)
-    ax.set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-    ax.set_ylim(ylim0, ylim1)
+    ylim0 = 600
+    ylim1 = 800
+    y_ticks = [i for i in range(600, 800 + 1, 100)]
 
-    ax.boxplot(ribbon_synapse_counts)
-    ax.set_xticklabels(["MOTOF1L"], fontsize=main_label_size)
+    axes[0].set_ylabel("IHC count", fontsize=main_label_size)
+    axes[0].set_yticks(y_ticks)
+    axes[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    axes[0].set_ylim(ylim0, ylim1)
 
-    # set range of literature values
+    axes[0].boxplot(ihc_values)
+    axes[0].set_xticklabels([alias], fontsize=main_label_size)
+
+    # Set the reference values for healthy cochleae
     xmin = 0.5
     xmax = 1.5
-    lower_y, upper_y = literature_reference_values("synapse")
-    ax.set_xlim(xmin, xmax)
-    ax.hlines([lower_y, upper_y], xmin, xmax)
-    ax.text(1.25, upper_y + 0.01*ax.get_ylim()[1]-ax.get_ylim()[0], "literature",
-            color="C0", fontsize=htext_size, ha="center")
-    ax.fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
+    ihc_reference_values = [712, 710, 721, 675]  # MLR226L, MLR226R, MLR227L, MLR227R
 
-    ihc_values = [14.1, 12.7, 13.8, 13.4]  # MLR226L, MLR226R, MLR227L, MLR227R
-
-    ihc_value = np.mean(ihc_values)
-    ihc_std = np.std(ihc_values)
+    ihc_value = np.mean(ihc_reference_values)
+    ihc_std = np.std(ihc_reference_values)
 
     upper_y = ihc_value + 1.96 * ihc_std
     lower_y = ihc_value - 1.96 * ihc_std
 
+    axes[0].hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
+    axes[0].text(1, upper_y + 10, "healthy cochleae", color="C1", fontsize=main_tick_size, ha="center")
+    axes[0].fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
+
+    #
+    # Create the plot for ribbon synapse distribution.
+    #
+    ylim0 = -1
+    ylim1 = 24
+    y_ticks = [i for i in range(0, 25, 5)]
+
+    axes[1].set_ylabel("Ribbon Syn. per IHC", fontsize=main_label_size)
+    axes[1].set_yticks(y_ticks)
+    axes[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    axes[1].set_ylim(ylim0, ylim1)
+
+    axes[1].boxplot(ribbon_synapse_counts)
+    axes[1].set_xticklabels([alias], fontsize=main_label_size)
+
+    axes[1].yaxis.tick_right()
+    axes[1].yaxis.set_ticks_position("right")
+    axes[1].yaxis.set_label_position("right")
+
+    # Set the reference values for healthy cochleae
+    xmin = 0.5
+    xmax = 1.5
+    syn_reference_values = [14.1, 12.7, 13.8, 13.4]  # MLR226L, MLR226R, MLR227L, MLR227R
+
+    syn_value = np.mean(syn_reference_values)
+    syn_std = np.std(syn_reference_values)
+
+    upper_y = syn_value + 1.96 * syn_std
+    lower_y = syn_value - 1.96 * syn_std
+
     plt.hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
-    plt.text(1.25, upper_y + 0.01*ax.get_ylim()[1]-ax.get_ylim()[0], "healthy cochleae (95% confidence interval)",
-             color="C1", fontsize=htext_size, ha="center")
+    plt.text(
+        1.25, upper_y + 0.01*axes[1].get_ylim()[1]-axes[1].get_ylim()[0], "healthy cochleae",
+        color="C1", fontsize=htext_size, ha="center"
+    )
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
 
+    # Save and plot the figure.
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
 
@@ -75,6 +116,33 @@ def fig_05c(save_path, plot=False):
         plt.show()
     else:
         plt.close()
+
+
+# TODO
+def fig_05d(save_path, plot):
+    if False:
+        s3 = create_s3_target()
+
+        # Intensity distribution for OTOF
+        cochlea = "M_AMD_OTOF1_L"
+        content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
+        info = json.loads(content.read())
+        sources = info["sources"]
+
+        # Load the seg table and filter the compartments.
+        source_name = "IHC_v4c"
+        source = sources[source_name]["segmentation"]
+        rel_path = source["tableData"]["tsv"]["relativePath"]
+        table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
+        table = pd.read_csv(table_content, sep="\t")
+        print(table)
+
+    # TODO would need the new intensity subtracted data here.
+    # Reference: intensity distributions for ChReef
+    chreef_data = get_chreef_data()
+    for cochlea, tab in chreef_data.items():
+        plt.hist(tab["median"])
+        plt.show()
 
 
 def main():
@@ -86,7 +154,10 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panel C: Monitoring of the Syn / IHC loss
-    fig_05c(save_path=os.path.join(args.figure_dir, "fig_05c"), plot=args.plot)
+    # fig_05c(save_path=os.path.join(args.figure_dir, "fig_05c"), plot=args.plot)
+
+    # Panel D: Tonotopic mapping of the intensities.
+    fig_05d(save_path=os.path.join(args.figure_dir, "fig_05d"), plot=args.plot)
 
 
 if __name__ == "__main__":

@@ -7,11 +7,12 @@
 #SBATCH -p grete:shared         # the partition
 #SBATCH -G A100:1               # For requesting 1 A100 GPU.
 #SBATCH -A nim00007
-#SBATCH -c 2
-#SBATCH --mem 36G
+#SBATCH -c 8
+#SBATCH --mem 128G
 
 source ~/.bashrc
-micromamba activate micro-sam_gpu
+# micromamba activate micro-sam_gpu
+micromamba activate sam
 
 # Print out some info.
 echo "Submitting job with sbatch from directory: ${SLURM_SUBMIT_DIR}"
@@ -19,10 +20,8 @@ echo "Home directory: ${HOME}"
 echo "Working directory: $PWD"
 echo "Current node: ${SLURM_NODELIST}"
 
-# Run the script
-#python myprogram.py $SLURM_ARRAY_TASK_ID
-
-SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+# SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+SCRIPT_REPO=/user/pape41/u12086/Work/my_projects/flamingo-tools
 cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
@@ -46,7 +45,8 @@ export MAX_DISTANCE=8
 echo "OUTPUT_FOLDER $OUTPUT_FOLDER"
 echo "MODEL $MODEL"
 
-python ~/flamingo-tools/scripts/synapse_marker_detection/marker_detection.py \
+SCRIPT="$SCRIPT_DIR"/synapse_marker_detection/marker_detection.py 
+python $SCRIPT \
 	--input "$INPUT_PATH" \
 	--input_key $INPUT_KEY \
 	--output_folder "$OUTPUT_FOLDER" \

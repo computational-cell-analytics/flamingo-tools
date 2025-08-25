@@ -115,14 +115,23 @@ def get_s3_path(
         bucket_name, service_endpoint, credential_file
     )
 
-    s3_filesystem = create_s3_target(url=service_endpoint, anon=False, credential_file=credential_file)
+    zarr_major_version = int(zarr.__version__.split(".")[0])
+    s3_filesystem = create_s3_target(
+        url=service_endpoint, anon=False, credential_file=credential_file, asynchronous=zarr_major_version == 3,
+    )
 
     zarr_path = f"{bucket_name}/{input_path}"
 
-    if not s3_filesystem.exists(zarr_path):
+    if zarr_major_version == 2 and not s3_filesystem.exists(zarr_path):
         print(f"Error: S3 path {zarr_path} does not exist!")
 
-    s3_path = zarr.storage.FSStore(zarr_path, fs=s3_filesystem)
+    # The approach for opening a dataset from S3 differs in zarr v2 and zarr v3.
+    if zarr_major_version == 2:
+        s3_path = zarr.storage.FSStore(zarr_path, fs=s3_filesystem)
+    elif zarr_major_version == 3:
+        s3_path = zarr.storage.FsspecStore(fs=s3_filesystem, path=zarr_path)
+    else:
+        raise RuntimeError(f"Unsupported zarr version {zarr_major_version}")
 
     return s3_path, s3_filesystem
 
@@ -153,6 +162,7 @@ def create_s3_target(
     url: Optional[str] = None,
     anon: Optional[str] = False,
     credential_file: Optional[str] = None,
+    asynchronous: bool = False,
 ) -> s3fs.core.S3FileSystem:
     """Create file system for S3 bucket based on a service endpoint and an optional credential file.
     If the credential file is not provided, the s3fs.S3FileSystem function checks the environment variables
@@ -162,6 +172,7 @@ def create_s3_target(
         url: Service endpoint for S3 bucket
         anon: Option for anon argument of S3FileSystem
         credential_file: File path to credentials
+        asynchronous: Whether to open the file system in async mode.
 
     Returns:
         s3_filesystem
@@ -169,7 +180,9 @@ def create_s3_target(
     client_kwargs = {"endpoint_url": SERVICE_ENDPOINT if url is None else url}
     if credential_file is not None:
         key, secret = read_s3_credentials(credential_file)
-        s3_filesystem = s3fs.S3FileSystem(key=key, secret=secret, client_kwargs=client_kwargs)
+        s3_filesystem = s3fs.S3FileSystem(
+            key=key, secret=secret, client_kwargs=client_kwargs, asynchronous=asynchronous
+        )
     else:
-        s3_filesystem = s3fs.S3FileSystem(anon=anon, client_kwargs=client_kwargs)
+        s3_filesystem = s3fs.S3FileSystem(anon=anon, client_kwargs=client_kwargs, asynchronous=asynchronous)
     return s3_filesystem

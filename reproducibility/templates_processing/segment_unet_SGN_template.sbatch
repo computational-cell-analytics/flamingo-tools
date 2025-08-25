@@ -8,7 +8,8 @@
 #SBATCH --mem 400G
 
 source ~/.bashrc
-micromamba activate micro-sam_gpu
+# micromamba activate micro-sam_gpu
+micromamba activate sam
 
 # Print out some info.
 echo "Submitting job with sbatch from directory: ${SLURM_SUBMIT_DIR}"
@@ -16,10 +17,8 @@ echo "Home directory: ${HOME}"
 echo "Working directory: $PWD"
 echo "Current node: ${SLURM_NODELIST}"
 
-# Run the script
-#python myprogram.py $SLURM_ARRAY_TASK_ID
-
-SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+# SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+SCRIPT_REPO=/user/pape41/u12086/Work/my_projects/flamingo-tools
 cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 # name of cochlea, as it appears in MoBIE and the NHR

@@ -85,6 +85,6 @@ def read_image_data(input_path: Union[str, Store], input_key: Optional[str]) -> 
     elif isinstance(input_path, str):
         input_ = open_file(input_path, "r")[input_key]
     else:
-        with zarr.open(input_path, mode="r") as f:
-            input_ = f[input_key]
+        f = zarr.open(input_path, mode="r")
+        input_ = f[input_key]
     return input_

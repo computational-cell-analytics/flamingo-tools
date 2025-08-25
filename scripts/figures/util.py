@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
 
+# Directory with synapse measurement tables
+SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
+# SYNAPSE_DIR_ROOT = "./synapses"
+
 
 # Define the animal specific octave bands.
 def _get_mapping(animal):
@@ -60,6 +64,7 @@ def sliding_runlength_sum(run_length, values, width):
     return x, window_sum
 
 
+# For mouse
 def literature_reference_values(structure):
     if structure == "SGN":
         lower_bound, upper_bound = 9141, 11736
@@ -72,6 +77,7 @@ def literature_reference_values(structure):
     return lower_bound, upper_bound
 
 
+# For gerbil
 def literature_reference_values_gerbil(structure):
     if structure == "SGN":
         lower_bound, upper_bound = 24700, 28450
@@ -82,3 +88,14 @@ def literature_reference_values_gerbil(structure):
     else:
         raise ValueError
     return lower_bound, upper_bound
+
+
+def to_alias(cochlea_name):
+    name_short = cochlea_name.replace("_", "").replace("0", "")
+    name_to_alias = {
+        "MLR226L": "M01L",
+        "MLR226R": "M01R",
+        "MLR227L": "M02L",
+        "MLR227R": "M02R",
+    }
+    return name_to_alias[name_short]
