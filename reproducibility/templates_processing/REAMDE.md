@@ -15,7 +15,7 @@ For IHC segmentation run:
 After this, run the following to add segmentation to MoBIE, create component labelings and upload to S3:
 - templates_transfer/mobie_segmentation_template.sbatch
 - templates_transfer/s3_seg_template.sh
-- repro_label_components.py
+- label_components/repro_label_components.py
 - templates_transfer/s3_seg_template.sh
 
 For ribbon synapse detection without associated IHC segmentation run

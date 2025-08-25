@@ -94,12 +94,18 @@ def downscale_segmentation():
             )
 
 
+# Note: consider different normalization strategy for these cochleae and normalize by local intensity
+# rather than by global values.
+
 # Also double check empty positions again and make sure they don't contain SGNs
 # Additional positions for LaVision annotations:
 # {"position":[2031.0655170248258,1925.206039671767,249.14546086048554],"timepoint":0}
 # {"position":[2378.3720460599393,2105.471228531872,303.9285928812524],"timepoint":0}
 # {"position":[1619.3251178227529,3444.7351705689553,271.2360278843609],"timepoint":0}
 # {"position":[2358.2784398426843,1503.2211953830192,762.7325586759833],"timepoint":0}
+
+# Position in Marmoset:
+# {"position":[2462.7875134103206,2818.067344942212,1177.1380214828991],"timepoint":0}
 
 
 def main():

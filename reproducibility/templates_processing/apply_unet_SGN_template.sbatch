@@ -47,8 +47,8 @@ export MODEL=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/train
 
 export PREDICTION_INSTANCES=10
 
-# export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
-export INPUT_KEY="s0"
+export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
+# export INPUT_KEY="s0"
 
 echo "Input directory: ${INPUT}"
 echo "Output directory: ${OUTPUT_FOLDER}"

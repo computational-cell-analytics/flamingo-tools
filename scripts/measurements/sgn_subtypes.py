@@ -1,8 +1,9 @@
 import json
 import os
+from glob import glob
+from subprocess import run
 
 import pandas as pd
-from skimage.filters import threshold_otsu
 
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target, get_s3_path
 from flamingo_tools.measurements import compute_object_measures
@@ -116,7 +117,7 @@ def require_missing_tables(missing_tables):
         seg_name = "PV_SGN_v2" if "PV" in COCHLEAE_FOR_SUBTYPES[cochlea] else "CR_SGN_v2"
         for missing in missing_tabs:
             channel = missing.split("_")[0]
-            print(cochlea, channel)
+            print("Computing intensities for:", cochlea, channel)
 
             img_s3 = f"{cochlea}/images/ome-zarr/{channel}.ome.zarr"
             seg_s3 = f"{cochlea}/images/ome-zarr/{seg_name}.ome.zarr"
@@ -126,7 +127,9 @@ def require_missing_tables(missing_tables):
 
             output_folder = os.path.join(output_root, cochlea)
             os.makedirs(output_folder, exist_ok=True)
-            output_table_path = os.path.join(output_folder, f"{channel}_{seg_name}_object-measures.tsv")
+            output_table_path = os.path.join(
+                output_folder, f"{channel}_{seg_name.replace('_', '-')}_object-measures.tsv"
+            )
             compute_object_measures(
                 image_path=img_path,
                 segmentation_path=seg_path,
@@ -136,17 +139,17 @@ def require_missing_tables(missing_tables):
                 segmentation_key="s0",
                 s3_flag=True,
                 component_list=[1],
-                n_threads=8,
+                n_threads=16,
             )
-            return
 
-            # TODO S3 upload
+            # S3 upload
+            run(["rclone", "--progress", "copyto", output_folder,
+                 f"cochlea-lightsheet:cochlea-lightsheet/{cochlea}/tables/{seg_name}"])
 
 
-def get_data_for_subtype_analysis():
+def compile_data_for_subtype_analysis():
     s3 = create_s3_target()
 
-    threshold_dict = {}
     output_folder = "./subtype_analysis"
     os.makedirs(output_folder, exist_ok=True)
 
@@ -176,47 +179,74 @@ def get_data_for_subtype_analysis():
         table = table[table.component_labels == 1]
         valid_sgns = table.label_id
 
-        output_table = {"label_id": table.label_id.values}
-        threshold_dict[cochlea] = {}
+        output_table = {"label_id": table.label_id.values, "frequency[kHz]": table["frequency[kHz]"]}
 
         # Analyze the different channels (= different subtypes).
+        reference_intensity = None
         for channel in channels:
             # Load the intensity table.
-            intensity_path = os.path.join(table_folder, f"{channel}_PV-SGN-v2_object-measures.tsv")
-            try:
-                table_content = s3.open(intensity_path, mode="rb")
-            except FileNotFoundError:
-                print(intensity_path, "is missing")
-                continue
+            intensity_path = os.path.join(table_folder, f"{channel}_{seg_name.replace('_', '-')}_object-measures.tsv")
+            table_content = s3.open(intensity_path, mode="rb")
+
             intensities = pd.read_csv(table_content, sep="\t")
             intensities = intensities[intensities.label_id.isin(valid_sgns)]
             assert len(table) == len(intensities)
             assert (intensities.label_id.values == table.label_id.values).all()
 
-            # Intensity based analysis.
             medians = intensities["median"].values
-
-            # TODO: we need to determine the threshold in a better way / validate it in MoBIE.
-            intensity_threshold = THRESHOLDS.get(cochlea, {}).get(channel, None)
-            if intensity_threshold is None:
-                print("Could not find a threshold for", cochlea, channel, "falling back to OTSU")
-                intensity_threshold = float(threshold_otsu(medians))
-            threshold_dict[cochlea][channel] = intensity_threshold
-
-            subtype = CHANNEL_TO_TYPE[channel]
             output_table[f"{channel}_median"] = medians
-            output_table[f"is_{subtype}"] = medians > intensity_threshold
-
-        # Add the frequency mapping.
-        # TODO
+            if channel == reference_channel:
+                reference_intensity = medians
+            else:
+                assert reference_intensity is not None
+                output_table[f"{channel}_ratio_{reference_channel}"] = medians / reference_intensity
 
         out_path = os.path.join(output_folder, f"{cochlea}_subtype_analysis.tsv")
         output_table = pd.DataFrame(output_table)
-        output_table.to_csv(out_path, sep="\t")
+        output_table.to_csv(out_path, sep="\t", index=False)
 
-    threshold_out = os.path.join(output_folder, "thresholds.json")
-    with open(threshold_out, "w") as f:
-        json.dump(threshold_dict, f, sort_keys=True, indent=4)
+
+def _plot_histogram(table, column, name, show_plots):
+    data = table[column].values
+
+    # TODO determine automatic threshold
+
+    if show_plots:
+        pass
+    else:
+        pass
+
+
+# TODO enable over-writing by manual thresholds
+def analyze_subtype_data(show_plots=True):
+    files = sorted(glob("./subtype_analysis/*.tsv"))
+
+    for ff in files:
+        cochlea = os.path.basename(ff)[:-len("_subtype_analysis.tsv")]
+        print(cochlea)
+        channels = COCHLEAE_FOR_SUBTYPES[cochlea]
+        reference_channel = "PV" if "PV" in channels else "CR"
+        assert channels[0] == reference_channel
+
+        tab = pd.read_csv(ff, sep="\t")
+        breakpoint()
+
+        # 1.) Plot simple intensity histograms, including otsu threshold.
+        for chan in channels:
+            column = f"{chan}_median"
+            name = f"{cochlea}_{chan}_histogram.png"
+            _plot_histogram(tab, column, name, show_plots)
+
+        # 2.) Plot ratio histograms, including otsu threshold.
+        ratios = {}
+        # TODO ratio based classification and overlay in 2d plot?
+        for chan in channels[1:]:
+            column = f"{chan}_median_ratio_{reference_channel}"
+            name = f"{cochlea}_{chan}_histogram_ratio_{reference_channel}.png"
+            _plot_histogram(tab, column, name, show_plots)
+            ratios[f"{chan}_{reference_channel}"] = tab[column].values
+
+        # 3.) Plot 2D space of ratios.
 
 
 # General notes:
@@ -229,7 +259,9 @@ def main():
     missing_tables = check_processing_status()
     require_missing_tables(missing_tables)
 
-    # analyze_subtypes_intensity_based()
+    # compile_data_for_subtype_analysis()
+
+    # analyze_subtype_data()
 
 
 if __name__ == "__main__":

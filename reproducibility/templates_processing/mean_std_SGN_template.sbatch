@@ -33,8 +33,8 @@ export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COC
 export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
 export SEG_CLASS="sgn"
 
-# export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
-export INPUT_KEY="s0"
+export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
+# export INPUT_KEY="s0"
 
 if ! [[ -f $OUTPUT_FOLDER ]] ; then
 	mkdir -p "$OUTPUT_FOLDER"
@@ -51,4 +51,3 @@ cmd_array=(	'import sys,os;'
 	'output_folder=os.environ["OUTPUT_FOLDER"],seg_class=os.environ["SEG_CLASS"])')
 cmd="${cmd_array[*]}"
 python -c "$cmd"
-
