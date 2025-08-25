@@ -4,6 +4,7 @@ from typing import Optional, List, Union, Tuple
 import imageio.v3 as imageio
 import numpy as np
 import zarr
+from skimage.transform import rescale
 
 import flamingo_tools.s3_utils as s3_utils
 from flamingo_tools.file_utils import read_image_data
@@ -22,7 +23,8 @@ def extract_block(
     s3_credentials: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
     s3_service_endpoint: Optional[str] = None,
-):
+    scale_factor: Optional[Tuple[float, float, float]] = None,
+) -> None:
     """Extract block around coordinate from input data according to a given halo.
     Either from a local file or from an S3 bucket.
 
@@ -38,6 +40,7 @@ def extract_block(
         s3_bucket_name: S3 bucket name.
         s3_service_endpoint: S3 service endpoint.
         s3_credentials: File path to credentials for S3 bucket.
+        scale_factor: Optional factor for rescaling the extracted data.
     """
     coord_string = "-".join([str(int(round(c))).zfill(4) for c in coords])
 
@@ -93,9 +96,15 @@ def extract_block(
 
     data_ = read_image_data(input_path, input_key)
     data_roi = data_[roi]
+    if scale_factor is not None:
+        kwargs = {"preserve_range": True}
+        # Check if this is a segmentation.
+        if data_roi.dtype in (np.dtype("int32"), np.dtype("uint32"), np.dtype("int64"), np.dtype("uint64")):
+            kwargs.update({"order": 0, "anti_aliasing": False})
+        data_roi = rescale(data_roi, scale_factor, **kwargs).astype(data_roi.dtype)
 
     if tif:
         imageio.imwrite(output_file, data_roi, compression="zlib")
     else:
-        with zarr.open(output_file, mode="w") as f_out:
-            f_out.create_dataset(output_key, data=data_roi, compression="gzip")
+        f_out = zarr.open(output_file, mode="w")
+        f_out.create_dataset(output_key, data=data_roi, compression="gzip")

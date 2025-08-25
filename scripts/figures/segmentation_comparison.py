@@ -29,6 +29,7 @@ def _eval_seg(seg, eval_path):
 
 
 def sgn_comparison():
+    scale = (0.38,) * 2
     z = 10
 
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
@@ -57,15 +58,21 @@ def sgn_comparison():
             eval_im[seg_name] = eva
 
         v = napari.Viewer()
-        v.add_image(image)
+        v.add_image(image, scale=scale)
         for seg_name, bd in boundaries.items():
-            v.add_labels(bd, name=seg_name, colormap={1: "cyan"})
-            v.add_labels(eval_im[seg_name], name=f"{seg_name}_eval", colormap={1: "green", 2: "red"})
+            v.add_labels(bd, name=seg_name, colormap={1: "cyan"}, scale=scale)
+            v.add_labels(eval_im[seg_name], name=f"{seg_name}_eval", colormap={1: "green", 2: "red"}, scale=scale)
+
+        v.scale_bar.visible = True
+        v.scale_bar.unit = "μm"
+        v.scale_bar.font_size = 16
         v.title = Path(path).stem
+
         napari.run()
 
 
 def ihc_comparison():
+    scale = (0.38,) * 2
     z = 10
 
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
@@ -73,6 +80,7 @@ def ihc_comparison():
     image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationIHCs"
 
     image_paths = sorted(glob(os.path.join(image_dir, "*.tif")))
+    scale = (0.38,) * 2
 
     for path in image_paths:
         image = imageio.imread(path)[z]
@@ -96,11 +104,16 @@ def ihc_comparison():
             eval_im[seg_name] = eva
 
         v = napari.Viewer()
-        v.add_image(image)
+        v.add_image(image, scale=scale)
         for seg_name, bd in boundaries.items():
-            v.add_labels(bd, name=seg_name, colormap={1: "cyan"})
-            v.add_labels(eval_im[seg_name], name=f"{seg_name}_eval", colormap={1: "green", 2: "red"})
+            v.add_labels(bd, name=seg_name, colormap={1: "cyan"}, scale=scale)
+            v.add_labels(eval_im[seg_name], name=f"{seg_name}_eval", colormap={1: "green", 2: "red"}, scale=scale)
+
+        v.scale_bar.visible = True
+        v.scale_bar.unit = "μm"
+        v.scale_bar.font_size = 16
         v.title = Path(path).stem
+
         napari.run()
 
 

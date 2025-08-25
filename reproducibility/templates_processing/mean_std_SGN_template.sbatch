@@ -8,11 +8,13 @@
 #SBATCH --mem 128G
 
 source ~/.bashrc
-micromamba activate flamingo13
+# micromamba activate flamingo13
+micromamba activate sam
 
 # Run the script
 
-SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+# SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+SCRIPT_REPO=/user/pape41/u12086/Work/my_projects/flamingo-tools
 cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
@@ -26,15 +28,13 @@ STAIN_CHANNEL=$3
 # segmentation name, as it appears in MoBIE, e.g. SGN_v2 or Calb1_SGN_v2
 SEG_NAME=$4
 
-# TODO update model to
-# /mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/v2_domain_adaptation_mlr99l
-# and download the PV channel again
-
 export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/"$DATA"
 
 export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
 export SEG_CLASS="sgn"
-export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
+
+# export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
+export INPUT_KEY="s0"
 
 if ! [[ -f $OUTPUT_FOLDER ]] ; then
 	mkdir -p "$OUTPUT_FOLDER"

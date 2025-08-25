@@ -40,6 +40,7 @@ def repro_label_components(
         component_list = dic["component_list"] if "component_list" in dic else default_component_list
 
         table_name = f"{cell_type.upper()}_{unet_version}"
+        # table_name = "PV_SGN_V2_DA"
         s3_path = os.path.join(f"{cochlea}", "tables", table_name, "default.tsv")
         tsv_path, fs = get_s3_path(s3_path, bucket_name=s3_bucket_name,
                                    service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
