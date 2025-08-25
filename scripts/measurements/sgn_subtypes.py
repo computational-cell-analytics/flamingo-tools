@@ -3,7 +3,9 @@ import os
 from glob import glob
 from subprocess import run
 
+import matplotlib.pyplot as plt
 import pandas as pd
+from skimage.filters import threshold_otsu
 
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target, get_s3_path
 from flamingo_tools.measurements import compute_object_measures
@@ -44,6 +46,8 @@ THRESHOLDS = {
     "M_AMD_N62_L": {
     },
 }
+
+PLOT_OUT = "./subtype_plots"
 
 
 def check_processing_status():
@@ -206,15 +210,83 @@ def compile_data_for_subtype_analysis():
         output_table.to_csv(out_path, sep="\t", index=False)
 
 
-def _plot_histogram(table, column, name, show_plots):
+def _plot_histogram(table, column, name, show_plots, subtype=None):
     data = table[column].values
+    threshold = threshold_otsu(data)
 
-    # TODO determine automatic threshold
+    fig, ax = plt.subplots(1)
+    ax.hist(data, bins=24)
+    ax.axvline(x=threshold, color='red', linestyle='--')
+    ax.set_title(f"{name}\n threshold: {threshold}")
 
     if show_plots:
-        pass
+        plt.show()
     else:
-        pass
+        os.makedirs(PLOT_OUT, exist_ok=True)
+        plt.savefig(f"{PLOT_OUT}/{name}.png")
+
+    if subtype is not None:
+        subtype_classification = [None if datum < threshold else subtype for datum in data]
+        return subtype_classification
+
+
+def _plot_2d(ratios, name, show_plots, classification=None):
+    fig, ax = plt.subplots(1)
+    assert len(ratios) == 2
+    keys = list(ratios.keys())
+    k1, k2 = keys
+
+    if classification is None:
+        ax.scatter(ratios[k1, k2])
+
+    else:
+        def _combine(a, b):
+            if a is None and b is None:
+                return None
+            elif a is None and b is not None:
+                return b
+            elif a is not None and b is None:
+                return a
+            else:
+                return f"{a}-{b}"
+
+        classification = [cls for cls in classification if cls is not None]
+        labels = classification[0].copy()
+        for cls in classification[1:]:
+            if cls is None:
+                continue
+            labels = [_combine(a, b) for a, b in zip(labels, cls)]
+
+        unique_labels = set(ll for ll in labels if ll is not None)
+        all_colors = ["red", "blue", "orange", "yellow"]
+        colors = {ll: color for ll, color in zip(unique_labels, all_colors[:len(unique_labels)])}
+
+        for lbl in unique_labels:
+            mask = [ll == lbl for ll in labels]
+            ax.scatter(
+                [ratios[k1][i] for i in range(len(labels)) if mask[i]],
+                [ratios[k2][i] for i in range(len(labels)) if mask[i]],
+                c=colors[lbl], label=lbl
+            )
+
+        mask_none = [ll is None for ll in labels]
+        ax.scatter(
+            [ratios[k1][i] for i in range(len(labels)) if mask_none[i]],
+            [ratios[k2][i] for i in range(len(labels)) if mask_none[i]],
+            facecolors="none", edgecolors="black", label="None"
+        )
+
+        ax.legend()
+
+    ax.set_xlabel(k1)
+    ax.set_ylabel(k2)
+    ax.set_title(name)
+
+    if show_plots:
+        plt.show()
+    else:
+        os.makedirs(PLOT_OUT, exist_ok=True)
+        plt.savefig(f"{PLOT_OUT}/{name}.png")
 
 
 # TODO enable over-writing by manual thresholds
@@ -229,24 +301,29 @@ def analyze_subtype_data(show_plots=True):
         assert channels[0] == reference_channel
 
         tab = pd.read_csv(ff, sep="\t")
-        breakpoint()
 
         # 1.) Plot simple intensity histograms, including otsu threshold.
         for chan in channels:
             column = f"{chan}_median"
-            name = f"{cochlea}_{chan}_histogram.png"
+            name = f"{cochlea}_{chan}_histogram"
             _plot_histogram(tab, column, name, show_plots)
 
         # 2.) Plot ratio histograms, including otsu threshold.
-        ratios = {}
         # TODO ratio based classification and overlay in 2d plot?
+        ratios = {}
+        subtype_classification = []
         for chan in channels[1:]:
-            column = f"{chan}_median_ratio_{reference_channel}"
-            name = f"{cochlea}_{chan}_histogram_ratio_{reference_channel}.png"
-            _plot_histogram(tab, column, name, show_plots)
+            column = f"{chan}_ratio_{reference_channel}"
+            name = f"{cochlea}_{chan}_histogram_ratio_{reference_channel}"
+            classification = _plot_histogram(
+                tab, column, name, subtype=CHANNEL_TO_TYPE.get(chan, None), show_plots=show_plots
+            )
+            subtype_classification.append(classification)
             ratios[f"{chan}_{reference_channel}"] = tab[column].values
 
         # 3.) Plot 2D space of ratios.
+        name = f"{cochlea}_2d"
+        _plot_2d(ratios, name, show_plots, classification=subtype_classification)
 
 
 # General notes:
@@ -256,12 +333,12 @@ def analyze_subtype_data(show_plots=True):
 # M_AMD_N62_L: PV signal and segmentation look good.
 # M_AMD_N180_R: Need SGN segmentation based on CR.
 def main():
-    missing_tables = check_processing_status()
-    require_missing_tables(missing_tables)
+    # missing_tables = check_processing_status()
+    # require_missing_tables(missing_tables)
 
     # compile_data_for_subtype_analysis()
 
-    # analyze_subtype_data()
+    analyze_subtype_data(show_plots=False)
 
 
 if __name__ == "__main__":
