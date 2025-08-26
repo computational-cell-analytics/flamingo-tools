@@ -4,13 +4,6 @@ from flamingo_tools.extract_block_util import extract_block
 
 # Segmentation G_EK_000233_L IHC_v5:
 # Components: 1, 2, 3, 4, 5, 8
-# Additional locations for annotation
-# {"position":[1369.3745663030836,1518.1919905173781,629.7304794154277],"timepoint":0}
-# {"position":[1455.8392111279102,1678.0405530924381,706.4828408796568],"timepoint":0}
-# {"position":[787.5688223108835,937.4842970917134,254.5776808983996],"timepoint":0}
-# {"position":[673.778067707707,1047.544514258375,1573.6031222817312],"timepoint":0}
-# {"position":[593.1568182540034,1018.005901151162,276.4582768781532],"timepoint":0}
-# {"position":[962.1827956246404,1973.0958986758776,756.6812813123805],"timepoint":0}
 
 
 def initial_blocks():
@@ -53,9 +46,37 @@ def initial_blocks():
         )
 
 
+def next_blocks():
+    blocks_to_annotate = [
+        "[1369.3745663030836,1518.1919905173781,629.7304794154277]",
+        "[1455.8392111279102,1678.0405530924381,706.4828408796568]",
+        "[787.5688223108835,937.4842970917134,254.5776808983996]",
+        "[673.778067707707,1047.544514258375,1573.6031222817312]",
+        "[593.1568182540034,1018.005901151162,276.4582768781532]",
+        "[962.1827956246404,1973.0958986758776,756.6812813123805]",
+    ]
+
+    input_path = "G_EK_000233_L/images/ome-zarr/Vglut3.ome.zarr"
+    input_key = "s0"
+    output_key = None
+    resolution = 0.38
+
+    output_folder = "./G_EK_000233_L_VGlut3-round2"
+    os.makedirs(output_folder, exist_ok=True)
+    print("Exporting to", output_folder)
+    for coords in blocks_to_annotate:
+        halo = [196, 196, 48]
+        coords = json.loads(coords)
+        extract_block(
+            input_path, coords, output_folder, input_key, output_key, resolution, halo,
+            tif=True, s3=True,
+        )
+
+
 def main():
-    initial_blocks()
+    # initial_blocks()
+    next_blocks()
 
 
 if __name__ == "__main__":
-    initial_blocks()
+    main()
