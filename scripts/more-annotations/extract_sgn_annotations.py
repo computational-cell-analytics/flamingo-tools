@@ -96,21 +96,48 @@ def downscale_segmentation():
 
 # Note: consider different normalization strategy for these cochleae and normalize by local intensity
 # rather than by global values.
-
 # Also double check empty positions again and make sure they don't contain SGNs
-# Additional positions for LaVision annotations:
-# {"position":[2031.0655170248258,1925.206039671767,249.14546086048554],"timepoint":0}
-# {"position":[2378.3720460599393,2105.471228531872,303.9285928812524],"timepoint":0}
-# {"position":[1619.3251178227529,3444.7351705689553,271.2360278843609],"timepoint":0}
-# {"position":[2358.2784398426843,1503.2211953830192,762.7325586759833],"timepoint":0}
+def download_lavision_crops2():
+    input_key = "s0"
+    output_key = None
 
-# Position in Marmoset:
-# {"position":[2462.7875134103206,2818.067344942212,1177.1380214828991],"timepoint":0}
+    # Additional positions for LaVision annotations:
+    input_path = "LaVision-M04/images/ome-zarr/PV.ome.zarr"
+    new_positions_m04 = [
+        [2031.0655170248258, 1925.206039671767, 249.14546086048554],
+        [2378.3720460599393, 2105.471228531872, 303.9285928812524],
+        [1619.3251178227529, 3444.7351705689553, 271.2360278843609],
+        [2358.2784398426843, 1503.2211953830192, 762.7325586759833],
+    ]
+
+    output_folder = "./LA_VISION_M04_2"
+    os.makedirs(output_folder, exist_ok=True)
+    for pos in new_positions_m04:
+        halo = [128, 128, 32]
+        extract_block(
+            input_path, pos, output_folder, input_key, output_key, RESOLUTION_LA_VISION, halo,
+            tif=True, s3=True,
+        )
+
+    # Position in Marmoset:
+    new_positions_mar05 = [
+        [2462.7875134103206, 2818.067344942212, 1177.1380214828991]
+    ]
+    input_path = "LaVision-Mar05/images/ome-zarr/PV.ome.zarr"
+    output_folder = "./LA_VISION_Mar05"
+    os.makedirs(output_folder, exist_ok=True)
+    for pos in new_positions_mar05:
+        halo = [128, 128, 32]
+        extract_block(
+            input_path, pos, output_folder, input_key, output_key, RESOLUTION_LA_VISION, halo,
+            tif=True, s3=True,
+        )
 
 
 def main():
     # download_lavision_crops()
-    downscale_segmentation()
+    # downscale_segmentation()
+    download_lavision_crops2()
 
 
 if __name__ == "__main__":

@@ -7,9 +7,9 @@ from flamingo_tools.segmentation.postprocessing import label_components_sgn
 from mobie import add_segmentation
 from mobie.metadata import add_remote_project_metadata
 
-MODEL_PATH = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/training/checkpoints/cochlea_distance_unet_low-res-sgn"  # noqa
+MODEL_PATH = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/training/checkpoints/cochlea_distance_unet_low-res-sgn-v2"  # noqa
 RESOLUTION = (3.0, 1.887779, 1.887779)
-SEG_NAME = "SGN_LOWRES"
+SEG_NAME = "SGN_LOWRES-v2"
 
 
 def segment_sgns(input_path, input_key, output_folder):
@@ -56,6 +56,7 @@ def upload_to_s3(mobie_dir, dataset_name):
 
     add_remote_project_metadata(mobie_dir, bucket_name, service_endpoint)
 
+    # run(["module", "load", "rclone"])
     run(["rclone", "--progress", "copyto",
          f"{mobie_dir}/{dataset_name}/dataset.json",
          f"cochlea-lightsheet:cochlea-lightsheet/{dataset_name}/dataset.json"])
@@ -92,7 +93,7 @@ def segment_Mar05():
 
 
 def main():
-    # segment_M04()
+    segment_M04()
     segment_Mar05()
 
 

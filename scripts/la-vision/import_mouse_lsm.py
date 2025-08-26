@@ -2,6 +2,7 @@ import os
 
 import imageio.v3 as imageio
 from mobie import add_image
+from mobie.metadata import read_dataset_metadata
 
 INPUT_ROOT = "/mnt/ceph-hdd/cold/nim00007/cochlea-lightsheet/keppeler-et-al/mouse"
 MOBIE_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet"
@@ -17,6 +18,12 @@ def add_mouse_lsm():
     chunks = (96, 96, 96)
 
     for channel_id, channel_name in enumerate(channel_names, 1):
+        mobie_ds_folder = os.path.join(MOBIE_ROOT, DS_NAME)
+        ds_metadata = read_dataset_metadata(mobie_ds_folder)
+        if channel_name in ds_metadata["sources"]:
+            print(channel_name, "is already in MoBIE")
+            continue
+
         input_path = os.path.join(INPUT_ROOT, f"Mouse_cochlea_04_LSFM_ch{channel_id}_raw.tif")
         print("Load image data ...")
         input_data = imageio.imread(input_path)
