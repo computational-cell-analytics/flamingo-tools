@@ -16,12 +16,11 @@ COCHLEAE_FOR_SUBTYPES = {
     "M_LR_000214_L": ["PV", "CR", "Calb1"],
     "M_AMD_N62_L": ["PV", "CR", "Calb1"],
     "M_AMD_N180_R": ["CR", "Ntng1", "CTBP2"],
+    "M_AMD_N180_L": ["CR", "Ntng1", "Lypd1"],
     # Mutant / some stuff is weird.
     # "M_AMD_Runx1_L": ["PV", "Lypd1", "Calb1"],
     # This one still has to be stitched:
     # "M_LR_000184_R": {"PV", "Prph"},
-    # We don't have PV here, so we exclude these two for now.
-    # "M_AMD_00N180_L": {"CR", "Ntng1", "Lypd1"},
 }
 
 # Map from channels to subtypes.
@@ -99,7 +98,15 @@ def check_processing_status():
             continue
 
         # Check which tables we have.
-        expected_tables = [f"{chan}_{seg_name}_object-measures.tsv" for chan in channels]
+        if cochlea == "M_AMD_N180_L":  # we need all intensity measures here
+            seg_names = ["CR-SGN-v2", "Ntng1-SGN-v2", "Lypd1-SGN-v2"]
+            expected_tables = [f"{chan}_{sname}_object-measures.tsv" for chan in channels for sname in seg_names]
+        elif cochlea == "M_AMD_N180_R":
+            seg_names = ["CR-SGN-v2", "Ntng1-SGN-v2"]
+            expected_tables = [f"{chan}_{sname}_object-measures.tsv" for chan in channels for sname in seg_names]
+        else:
+            expected_tables = [f"{chan}_{seg_name}_object-measures.tsv" for chan in channels]
+
         tables = s3.ls(os.path.join(BUCKET_NAME, cochlea, table_folder))
         tables = [os.path.basename(tab) for tab in tables]
 
@@ -118,10 +125,10 @@ def require_missing_tables(missing_tables):
     output_root = "./object_measurements"
 
     for cochlea, missing_tabs in missing_tables.items():
-        seg_name = "PV_SGN_v2" if "PV" in COCHLEAE_FOR_SUBTYPES[cochlea] else "CR_SGN_v2"
         for missing in missing_tabs:
             channel = missing.split("_")[0]
-            print("Computing intensities for:", cochlea, channel)
+            seg_name = missing.split("_")[1].replace("-", "_")
+            print("Computing intensities for cochlea:", cochlea, "segmentation:", seg_name, "channel:", channel)
 
             img_s3 = f"{cochlea}/images/ome-zarr/{channel}.ome.zarr"
             seg_s3 = f"{cochlea}/images/ome-zarr/{seg_name}.ome.zarr"
@@ -327,18 +334,14 @@ def analyze_subtype_data(show_plots=True):
 
 
 # General notes:
-# M_LR_000099_L: PV looks weird and segmentation doesn't work so well. Besides this intensities look good.
-#                Double check if this is the right channel. Maybe we try domain adaptation here?
-# M_LR_000214_L: PV looks correct, segmentation is not there yet.
-# M_AMD_N62_L: PV signal and segmentation look good.
-# M_AMD_N180_R: Need SGN segmentation based on CR.
+# See:
 def main():
-    # missing_tables = check_processing_status()
-    # require_missing_tables(missing_tables)
+    missing_tables = check_processing_status()
+    require_missing_tables(missing_tables)
 
     # compile_data_for_subtype_analysis()
 
-    analyze_subtype_data(show_plots=False)
+    # analyze_subtype_data(show_plots=False)
 
 
 if __name__ == "__main__":

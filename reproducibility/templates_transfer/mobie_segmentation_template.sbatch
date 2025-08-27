@@ -17,7 +17,7 @@ micromamba activate sam
 
 # name of cochlea, as it appears in MoBIE and the NHR
 COCHLEA=$1
-# data in n5 format, e.g. G_EK_000233_L/IHC_v5/segmentation.zarr
+# data in n5 format, e.g. IHC_v5/segmentation.zarr
 DATA=$2
 # segmentation name, as it appears in MoBIE, e.g. SGN_V2
 CHANNEL_NAME=$3
