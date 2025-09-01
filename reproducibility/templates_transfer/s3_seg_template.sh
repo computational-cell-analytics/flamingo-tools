@@ -12,7 +12,8 @@ export SERVICE_ENDPOINT="https://s3.fs.gwdg.de"
 mobie.add_remote_metadata -i $MOBIE_DIR -s $SERVICE_ENDPOINT -b $BUCKET_NAME
 
 rclone --progress copyto "$MOBIE_DIR"/"$COCHLEA"/dataset.json cochlea-lightsheet:cochlea-lightsheet/"$COCHLEA"/dataset.json
-rclone --progress copyto "$MOBIE_DIR"/"$COCHLEA"/images/ome-zarr cochlea-lightsheet:cochlea-lightsheet/"$COCHLEA"/images/ome-zarr
+rclone --progress copyto "$MOBIE_DIR"/"$COCHLEA"/images/ome-zarr/"$SEG_CHANNEL".ome.zarr cochlea-lightsheet:cochlea-lightsheet/"$COCHLEA"/images/ome-zarr/"$SEG_CHANNEL".ome.zarr
+# TODO enable to also sync the whole thing and project.json
 # take care that segmentation tables containing evaluations (tonotopic mapping, marker labels, etc.) might be overwritten
 rclone --progress copyto "$MOBIE_DIR"/"$COCHLEA"/tables/"$SEG_CHANNEL" cochlea-lightsheet:cochlea-lightsheet/"$COCHLEA"/tables/"$SEG_CHANNEL"
 

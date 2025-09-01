@@ -42,6 +42,7 @@ def repro_tonotopic_mapping(
 
         cochlea_str = "-".join(cochlea.split("_"))
         seg_str = "-".join(seg_channel.split("_"))
+        os.makedirs(output_dir, exist_ok=True)
         output_table_path = os.path.join(output_dir, f"{cochlea_str}_{seg_str}.tsv")
 
         s3_path = os.path.join(f"{cochlea}", "tables", f"{seg_channel}", "default.tsv")

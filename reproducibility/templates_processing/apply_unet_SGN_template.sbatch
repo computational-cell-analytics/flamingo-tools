@@ -4,12 +4,13 @@
 
 #SBATCH -p grete:shared         # the partition
 #SBATCH -G A100:1               # For requesting 1 A100 GPU.
-#SBATCH -c 1
-#SBATCH --mem 24G
+#SBATCH -c 4
+#SBATCH --mem 32G
 #SBATCH -a 0-9
 
 source ~/.bashrc
-micromamba activate micro-sam_gpu
+# micromamba activate micro-sam_gpu
+micromamba activate sam
 
 # Print out some info.
 echo "Submitting job with sbatch from directory: ${SLURM_SUBMIT_DIR}"
@@ -19,7 +20,8 @@ echo "Current node: ${SLURM_NODELIST}"
 
 # Run the script
 
-SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+# SCRIPT_REPO=/user/schilling40/u15000/flamingo-tools
+SCRIPT_REPO=/user/pape41/u12086/Work/my_projects/flamingo-tools
 cd "$SCRIPT_REPO"/flamingo_tools/segmentation/ || exit
 
 export SCRIPT_DIR=$SCRIPT_REPO/scripts
@@ -37,9 +39,16 @@ export INPUT=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COC
 
 export OUTPUT_FOLDER=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$SEG_NAME"
 
+# The default v2 model
 export MODEL=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/v2_cochlea_distance_unet_SGN_supervised_2025-05-27
+
+# Domain adapted model for MLR99L
+# export MODEL=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/v2_domain_adaptation_mlr99l/best.pt
+
 export PREDICTION_INSTANCES=10
+
 export INPUT_KEY="setup$STAIN_CHANNEL/timepoint0/s0"
+# export INPUT_KEY="s0"
 
 echo "Input directory: ${INPUT}"
 echo "Output directory: ${OUTPUT_FOLDER}"

@@ -8,7 +8,7 @@ from util import literature_reference_values_gerbil
 png_dpi = 300
 
 
-def fig_06a(save_path, plot=False):
+def fig_06b(save_path, plot=False):
     """Box plot showing the counts for SGN and IHC per gerbil cochlea in comparison to literature values.
     """
     main_tick_size = 12
@@ -76,13 +76,29 @@ def fig_06a(save_path, plot=False):
         plt.close()
 
 
+def fig_06d(save_path, plot=False):
+    """Plot the synapse distribution measured with different markers.
+
+    The underlying measurements were done with 'scripts/measurements/synapse_colocalization.py'
+
+    Here are the other relevant numbers for the analysis.
+    Number of IHCs: 486
+    Number of matched synapses: 3119
+    Number and percentage of matched synapses for markers:
+    CTBP2: 3119 / 3371 (92.52447345001484% matched)
+    RibA : 3119 / 6701 (46.54529174750037% matched)
+    """
+    # TODO Plot this
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Generate plots for Fig 2 of the cochlea paper.")
+    parser = argparse.ArgumentParser(description="Generate plots for Fig 6 of the cochlea paper.")
     parser.add_argument("figure_dir", type=str, help="Output directory for plots.", default="./panels")
     args = parser.parse_args()
     plot = False
 
-    fig_06a(save_path=os.path.join(args.figure_dir, "fig_06a"), plot=plot)
+    fig_06b(save_path=os.path.join(args.figure_dir, "fig_06b"), plot=plot)
+    fig_06d(save_path=os.path.join(args.figure_dir, "fig_06d"), plot=plot)
 
 
 if __name__ == "__main__":

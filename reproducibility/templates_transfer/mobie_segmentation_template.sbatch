@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=mobie_segm
-#SBATCH -t 01:00:00             # estimated time, adapt to your needs
+#SBATCH -t 02:00:00             # estimated time, adapt to your needs
 #SBATCH --mail-user=martin.schilling@med.uni-goettingen.de # change this to your mailaddress
 #SBATCH --mail-type=FAIL        # send mail when job begins and ends
 
@@ -10,20 +10,21 @@
 #SBATCH --mem 180G
 
 source ~/.bashrc
-source ~/miniconda3/bin/activate
-source activate mobie
+# source activate mobie
+micromamba activate sam
 
 # Run the script
 
 # name of cochlea, as it appears in MoBIE and the NHR
 COCHLEA=$1
-# data in n5 format, e.g. GEK11L_PV_GFP_01_fused.n5
+# data in n5 format, e.g. IHC_v5/segmentation.zarr
 DATA=$2
-# segmentation name, as it appears in MoBIE, e.g. PV or Calb1
+# segmentation name, as it appears in MoBIE, e.g. SGN_V2
 CHANNEL_NAME=$3
 
 MOBIE_PROJECT="/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet"
-INPUT_PATH=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/"$COCHLEA"/"$DATA"
+# /mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/G_EK_000233_L/IHC_v5/segmentation.zarr/
+INPUT_PATH=/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/"$COCHLEA"/"$DATA"
 
 SEGMENTATION_KEY="segmentation"
 
@@ -31,6 +32,9 @@ RESOLUTION="[0.38,0.38,0.38]"
 SCALE_FACTORS="[[2,2,2],[2,2,2],[2,2,2],[2,2,2],[2,2,2],[2,2,2]]"
 CHUNKS="[64,64,64]"
 
-mobie.add_segmentation --input_path "$SEGMENTATION_PATH" --input_key "$SEGMENTATION_KEY" --root "$MOBIE_PROJECT" \
+echo $INPUT_PATH
+echo $MOBIE_PROJECT
+
+mobie.add_segmentation --input_path "$INPUT_PATH" --input_key "$SEGMENTATION_KEY" --root "$MOBIE_PROJECT" \
 	--dataset_name "$COCHLEA" --name "$CHANNEL_NAME" --resolution "$RESOLUTION" \
 	--scale_factors "$SCALE_FACTORS" --chunks "$CHUNKS"

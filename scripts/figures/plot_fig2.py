@@ -8,7 +8,7 @@ import tifffile
 from matplotlib import colors
 from skimage.segmentation import find_boundaries
 
-from util import literature_reference_values
+from util import literature_reference_values, SYNAPSE_DIR_ROOT
 
 png_dpi = 300
 
@@ -66,7 +66,7 @@ def plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, bou
         plt.close()
 
 
-def fig_02b_sgn(save_dir, plot=False):
+def fig_02a_sgn(save_dir, plot=False):
     """Plot crops of SGN segmentation of CochleaNet, Cellpose and micro-sam.
     """
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
@@ -170,10 +170,10 @@ def fig_02c(save_path, plot=False, all_versions=False):
         # Plot
         plt.figure(figsize=(8, 5))
 
-        main_label_size = 20
+        main_label_size = 22
         sub_label_size = 16
-        main_tick_size = 12
-        legendsize = 16
+        main_tick_size = 16
+        legendsize = 18
 
         plt.scatter(x - offset, precision, label="Precision", marker="o", s=80)
         plt.scatter(x,         recall, label="Recall", marker="^", s=80)
@@ -204,7 +204,7 @@ def fig_02c(save_path, plot=False, all_versions=False):
 # Load the synapse counts for all IHCs from the relevant tables.
 def _load_ribbon_synapse_counts():
     ihc_version = "ihc_counts_v4c"
-    synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
+    synapse_dir = os.path.join(SYNAPSE_DIR_ROOT, ihc_version)
     tables = [entry.path for entry in os.scandir(synapse_dir) if "ihc_count_M_LR" in entry.name]
     syn_counts = []
     for tab in tables:
@@ -216,8 +216,8 @@ def _load_ribbon_synapse_counts():
 def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_synapses=False):
     """Box plot showing the counts for SGN and IHC per (mouse) cochlea in comparison to literature values.
     """
-    main_tick_size = 16
-    main_label_size = 24
+    main_tick_size = 20
+    main_label_size = 26
 
     rows = 1
     columns = 3 if plot_average_ribbon_synapses else 2
@@ -321,7 +321,7 @@ def fig_02d_02(save_path, filter_zeros=True, plot=False):
     """
     cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R"]
     ihc_version = "ihc_counts_v4b"
-    synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_version}"
+    synapse_dir = os.path.join(SYNAPSE_DIR_ROOT, ihc_version)
 
     max_dist = 3
     bins = 10
@@ -402,9 +402,12 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    # Panel C: Evaluation of the segmentation results:
-    fig_02b_sgn(save_dir=args.figure_dir, plot=args.plot)
+    # Panes A and B: Qualitative comparison of visualization results.
+    fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
+    return
     fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
+
+    # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, "fig_02c"), plot=args.plot, all_versions=False)
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC

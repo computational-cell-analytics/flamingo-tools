@@ -39,6 +39,21 @@ def get_image_and_label_paths(root):
     return image_paths, label_paths
 
 
+def get_image_and_label_paths_sep_folders(root):
+    image_paths = sorted(glob(os.path.join(root, "images", "**", "*.tif"), recursive=True))
+    label_paths = sorted(glob(os.path.join(root, "labels", "**", "*.tif"), recursive=True))
+    assert len(image_paths) == len(label_paths)
+
+    # import imageio.v3 as imageio
+    # for imp, lp in zip(image_paths, label_paths):
+    #     s1 = imageio.imread(imp).shape
+    #     s2 = imageio.imread(lp).shape
+    #     if s1 != s2:
+    #         breakpoint()
+
+    return image_paths, label_paths
+
+
 def select_paths(image_paths, label_paths, split, filter_empty):
     if filter_empty:
         image_paths = [imp for imp in image_paths if "empty" not in imp]
@@ -60,8 +75,11 @@ def select_paths(image_paths, label_paths, split, filter_empty):
     return image_paths, label_paths
 
 
-def get_loader(root, split, patch_shape, batch_size, filter_empty):
-    image_paths, label_paths = get_image_and_label_paths(root)
+def get_loader(root, split, patch_shape, batch_size, filter_empty, separate_folders):
+    if separate_folders:
+        image_paths, label_paths = get_image_and_label_paths_sep_folders(root)
+    else:
+        image_paths, label_paths = get_image_and_label_paths(root)
     this_image_paths, this_label_paths = select_paths(image_paths, label_paths, split, filter_empty)
 
     assert len(this_image_paths) == len(this_label_paths)
@@ -97,6 +115,7 @@ def main():
     parser.add_argument(
         "--name", help="Optional name for the model to be trained. If not given the current date is used."
     )
+    parser.add_argument("--separate_folders", action="store_true")
     args = parser.parse_args()
     root = args.root
     batch_size = args.batch_size
@@ -106,14 +125,18 @@ def main():
 
     # Parameters for training on A100.
     n_iterations = int(1e5)
-    patch_shape = (64, 128, 128)
+    patch_shape = (48, 128, 128)
 
     # The U-Net.
     model = get_3d_model()
 
     # Create the training loader with train and val set.
-    train_loader = get_loader(root, "train", patch_shape, batch_size, filter_empty=filter_empty)
-    val_loader = get_loader(root, "val", patch_shape, batch_size, filter_empty=filter_empty)
+    train_loader = get_loader(
+        root, "train", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders
+    )
+    val_loader = get_loader(
+        root, "val", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders
+    )
 
     if check_loaders:
         from torch_em.util.debug import check_loader

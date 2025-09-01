@@ -6,6 +6,7 @@ from typing import Optional
 import pandas as pd
 from flamingo_tools.s3_utils import get_s3_path
 from flamingo_tools.segmentation.postprocessing import label_components_sgn, label_components_ihc
+from flamingo_tools.segmentation.cochlea_mapping import tonotopic_mapping
 
 
 def repro_label_components(
@@ -14,6 +15,7 @@ def repro_label_components(
     s3_credentials: Optional[str] = None,
     s3_bucket_name: Optional[str] = None,
     s3_service_endpoint: Optional[str] = None,
+    apply_tonotopic_mapping: bool = False,
 ):
     min_size = 1000
     default_threshold_erode = None
@@ -23,7 +25,7 @@ def repro_label_components(
     default_cell_type = "sgn"
     default_component_list = [1]
 
-    with open(ddict, 'r') as myfile:
+    with open(ddict, "r") as myfile:
         data = myfile.read()
     param_dicts = json.loads(data)
 
@@ -39,11 +41,17 @@ def repro_label_components(
         cell_type = dic["cell_type"] if "cell_type" in dic else default_cell_type
         component_list = dic["component_list"] if "component_list" in dic else default_component_list
 
+        # The table name sometimes has to be over-written.
+        # table_name = "PV_SGN_V2_DA"
+        # table_name = "CR_SGN_v2"
+        # table_name = "Ntng1_SGN_v2"
+
         table_name = f"{cell_type.upper()}_{unet_version}"
+
         s3_path = os.path.join(f"{cochlea}", "tables", table_name, "default.tsv")
         tsv_path, fs = get_s3_path(s3_path, bucket_name=s3_bucket_name,
                                    service_endpoint=s3_service_endpoint, credential_file=s3_credentials)
-        with fs.open(tsv_path, 'r') as f:
+        with fs.open(tsv_path, "r") as f:
             table = pd.read_csv(f, sep="\t")
 
         if cell_type == "sgn":
@@ -66,8 +74,12 @@ def repro_label_components(
         else:
             print(f"Custom component(s) have {largest_comp} {cell_type.upper()}s.")
 
+        if apply_tonotopic_mapping:
+            tsv_table = tonotopic_mapping(tsv_table, cell_type=cell_type)
+
         cochlea_str = "-".join(cochlea.split("_"))
         table_str = "-".join(table_name.split("_"))
+        os.makedirs(output_dir, exist_ok=True)
         out_path = os.path.join(output_dir, "_".join([cochlea_str, f"{table_str}.tsv"]))
 
         tsv_table.to_csv(out_path, sep="\t", index=False)
@@ -77,8 +89,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Script to label segmentation using a segmentation table and graph connected components.")
 
-    parser.add_argument('-i', '--input', type=str, required=True, help="Input JSON dictionary.")
-    parser.add_argument('-o', "--output", type=str, required=True, help="Output directory.")
+    parser.add_argument("-i", "--input", type=str, required=True, help="Input JSON dictionary.")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Output directory.")
+    parser.add_argument("-t", "--tonotopic_mapping", action="store_true", help="Also compute the tonotopic mapping.")
 
     parser.add_argument("--s3_credentials", type=str, default=None,
                         help="Input file containing S3 credentials. "
@@ -93,6 +106,7 @@ def main():
     repro_label_components(
         args.input, args.output,
         args.s3_credentials, args.s3_bucket_name, args.s3_service_endpoint,
+        apply_tonotopic_mapping=args.tonotopic_mapping,
     )
 
 
