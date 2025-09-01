@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=mobie_image
-#SBATCH -t 01:00:00             # estimated time, adapt to your needs
+#SBATCH -t 12:00:00             # estimated time, adapt to your needs
 #SBATCH --mail-user=martin.schilling@med.uni-goettingen.de # change this to your mailaddress
 #SBATCH --mail-type=FAIL        # send mail when job begins and ends
 
@@ -10,8 +10,8 @@
 #SBATCH --mem 180G
 
 source ~/.bashrc
-source ~/miniconda3/bin/activate
-source activate mobie
+# source activate sam
+micromamba activate sam
 
 # Run the script
 

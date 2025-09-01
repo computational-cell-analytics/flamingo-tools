@@ -1,7 +1,11 @@
 """This file contains utility functions for processing data located on an S3 storage.
 The upload of data to the storage system should be performed with 'rclone'.
 """
+import json
 import os
+import warnings
+from shutil import which
+from subprocess import run
 from typing import Optional, Tuple
 
 import s3fs
@@ -186,3 +190,96 @@ def create_s3_target(
     else:
         s3_filesystem = s3fs.S3FileSystem(anon=anon, client_kwargs=client_kwargs, asynchronous=asynchronous)
     return s3_filesystem
+
+
+def _sync_rclone(local_dir, target):
+    # The rclone alias could also be exposed as parameter.
+    rclone_alias = "cochlea-lightsheet"
+    print("Sync", local_dir, "to", target)
+    run(["rclone", "--progress", "copyto", local_dir, f"{rclone_alias}:{target}"])
+
+
+def sync_dataset(
+    mobie_root: str,
+    dataset_name: str,
+    bucket_name: Optional[str] = None,
+    url: Optional[str] = None,
+    anon: Optional[str] = False,
+    credential_file: Optional[str] = None,
+    force_segmentation_update: bool = False,
+) -> None:
+    """Sync a MoBIE dataset on the s3 bucket using rclone.
+
+    Args:
+        mobie_root: The directory with the local mobie project.
+        dataset_name: The mobie dataset to sync.
+        bucket_name: The name of the dataset's bucket on s3.
+        url: Service endpoint for S3 bucket
+        anon: Option for anon argument of S3FileSystem
+        credential_file: File path to credentials
+        force_segmentation_update: Whether to force segmentation updates.
+    """
+    from mobie.metadata import add_remote_project_metadata
+
+    # Make sure that rclone is loaded.
+    if which("rclone") is None:
+        raise RuntimeError("rclone is required for synchronization. Try loading it via 'module load rclone'.")
+
+    # Make sure the dataset is in the local version of the dataset.
+    with open(os.path.join(mobie_root, "project.json")) as f:
+        project_metadata = json.load(f)
+    datasets = project_metadata["datasets"]
+    assert dataset_name in datasets
+
+    # Get s3 filsystem and bucket name.
+    s3 = create_s3_target(url, anon, credential_file)
+    if bucket_name is None:
+        bucket_name = BUCKET_NAME
+    if url is None:
+        url = SERVICE_ENDPOINT
+
+    # Add the required remote metadata to the project. Suppress warnings about missing local data.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        add_remote_project_metadata(mobie_root, bucket_name, url)
+
+    # Get the metadata from the S3 bucket.
+    project_metadata_path = os.path.join(bucket_name, "project.json")
+    with s3.open(project_metadata_path, "r") as f:
+        project_metadata = json.load(f)
+
+    # Check if the dataset is part of the remote project already.
+    local_ds_root = os.path.join(mobie_root, dataset_name)
+    remote_ds_root = os.path.join(bucket_name, dataset_name)
+    if dataset_name not in project_metadata["datasets"]:
+        print("The dataset is not yet synced. Will copy it over.")
+        _sync_rclone(os.path.join(mobie_root, "project.json"), project_metadata_path)
+        _sync_rclone(local_ds_root, remote_ds_root)
+        return
+
+    # Otherwise, check which sources are new and add them.
+    with open(os.path.join(mobie_root, dataset_name, "dataset.json")) as f:
+        local_dataset_metadata = json.load(f)
+
+    dataset_metadata_path = os.path.join(bucket_name, dataset_name, "dataset.json")
+    with s3.open(dataset_metadata_path, "r") as f:
+        remote_dataset_metadata = json.load(f)
+
+    for source_name, source_data in local_dataset_metadata["sources"].items():
+        source_type, source_data = next(iter(source_data.items()))
+        is_segmentation = source_type == "segmentation"
+        is_spots = source_type == "spots"
+        data_path = source_data["imageData"]["ome.zarr"]["relativePath"]
+        source_not_on_remote = (source_name not in remote_dataset_metadata["sources"])
+        # Only update the image data if the source is not updated or if we force updates for segmentations.
+        if source_not_on_remote or (is_segmentation and force_segmentation_update):
+            _sync_rclone(os.path.join(local_ds_root, data_path), os.path.join(remote_ds_root, data_path))
+        # We always sync the tables.
+        if is_segmentation or is_spots:
+            table_path = source_data["tableData"]["tsv"]["relativePath"]
+            _sync_rclone(os.path.join(local_ds_root, table_path), os.path.join(remote_ds_root, table_path))
+
+    # Sync the dataset metadata.
+    _sync_rclone(
+        os.path.join(mobie_root, dataset_name, "dataset.json"), os.path.join(remote_ds_root, "dataset.json")
+    )

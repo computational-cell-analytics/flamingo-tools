@@ -54,4 +54,3 @@ python $SCRIPT \
 	--model $MODEL \
 	--max_distance $MAX_DISTANCE \
 	--s3
-

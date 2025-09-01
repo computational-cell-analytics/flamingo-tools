@@ -44,6 +44,7 @@ def repro_label_components(
         # The table name sometimes has to be over-written.
         # table_name = "PV_SGN_V2_DA"
         # table_name = "CR_SGN_v2"
+        # table_name = "Ntng1_SGN_v2"
 
         table_name = f"{cell_type.upper()}_{unet_version}"
 
