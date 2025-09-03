@@ -42,11 +42,16 @@ def compute_components(mobie_dir, dataset_name):
     table_path = os.path.join(mobie_dir, dataset_name, "tables", SEG_NAME, "default.tsv")
     table = pd.read_csv(table_path, sep="\t")
     # This may need to be further adapted
+    if "M04" in dataset_name:
+        max_edge_distance = 70
+    else:
+        max_edge_distance = 30
+
     table = label_components_sgn(table, min_size=100,
                                  threshold_erode=None,
-                                 min_component_length=50,
-                                 max_edge_distance=30,
-                                 iterations_erode=None)
+                                 min_component_length=1000,
+                                 max_edge_distance=max_edge_distance,
+                                 iterations_erode=0)
     table.to_csv(table_path, sep="\t", index=False)
 
 

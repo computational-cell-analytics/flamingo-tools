@@ -367,7 +367,7 @@ def components_sgn(
     threshold_erode: Optional[float] = None,
     min_component_length: int = 50,
     max_edge_distance: float = 30,
-    iterations_erode: Optional[int] = None,
+    iterations_erode: int = 0,
     postprocess_threshold: Optional[float] = None,
     postprocess_components: Optional[List[int]] = None,
 ) -> List[List[int]]:
@@ -379,7 +379,7 @@ def components_sgn(
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
         max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
-        iterations_erode: Number of iterations for erosion, normally determined automatically.
+        iterations_erode: Number of iterations for erosion.
         postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
         postprocess_components: Post-process specific graph connected components ([0] for largest component only).
 
@@ -388,7 +388,7 @@ def components_sgn(
     """
     if keyword not in table:
         distance_avg = nearest_neighbor_distance(table, n_neighbors=100)
-        table[keyword] = list(distance_avg)
+        table.loc[:, keyword] = list(distance_avg)
 
     centroids = list(zip(table["anchor_x"], table["anchor_y"], table["anchor_z"]))
     labels = [int(i) for i in list(table["label_id"])]
@@ -397,18 +397,16 @@ def components_sgn(
     distance_nn.sort()
 
     if len(table) < 20000:
-        iterations = iterations_erode if iterations_erode is not None else 0
         min_cells = None
         average_dist = int(distance_nn[int(len(table) * 0.8)])
         threshold = threshold_erode if threshold_erode is not None else average_dist
     else:
-        iterations = iterations_erode if iterations_erode is not None else 15
         min_cells = 20000
         threshold = threshold_erode if threshold_erode is not None else 40
 
-    if iterations != 0:
+    if iterations_erode != 0:
         print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
-        new_subset = erode_subset(table.copy(), iterations=iterations,
+        new_subset = erode_subset(table.copy(), iterations=iterations_erode,
                                   threshold=threshold, min_cells=min_cells, keyword=keyword)
     else:
         new_subset = table.copy()
@@ -454,7 +452,7 @@ def label_components_sgn(
     threshold_erode: Optional[float] = None,
     min_component_length: int = 50,
     max_edge_distance: float = 30,
-    iterations_erode: Optional[int] = None,
+    iterations_erode: int = 0,
     postprocess_threshold: Optional[float] = None,
     postprocess_components: Optional[List[int]] = None,
 ) -> List[int]:
@@ -466,7 +464,7 @@ def label_components_sgn(
         threshold_erode: Threshold of column value after erosion step with spatial statistics.
         min_component_length: Minimal length for filtering out connected components.
         max_edge_distance: Maximal distance in micrometer between points to create edges for connected components.
-        iterations_erode: Number of iterations for erosion, normally determined automatically.
+        iterations_erode: Number of iterations for erosion.
         postprocess_threshold: Post-process graph connected components by searching for points closer than threshold.
         postprocess_components: Post-process specific graph connected components ([0] for largest component only).
 
