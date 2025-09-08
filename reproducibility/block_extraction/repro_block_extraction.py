@@ -16,6 +16,7 @@ def repro_block_extraction(
     s3_flag = True
     tif_flag = True
     input_key = "s0"
+    default_resolution = 0.38
 
     with open(json_file, 'r') as myfile:
         data = myfile.read()
@@ -28,9 +29,11 @@ def repro_block_extraction(
                 input_path = os.path.join(dic["cochlea"], "images", "ome-zarr", image_channel + ".ome.zarr")
                 roi_halo = dic["halo_size"]
                 crop_centers = dic["crop_centers"]
+                resolution = tuple(dic["resolution"]) if "resolution" in dic else default_resolution
                 for coord in crop_centers:
                     extract_block(input_path, coord, output_dir, input_key=input_key,
                                   roi_halo=roi_halo.copy(), tif=tif_flag,
+                                  resolution=resolution,
                                   s3=s3_flag, s3_credentials=s3_credentials, s3_bucket_name=s3_bucket_name,
                                   s3_service_endpoint=s3_service_endpoint)
 
