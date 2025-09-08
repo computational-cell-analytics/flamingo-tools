@@ -28,6 +28,7 @@ def get_supervised_loader(
     image_key: Optional[str] = None,
     label_key: Optional[str] = None,
     n_samples: Optional[int] = None,
+    raw_transform: Optional[callable] = None,
 ) -> DataLoader:
     """Get a data loader for a supervised segmentation task.
 
@@ -39,6 +40,7 @@ def get_supervised_loader(
         image_key: Internal path for the image data. This is only required for hdf5/zarr/n5 data.
         image_key: Internal path for the label masks. This is only required for hdf5/zarr/n5 data.
         n_samples: The number of samples to use for training.
+        raw_transform: Optional transformation for the raw data.
 
     Returns:
         The data loader.
@@ -52,6 +54,6 @@ def get_supervised_loader(
     loader = torch_em.default_segmentation_loader(
         raw_paths=image_paths, raw_key=image_key, label_paths=label_paths, label_key=label_key,
         batch_size=batch_size, patch_shape=patch_shape, label_transform=label_transform,
-        n_samples=n_samples, num_workers=4, shuffle=True, sampler=sampler
+        n_samples=n_samples, num_workers=4, shuffle=True, sampler=sampler, raw_transform=raw_transform,
     )
     return loader
