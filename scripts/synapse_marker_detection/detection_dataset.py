@@ -1,3 +1,4 @@
+import imageio.v3 as imageio
 import numpy as np
 import pandas as pd
 import torch
@@ -38,7 +39,6 @@ class MinPointSampler:
 
 def load_labels(label_path, shape, bb):
     points = pd.read_csv(label_path)
-    assert len(points.columns) == len(shape)
     z_coords, y_coords, x_coords = points["axis-0"].values, points["axis-1"].values, points["axis-2"].values
 
     if bb is not None:
@@ -82,6 +82,25 @@ def process_labels(coords, shape, sigma, eps, bb=None):
     # TODO better normalization?
     labels /= (labels.max() + 1e-7)
     labels *= 4
+    return labels
+
+
+def process_labels_hacky(coords, shape, sigma, eps, bb=None):
+
+    if bb:
+        (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
+        restricted_shape = (z_max - z_min, y_max - y_min, x_max - x_min)
+        labels = np.zeros(restricted_shape, dtype="float32")
+        shape = restricted_shape
+    else:
+        labels = np.zeros(shape, dtype="float32")
+
+    labels[coords] = 1
+    labels = gaussian(labels, sigma)
+    labels = labels.clip(0, 0.0075)
+    labels /= (labels.max() + 1e-7)
+    labels *= 4
+    labels = labels.clip(0, 1)
     return labels
 
 
@@ -132,8 +151,8 @@ class DetectionDataset(torch.utils.data.Dataset):
         self.eps = eps
         self.sigma = sigma
 
-        with zarr.open(self.raw_path, "r") as f:
-            self.shape = f[self.raw_key].shape
+        self.raw = imageio.imread(self.raw_path) if raw_key is None else zarr.open(self.raw_path, "r")[raw_key][:]
+        self.shape = self.raw.shape
 
         if n_samples is None:
             self._len = self.compute_len(self.shape, self.patch_shape) if n_samples is None else n_samples
@@ -159,9 +178,8 @@ class DetectionDataset(torch.utils.data.Dataset):
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
 
     def _get_sample(self, index):
-        raw, label_path = self.raw_path, self.label_path
+        raw, label_path = self.raw, self.label_path
 
-        raw = zarr.open(raw)[self.raw_key]
         have_raw_channels = raw.ndim == 4  # 3D with channels
         shape = raw.shape
 
@@ -187,7 +205,13 @@ class DetectionDataset(torch.utils.data.Dataset):
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
-        label = process_labels(coords, shape, self.sigma, self.eps, bb=bb)
+        # For synapse detection.
+        # label = process_labels(coords, shape, self.sigma, self.eps, bb=bb)
+
+        # For SGN detection with data specfic hacks
+        label = process_labels_hacky(coords, shape, self.sigma, self.eps, bb=bb)
+        gap = 6
+        raw_patch, label = raw_patch[gap:-gap], label[gap:-gap]
 
         have_label_channels = label.ndim == 4
         if have_label_channels:
