@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import threading
 from concurrent import futures
 import os
 from typing import Optional, Tuple
@@ -20,7 +21,7 @@ def sgn_detection(
     model_path: str,
     block_shape: Optional[Tuple[int, int, int]] = None,
     halo: Optional[Tuple[int, int, int]] = None,
-    spot_radius: int = 4,
+    spot_radius: int = 2,
 ):
     """Run prediction for sgn detection.
 
@@ -53,14 +54,11 @@ def sgn_detection(
         )
 
     detection_path = os.path.join(output_folder, "SGN_detection.tsv")
-    detection_path = os.path.join(output_folder, "SGN_detection.tsv")
     if not os.path.exists(detection_path):
         input_ = zarr.open(output_path, "r")[prediction_key]
         detections = find_local_maxima(
             input_, block_shape=block_shape, min_distance=4, threshold_abs=0.5, verbose=True, n_threads=16,
         )
-
-        print(detections.shape)
 
         shape = input_.shape
         chunks = (128, 128, 128)
@@ -72,14 +70,17 @@ def sgn_detection(
             chunks=chunks, compression="gzip"
         )
 
+        lock = threading.Lock()
+
         def add_halo_segm(detection_index):
             """Create a segmentation volume around all detected spots.
             """
-            coord = detections[detection_index]
+            coord = list(detections[detection_index])
             block_begin = [round(c) - spot_radius for c in coord]
             block_end = [round(c) + spot_radius for c in coord]
             volume_index = tuple(slice(beg, end) for beg, end in zip(block_begin, block_end))
-            output_dataset[volume_index] = detection_index + 1
+            with lock:
+                output_dataset[volume_index] = detection_index + 1
 
         # Limit the number of cores for parallelization.
         n_threads = min(16, mp.cpu_count())
