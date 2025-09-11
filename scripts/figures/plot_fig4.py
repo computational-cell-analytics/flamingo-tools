@@ -10,6 +10,8 @@ from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 
 from util import frequency_mapping  # , literature_reference_values
 
+# from statsmodels.nonparametric.smoothers_lowess import lowess
+
 INTENSITY_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/mobie_project/cochlea-lightsheet/tables/measurements2"  # noqa
 
 # The cochlea for the CHReef analysis.
@@ -17,8 +19,8 @@ COCHLEAE_DICT = {
     "M_LR_000143_L": {"alias": "M0L", "component": [1]},
     "M_LR_000144_L": {"alias": "M05L", "component": [1]},
     "M_LR_000145_L": {"alias": "M06L", "component": [1]},
-    "M_LR_000153_L": {"alias": "M07L", "component": [1]},
-    "M_LR_000155_L": {"alias": "M08L", "component": [1, 2, 3]},
+    "M_LR_000153_L": {"alias": "M07L", "component": [1, 2, 3]},
+    "M_LR_000155_L": {"alias": "M08L", "component": [1]},
     "M_LR_000189_L": {"alias": "M09L", "component": [1]},
     "M_LR_000143_R": {"alias": "M0R", "component": [1]},
     "M_LR_000144_R": {"alias": "M05R", "component": [1]},
@@ -30,6 +32,7 @@ COCHLEAE_DICT = {
     "G_EK_000049_R": {"alias": "G1R", "component": [1, 2]},
 }
 
+FILE_EXTENSION = "png"
 png_dpi = 300
 
 
@@ -175,7 +178,11 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
 
     plt.tight_layout()
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
     if plot:
         plt.show()
@@ -218,12 +225,13 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     main_label_size = 20
     sub_label_size = 16
     main_tick_size = 12
-    legendsize = 16 if intensity else 12
+    legendsize = 16
 
     label = "Intensity" if intensity else "Transduction efficiency"
+
     if plot_by_side:
-        plt.scatter(x, values_left, label=f"{label} (Left)", marker="o", s=80)
-        plt.scatter(x, values_right, label=f"{label} (Right)", marker="x", s=80)
+        plt.scatter(x, values_left, label="Left", marker="o", s=80)
+        plt.scatter(x, values_right, label="Right", marker="x", s=80)
     else:
         plt.scatter(x, values, label=label, marker="o", s=80)
 
@@ -242,7 +250,11 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
             plt.ylim(0.5, 1.05)
 
     plt.tight_layout()
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
     if plot:
         plt.show()
@@ -250,7 +262,8 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
         plt.close()
 
 
-def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_alias=True):
+def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_alias=True, trendlines=False,
+            trendline_fit="linear_regression"):
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for name, values in chreef_data.items():
@@ -306,6 +319,8 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     all_x_positions = []
     all_x_labels = []
 
+    trend_dict = {}
+
     for name_lr, grp in result.groupby("cochlea"):
         name, side = name_lr[:-1], name_lr[-1]
         x_positions = grp["x_pos"] + offset_map[side]
@@ -321,9 +336,68 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
         if name not in legend_added:
             legend_added.add(name)
 
+        if trendlines:
+            sorted_idx = np.argsort(x_positions)
+            x_sorted = np.array(x_positions)[sorted_idx]
+            y_sorted = np.array(grp["value"])[sorted_idx]
+            trend_dict[name_lr] = {"x_sorted": x_sorted,
+                                   "y_sorted": y_sorted,
+                                   "side": side,
+                                   }
+
         # Store for sublabel ticks
         all_x_positions.extend(x_positions)
         all_x_labels.extend([sublabels[side]] * len(x_positions))
+
+    if trendlines:
+        def get_trendline_values(trend_dict, side):
+            x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side][0]
+            y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side]
+            y_sorted = []
+            for num in range(len(x_sorted)):
+                y_sorted.append(np.mean([y[num] for y in y_sorted_all]))
+            return x_sorted, y_sorted
+
+        # Trendline left
+        x_sorted, y_sorted = get_trendline_values(trend_dict, "L")
+
+        if trendline_fit == "linear_regression":
+            # linear regression
+            coeffs = np.polyfit(x_sorted, y_sorted, 1)
+            poly_fn = np.poly1d(coeffs)
+
+            ax.plot(
+                x_sorted,
+                poly_fn(x_sorted),
+                linestyle="dotted",
+                color="red",
+                alpha=0.7
+            )
+
+#        if trendline_fit == "LOWESS":
+#            # Fit LOWESS curve, using statsmodels.nonparametric.smoothers_lowess
+#            lowess_fit = lowess(y_sorted, x_sorted, frac=0.4)  # frac for smoothness (0.2 = wiggly, 0.6 = smoother)
+#            x_fit, y_fit = lowess_fit[:, 0], lowess_fit[:, 1]
+#            ax.plot(x_fit, y_fit, linestyle="dotted", color="red", alpha=0.7)
+
+        # Trendline right
+        x_sorted, y_sorted = get_trendline_values(trend_dict, "R")
+
+        if trendline_fit == "linear_regression":
+            coeffs = np.polyfit(x_sorted, y_sorted, 1)
+            poly_fn = np.poly1d(coeffs)
+            ax.plot(
+                x_sorted,
+                poly_fn(x_sorted),
+                linestyle="dashed",
+                color="blue",
+                alpha=0.7
+            )
+#        if trendline_fit == "LOWESS":
+#            # Fit LOWESS curve, using statsmodels.nonparametric.smoothers_lowess
+#            lowess_fit = lowess(y_sorted, x_sorted, frac=0.4)  # frac for smoothness (0.2 = wiggly, 0.6 = smoother)
+#            x_fit, y_fit = lowess_fit[:, 0], lowess_fit[:, 1]
+#            ax.plot(x_fit, y_fit, linestyle="dashed", color="blue", alpha=0.7)
 
     # Create combined tick positions & labels
     main_ticks = range(len(bin_labels))
@@ -351,7 +425,11 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     ax.legend(title="Cochlea", fontsize=legend_size)
     plt.tight_layout()
 
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+
     if plot:
         plt.show()
     else:
@@ -379,29 +457,40 @@ def main():
 
     # C: The SGN count compared to reference values from literature and healthy
     # Maybe remove literature reference from plot?
-    fig_04c(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04c"),
+    fig_04c(chreef_data,
+            save_path=os.path.join(args.figure_dir, f"fig_04c.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, use_alias=use_alias)
 
     # D: The transduction efficiency. We also plot GFP intensities.
-    fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_transduction"),
+    fig_04d(chreef_data,
+            save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, use_alias=use_alias)
-    fig_04d(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04d_intensity"),
+    fig_04d(chreef_data,
+            save_path=os.path.join(args.figure_dir, f"fig_04d_intensity.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
-    fig_04e(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04e_transduction"),
-            plot=args.plot, use_alias=use_alias)
-    fig_04e(chreef_data, save_path=os.path.join(args.figure_dir, "fig_04e_intensity"),
+    fig_04e(chreef_data,
+            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction.{FILE_EXTENSION}"),
+            plot=args.plot, use_alias=use_alias, trendlines=False)
+    fig_04e(chreef_data,
+            save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
             plot=args.plot, intensity=True, use_alias=use_alias)
 
     chreef_data_gerbil = get_chreef_data(animal="gerbil")
-    fig_04d(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04d_gerbil_transduction"),
+    fig_04d(chreef_data_gerbil,
+            save_path=os.path.join(args.figure_dir, f"fig_04d_gerbil_transduction.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, gerbil=True, use_alias=use_alias)
-    fig_04d(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04d_gerbil_intensity"),
+
+    fig_04d(chreef_data_gerbil,
+            save_path=os.path.join(args.figure_dir, f"fig_04d_gerbil_intensity.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
-    fig_04e(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04e_gerbil_transduction"),
+    fig_04e(chreef_data_gerbil,
+            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction.{FILE_EXTENSION}"),
             plot=args.plot, gerbil=True, use_alias=use_alias)
-    fig_04e(chreef_data_gerbil, save_path=os.path.join(args.figure_dir, "fig_04e_gerbil_intensity"),
+
+    fig_04e(chreef_data_gerbil,
+            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_intensity.{FILE_EXTENSION}"),
             plot=args.plot, intensity=True, use_alias=use_alias)
 
 
