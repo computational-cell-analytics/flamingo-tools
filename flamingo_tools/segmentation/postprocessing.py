@@ -774,7 +774,8 @@ def split_nonconvex_objects(
         nonlocal offset
 
         row = segmentation_table[segmentation_table.label_id == object_id]
-        if min_size and row.n_pixels.values[0] < min_size:
+        if row.n_pixels.values[0] < min_size:
+            # print(object_id, ": min-size")
             return [object_id]
 
         bb_min = np.array([
@@ -788,6 +789,12 @@ def split_nonconvex_objects(
         bb_max = np.minimum(bb_max.astype(int) + 1, np.array(list(segmentation.shape)))
         bb = tuple(slice(mi, ma) for mi, ma in zip(bb_min, bb_max))
 
+        # This is due to segmentation artifacts.
+        bb_shape = bb_max - bb_min
+        if (bb_shape > 500).any():
+            print(object_id, "has a too large shape:", bb_shape)
+            return [object_id]
+
         seg = segmentation[bb]
         mask = ~find_boundaries(seg)
         dist = distance_transform_edt(mask, sampling=resolution)
@@ -798,6 +805,7 @@ def split_nonconvex_objects(
         maxima = peak_local_max(dist, min_distance=3, exclude_border=True)
 
         if len(maxima) == 1:
+            # print(object_id, ": max len")
             return [object_id]
 
         with lock:
@@ -819,14 +827,20 @@ def split_nonconvex_objects(
 
         keep_ids = seg_ids[sizes > min_size]
         if len(keep_ids) < 2:
+            # print(object_id, ": keep-id")
             return [object_id]
 
         elif len(keep_ids) != len(seg_ids):
             new_seg[~np.isin(new_seg, keep_ids)] = 0
             new_seg = watershed(hmap, markers=new_seg, mask=seg_mask)
 
-        output[bb][seg_mask] = new_seg[seg_mask]
-        return seg_ids.tolist()
+        with lock:
+            out = output[bb]
+            out[seg_mask] = new_seg[seg_mask]
+            output[bb] = out
+
+        # print(object_id, ":", len(keep_ids))
+        return keep_ids.tolist()
 
         # import napari
         # v = napari.Viewer()
@@ -839,10 +853,14 @@ def split_nonconvex_objects(
     if component_labels is None:
         object_ids = segmentation_table.label_id.values
     else:
-        object_ids = segmentation_table[segmentation_table.isin(component_labels)].label_id.values
+        object_ids = segmentation_table[segmentation_table.component_labels.isin(component_labels)].label_id.values
 
     if n_threads is None:
         n_threads = mp.cpu_count()
+
+    # new_id_mapping = []
+    # for object_id in tqdm(object_ids, desc="Split non-convex objects"):
+    #     new_id_mapping.append(split_object(object_id))
 
     with futures.ThreadPoolExecutor(n_threads) as tp:
         new_id_mapping = list(

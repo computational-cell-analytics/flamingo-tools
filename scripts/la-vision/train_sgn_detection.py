@@ -12,7 +12,8 @@ sys.path.append("../synapse_marker_detection")
 from utils.training.training import supervised_training  # noqa
 from detection_dataset import DetectionDataset, MinPointSampler  # noqa
 
-ROOT = "./la-vision-sgn-new"  # noqa
+# ROOT = "./la-vision-sgn-new"  # noqa
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/SGN/sgn-detection"
 
 TRAIN = os.path.join(ROOT, "images")
 TRAIN_EMPTY = os.path.join(ROOT, "empty_images")
@@ -24,6 +25,7 @@ LABEL_EMPTY = os.path.join(ROOT, "empty_centroids")
 def _get_paths(split, train_folder, label_folder, n=None):
     image_paths = sorted(glob(os.path.join(train_folder, "*.tif")))
     label_paths = sorted(glob(os.path.join(label_folder, "*.csv")))
+    assert len(image_paths) > 0
     assert len(image_paths) == len(label_paths)
     if n is not None:
         image_paths, label_paths = image_paths[:n], label_paths[:n]

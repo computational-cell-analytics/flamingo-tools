@@ -206,12 +206,12 @@ class DetectionDataset(torch.utils.data.Dataset):
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
         # For synapse detection.
-        # label = process_labels(coords, shape, self.sigma, self.eps, bb=bb)
+        label = process_labels(coords, shape, self.sigma, self.eps, bb=bb)
 
         # For SGN detection with data specfic hacks
-        label = process_labels_hacky(coords, shape, self.sigma, self.eps, bb=bb)
-        gap = 6
-        raw_patch, label = raw_patch[gap:-gap], label[gap:-gap]
+        # label = process_labels_hacky(coords, shape, self.sigma, self.eps, bb=bb)
+        # gap = 8
+        # raw_patch, label = raw_patch[gap:-gap], label[gap:-gap]
 
         have_label_channels = label.ndim == 4
         if have_label_channels:
