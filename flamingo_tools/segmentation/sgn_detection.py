@@ -66,7 +66,7 @@ def sgn_detection(
         output = open_file(segmentation_path, mode="a")
         segmentation_key = "segmentation"
         output_dataset = output.create_dataset(
-            segmentation_key, shape=shape, dtype=input_.dtype,
+            segmentation_key, shape=shape, dtype=np.uint64,
             chunks=chunks, compression="gzip"
         )
 
@@ -80,7 +80,7 @@ def sgn_detection(
             block_end = [round(c) + spot_radius for c in coord]
             volume_index = tuple(slice(beg, end) for beg, end in zip(block_begin, block_end))
             with lock:
-                output_dataset[volume_index] = detection_index + 1
+                output_dataset[volume_index] = int(detection_index) + 1
 
         # Limit the number of cores for parallelization.
         n_threads = min(16, mp.cpu_count())
