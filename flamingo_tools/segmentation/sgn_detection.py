@@ -35,9 +35,9 @@ def sgn_detection(
         spot_radius: Radius in pixel to convert spot detection of SGNs into a volume.
     """
     if block_shape is None:
-        block_shape = (24, 256, 256)
+        block_shape = (12, 128, 128)
     if halo is None:
-        halo = (12, 64, 64)
+        halo = (10, 64, 64)
 
     # Skip existing prediction, which is saved in output_folder/predictions.zarr
     skip_prediction = False

@@ -25,8 +25,8 @@ def main():
 
     args = parser.parse_args()
 
-    block_shape = (24, 256, 256)
-    halo = (12, 64, 64)
+    block_shape = (12, 128, 128)
+    halo = (10, 64, 64)
 
     if args.s3:
         input_path, fs = s3_utils.get_s3_path(args.input, bucket_name=args.s3_bucket_name,
