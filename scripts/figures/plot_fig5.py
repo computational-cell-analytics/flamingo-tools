@@ -11,6 +11,7 @@ from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 from util import SYNAPSE_DIR_ROOT
 from plot_fig4 import get_chreef_data
 
+FILE_EXTENSION = "png"
 png_dpi = 300
 
 
@@ -110,7 +111,10 @@ def fig_05c(save_path, plot=False):
 
     # Save and plot the figure.
     plt.tight_layout()
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
     if plot:
         plt.show()
@@ -157,7 +161,7 @@ def main():
     # fig_05c(save_path=os.path.join(args.figure_dir, "fig_05c"), plot=args.plot)
 
     # Panel D: Tonotopic mapping of the intensities.
-    fig_05d(save_path=os.path.join(args.figure_dir, "fig_05d"), plot=args.plot)
+    fig_05d(save_path=os.path.join(args.figure_dir, f"fig_05d.{FILE_EXTENSION}"), plot=args.plot)
 
 
 if __name__ == "__main__":
