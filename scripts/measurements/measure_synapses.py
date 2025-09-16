@@ -1,3 +1,4 @@
+import argparse
 import os
 import json
 
@@ -8,16 +9,39 @@ from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 
 OUTPUT_FOLDER = "./ihc_counts"
 
+COCHLEAE = [
+    "M_LR_000226_L",
+    "M_LR_000226_R",
+    "M_LR_000227_L",
+    "M_LR_000227_R",
+    "G_EK_000233_L",
+    "G_LR_000233_R",
 
-def check_project(plot=False, save_ihc_table=False, max_dist=None):
+]
+
+
+SYNAPSE_DICT = {
+    "M_LR_000226_L": {"synapse_table_name": "synapse_v3_ihc_v4c", "ihc_table_name": "IHC_v4c"},
+    "M_LR_000226_R": {"synapse_table_name": "synapse_v3_ihc_v4c", "ihc_table_name": "IHC_v4c"},
+    "M_LR_000227_L": {"synapse_table_name": "synapse_v3_ihc_v4c", "ihc_table_name": "IHC_v4c"},
+    "M_LR_000227_R": {"synapse_table_name": "synapse_v3_ihc_v4c", "ihc_table_name": "IHC_v4c"},
+    "G_EK_000233_L": {"synapse_table_name": "synapse_v3_ihc_v6", "ihc_table_name": "IHC_v6"},
+    "G_LR_000233_R": {"synapse_table_name": "synapse_v3_ihc_v6", "ihc_table_name": "IHC_v6"},
+}
+
+
+def check_project(cochleae, output_folder, plot=False, save_ihc_table=False, max_dist=None):
     s3 = create_s3_target()
-    # cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R", "M_AMD_OTOF1_L"]
-    cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R"]
-
     results = {}
     for cochlea in cochleae:
-        synapse_table_name = "synapse_v3_ihc_v4c"
-        ihc_table_name = "IHC_v4c"
+        if cochlea in SYNAPSE_DICT.keys():
+            synapse_table_name = SYNAPSE_DICT[cochlea]["synapse_table_name"]
+            ihc_table_name = SYNAPSE_DICT[cochlea]["ihc_table_name"]
+
+        else:
+            synapse_table_name = "synapse_v3_ihc_v4c"
+            ihc_table_name = "IHC_v4c"
+
         component_id = [1]
 
         if cochlea == "M_AMD_OTOF1_L":
@@ -82,8 +106,8 @@ def check_project(plot=False, save_ihc_table=False, max_dist=None):
                 "run_length": [run_length_dict[ihc_id] for ihc_id in ihc_to_count.keys()],
                 "frequency": [frequency_dict[ihc_id] for ihc_id in ihc_to_count.keys()]
             })
-            os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-            output_path = os.path.join(OUTPUT_FOLDER, f"ihc_count_{cochlea}.tsv")
+            os.makedirs(output_folder, exist_ok=True)
+            output_path = os.path.join(output_folder, f"ihc_count_{cochlea}.tsv")
             ihc_count_table.to_csv(output_path, sep="\t", index=False)
 
     if plot:
@@ -104,7 +128,15 @@ def check_project(plot=False, save_ihc_table=False, max_dist=None):
 
 
 def main():
-    check_project(plot=False, save_ihc_table=True, max_dist=3)
+    parser = argparse.ArgumentParser(
+        description="Assign each segmentation instance a marker based on annotation thresholds."
+    )
+
+    parser.add_argument("-c", "--cochlea", type=str, nargs="+", default=COCHLEAE, help="Cochlea(e) to process.")
+    parser.add_argument("-o", "--output", type=str, default=OUTPUT_FOLDER, help="Output directory.")
+
+    args = parser.parse_args()
+    check_project(args.cochlea, args.output, plot=False, save_ihc_table=True, max_dist=3)
 
 
 if __name__ == "__main__":

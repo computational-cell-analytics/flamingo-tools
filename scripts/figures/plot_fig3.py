@@ -16,7 +16,9 @@ from matplotlib import cm, colors
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT, to_alias
 
-INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+# INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/frequency_mapping/M_LR_000227_R/scale3"
+FILE_EXTENSION = "png"
 
 TYPE_TO_CHANNEL = {
     "Type-Ia": "CR",

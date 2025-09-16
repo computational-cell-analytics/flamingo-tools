@@ -1,0 +1,25 @@
+[
+	{
+		"cochlea": "LaVision-M04",
+		"image_channel": [
+			"PV"
+		],
+		"resolution" : [
+			1.887779, 
+			1.887779,
+			3.0 
+		],
+		"halo_size": [
+			128,
+			128,
+			64
+		],
+		"crop_centers": [
+			[
+				2550,
+				2340,
+				440
+			]
+		]
+	}
+]
