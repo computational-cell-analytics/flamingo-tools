@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from glob import glob
 from subprocess import run
 
@@ -10,6 +11,8 @@ from skimage.filters import threshold_otsu
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target, get_s3_path
 from flamingo_tools.measurements import compute_object_measures
 
+sys.path.append("../figures")
+
 # Map from cochlea names to channels
 COCHLEAE_FOR_SUBTYPES = {
     "M_LR_000099_L": ["PV", "Calb1", "Lypd1"],
@@ -17,11 +20,16 @@ COCHLEAE_FOR_SUBTYPES = {
     "M_AMD_N62_L": ["PV", "CR", "Calb1"],
     "M_AMD_N180_R": ["CR", "Ntng1", "CTBP2"],
     "M_AMD_N180_L": ["CR", "Ntng1", "Lypd1"],
+    "M_LR_000184_R": ["PV", "Prph"],
+    "M_LR_000184_L": ["PV", "Prph"],
     # Mutant / some stuff is weird.
     # "M_AMD_Runx1_L": ["PV", "Lypd1", "Calb1"],
     # This one still has to be stitched:
     # "M_LR_000184_R": {"PV", "Prph"},
 }
+REGULAR_COCHLEAE = [
+    "M_LR_000099_L", "M_LR_000214_L", "M_AMD_N62_L", "M_LR_000184_R", "M_LR_000184_L"
+]
 
 # Map from channels to subtypes.
 # Comment Aleyna:
@@ -46,7 +54,30 @@ THRESHOLDS = {
     },
 }
 
+# For consistent colors.
+ALL_COLORS = ["red", "blue", "orange", "yellow", "cyan", "magenta", "green", "purple"]
+COLORS = {}
+
 PLOT_OUT = "./subtype_plots"
+
+# TODO: updates based on Aleyna's feedback.
+# Subtype mapping
+
+# Combined visualization for the cochleae
+# Can we visualize the tonotopy in subtypes and not stainings?
+# It would also be good to have subtype percentages per cochlea and pooled together as a diagram and tonotopy?
+# This would help to see if different staining gives same/similar results.
+# Type Ia ; CR+ / Calb1- or Calb1- / Lypd1-
+# Type Ib: CR+ / Calb1+ or Calb1+ / Lypd1+
+# Type Ic: CR-/Calb1+ - or Calb1- / Lypd1+
+# Type II: CR-/Calb1- or Calb1- / Lypd1- or Prph+
+
+# > It's good to see that for the N mice the Ntng1C and Lypd1 separate from CR so well on the thresholds. Can I visualize these samples ones segmentation masks are done to verify the Ntng1C thresholds? As this is a quite clear signal I'm not sure if taking the middle of the histogram would be the best choice.
+# The segmentations are in MoBIE already. I need to send you the tables for analyzing the signals. Will send them later.
+
+# > Where are we at PV-Prph segmentation results from MLR184_L and R for SGN type II analysis? This would hopefully give <5% Prph+ cells.
+# The cochleae are in MoBIE. Segmentation and Prph signal look good! I will include it in the next analysis.
+# Need tonotopic mapping from Martin and then compute the intensities.
 
 
 def check_processing_status():
@@ -63,6 +94,8 @@ def check_processing_status():
     missing_tables = {}
 
     for cochlea, channels in COCHLEAE_FOR_SUBTYPES.items():
+        if cochlea not in REGULAR_COCHLEAE:
+            continue
         try:
             content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
         except FileNotFoundError:
@@ -125,6 +158,8 @@ def require_missing_tables(missing_tables):
     output_root = "./object_measurements"
 
     for cochlea, missing_tabs in missing_tables.items():
+        if cochlea not in REGULAR_COCHLEAE:
+            continue
         for missing in missing_tabs:
             channel = missing.split("_")[0]
             seg_name = missing.split("_")[1].replace("-", "_")
@@ -165,6 +200,8 @@ def compile_data_for_subtype_analysis():
     os.makedirs(output_folder, exist_ok=True)
 
     for cochlea, channels in COCHLEAE_FOR_SUBTYPES.items():
+        if cochlea not in REGULAR_COCHLEAE:
+            continue
         if "PV" in channels:
             reference_channel = "PV"
             seg_name = "PV_SGN_v2"
@@ -217,14 +254,17 @@ def compile_data_for_subtype_analysis():
         output_table.to_csv(out_path, sep="\t", index=False)
 
 
-def _plot_histogram(table, column, name, show_plots, subtype=None):
+def _plot_histogram(table, column, name, show_plots, class_names=None, apply_threshold=True):
     data = table[column].values
     threshold = threshold_otsu(data)
 
     fig, ax = plt.subplots(1)
     ax.hist(data, bins=24)
-    ax.axvline(x=threshold, color='red', linestyle='--')
-    ax.set_title(f"{name}\n threshold: {threshold}")
+    if apply_threshold:
+        ax.axvline(x=threshold, color='red', linestyle='--')
+        ax.set_title(f"{name}\n threshold: {threshold}")
+    else:
+        ax.set_title(name)
 
     if show_plots:
         plt.show()
@@ -232,12 +272,14 @@ def _plot_histogram(table, column, name, show_plots, subtype=None):
         os.makedirs(PLOT_OUT, exist_ok=True)
         plt.savefig(f"{PLOT_OUT}/{name}.png")
 
-    if subtype is not None:
-        subtype_classification = [None if datum < threshold else subtype for datum in data]
+    if class_names is not None:
+        assert len(class_names) == 2
+        c0, c1 = class_names
+        subtype_classification = [c0 if datum < threshold else c1 for datum in data]
         return subtype_classification
 
 
-def _plot_2d(ratios, name, show_plots, classification=None):
+def _plot_2d(ratios, name, show_plots, classification=None, colors=None):
     fig, ax = plt.subplots(1)
     assert len(ratios) == 2
     keys = list(ratios.keys())
@@ -247,41 +289,15 @@ def _plot_2d(ratios, name, show_plots, classification=None):
         ax.scatter(ratios[k1, k2])
 
     else:
-        def _combine(a, b):
-            if a is None and b is None:
-                return None
-            elif a is None and b is not None:
-                return b
-            elif a is not None and b is None:
-                return a
-            else:
-                return f"{a}-{b}"
-
-        classification = [cls for cls in classification if cls is not None]
-        labels = classification[0].copy()
-        for cls in classification[1:]:
-            if cls is None:
-                continue
-            labels = [_combine(a, b) for a, b in zip(labels, cls)]
-
-        unique_labels = set(ll for ll in labels if ll is not None)
-        all_colors = ["red", "blue", "orange", "yellow"]
-        colors = {ll: color for ll, color in zip(unique_labels, all_colors[:len(unique_labels)])}
-
+        assert colors is not None
+        unique_labels = set(classification)
         for lbl in unique_labels:
-            mask = [ll == lbl for ll in labels]
+            mask = [ll == lbl for ll in classification]
             ax.scatter(
-                [ratios[k1][i] for i in range(len(labels)) if mask[i]],
-                [ratios[k2][i] for i in range(len(labels)) if mask[i]],
+                [ratios[k1][i] for i in range(len(classification)) if mask[i]],
+                [ratios[k2][i] for i in range(len(classification)) if mask[i]],
                 c=colors[lbl], label=lbl
             )
-
-        mask_none = [ll is None for ll in labels]
-        ax.scatter(
-            [ratios[k1][i] for i in range(len(labels)) if mask_none[i]],
-            [ratios[k2][i] for i in range(len(labels)) if mask_none[i]],
-            facecolors="none", edgecolors="black", label="None"
-        )
 
         ax.legend()
 
@@ -296,41 +312,90 @@ def _plot_2d(ratios, name, show_plots, classification=None):
         plt.savefig(f"{PLOT_OUT}/{name}.png")
 
 
-# TODO enable over-writing by manual thresholds
-def analyze_subtype_data(show_plots=True):
+def _plot_tonotopic_mapping(freq, classification, name, colors, show_plots):
+    from util import frequency_mapping
+
+    frequency_mapped = frequency_mapping(freq, classification, categorical=True)
+    result = next(iter(frequency_mapped.values()))
+    bin_labels = pd.unique(result["octave_band"])
+    band_to_x = {band: i for i, band in enumerate(bin_labels)}
+    x_positions = result["octave_band"].map(band_to_x)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    for cat, vals in frequency_mapped.items():
+        ax.scatter(x_positions, vals.value, label=cat, color=colors[cat])
+    ax.legend()
+    ax.set_title(name)
+
+    if show_plots:
+        plt.show()
+    else:
+        os.makedirs(PLOT_OUT, exist_ok=True)
+        plt.savefig(f"{PLOT_OUT}/{name}.png")
+    plt.close()
+
+
+def analyze_subtype_data_regular(show_plots=True):
+    global PLOT_OUT, COLORS  # noqa
+    PLOT_OUT = "subtype_plots/regular_mice"
+
     files = sorted(glob("./subtype_analysis/*.tsv"))
 
     for ff in files:
         cochlea = os.path.basename(ff)[:-len("_subtype_analysis.tsv")]
+        if cochlea not in REGULAR_COCHLEAE:
+            continue
         print(cochlea)
         channels = COCHLEAE_FOR_SUBTYPES[cochlea]
-        reference_channel = "PV" if "PV" in channels else "CR"
+
+        reference_channel = "PV"
         assert channels[0] == reference_channel
 
         tab = pd.read_csv(ff, sep="\t")
 
         # 1.) Plot simple intensity histograms, including otsu threshold.
-        for chan in channels:
-            column = f"{chan}_median"
-            name = f"{cochlea}_{chan}_histogram"
-            _plot_histogram(tab, column, name, show_plots)
+        # for chan in channels:
+        #     column = f"{chan}_median"
+        #     name = f"{cochlea}_{chan}_histogram"
+        #     _plot_histogram(tab, column, name, show_plots, apply_threshold=chan != reference_channel)
 
         # 2.) Plot ratio histograms, including otsu threshold.
-        # TODO ratio based classification and overlay in 2d plot?
         ratios = {}
-        subtype_classification = []
+        classification = []
         for chan in channels[1:]:
             column = f"{chan}_ratio_{reference_channel}"
             name = f"{cochlea}_{chan}_histogram_ratio_{reference_channel}"
-            classification = _plot_histogram(
-                tab, column, name, subtype=CHANNEL_TO_TYPE.get(chan, None), show_plots=show_plots
+            chan_classification = _plot_histogram(
+                tab, column, name, class_names=[f"{chan}-", f"{chan}+"], show_plots=show_plots
             )
-            subtype_classification.append(classification)
+            classification.append(chan_classification)
             ratios[f"{chan}_{reference_channel}"] = tab[column].values
 
-        # 3.) Plot 2D space of ratios.
+        # Unify the classification and assign colors
+        cls1, cls2 = classification[0], classification[1]
+        assert len(cls1) == len(cls2)
+        classification = [f"{c1} / {c2}" for c1, c2 in zip(cls1, cls2)]
+
+        unique_labels = set(classification)
+        for label in unique_labels:
+            if label in COLORS:
+                continue
+            if COLORS:
+                last_color = list(COLORS.values())[-1]
+                next_color = ALL_COLORS[ALL_COLORS.index(last_color) + 1]
+                COLORS[label] = next_color
+            else:
+                COLORS[label] = ALL_COLORS[0]
+
+        # 3.) Plot tonotopic mapping.
+        freq = tab["frequency[kHz]"].values
+        assert len(freq) == len(classification)
+        name = f"{cochlea}_tonotopic_mapping"
+        _plot_tonotopic_mapping(freq, classification, name=name, colors=COLORS, show_plots=show_plots)
+
+        # 4.) Plot 2D space of ratios.
         name = f"{cochlea}_2d"
-        _plot_2d(ratios, name, show_plots, classification=subtype_classification)
+        _plot_2d(ratios, name, show_plots, classification=classification, colors=COLORS)
 
 
 # General notes:
@@ -338,10 +403,15 @@ def analyze_subtype_data(show_plots=True):
 def main():
     missing_tables = check_processing_status()
     require_missing_tables(missing_tables)
+    compile_data_for_subtype_analysis()
 
-    # compile_data_for_subtype_analysis()
+    # analyze_subtype_data_regular(show_plots=False)
 
-    # analyze_subtype_data(show_plots=False)
+    # TODO
+    # analyze_subtype_data_N_mice()
+
+    # CTBP2 stain
+    # analyze_subtype_data_syn_mice()
 
 
 if __name__ == "__main__":

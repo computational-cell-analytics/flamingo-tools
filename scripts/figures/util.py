@@ -24,7 +24,7 @@ def _get_mapping(animal):
     return bin_edges, bin_labels
 
 
-def frequency_mapping(frequencies, values, animal="mouse", transduction_efficiency=False):
+def frequency_mapping(frequencies, values, animal="mouse", transduction_efficiency=False, categorical=False):
     # Get the mapping of frequencies to octave bands for the given species.
     bin_edges, bin_labels = _get_mapping(animal)
 
@@ -34,7 +34,18 @@ def frequency_mapping(frequencies, values, animal="mouse", transduction_efficien
         df["freq_khz"], bins=bin_edges, labels=bin_labels, right=False
     )
 
-    if transduction_efficiency:  # We compute the transduction efficiency per band.
+    if categorical:
+        assert not transduction_efficiency
+        categories = pd.unique(df.value)
+        num_tot = df.groupby("octave_band", observed=False).size()
+        value_by_band = {}
+        for cat in categories:
+            pos_cat = df[df.value == cat].groupby("octave_band", observed=False).size()
+            cat_by_band = (pos_cat / num_tot).reindex(bin_labels)
+            cat_by_band = cat_by_band.reset_index()
+            cat_by_band.columns = ["octave_band", "value"]
+            value_by_band[cat] = cat_by_band
+    elif transduction_efficiency:  # We compute the transduction efficiency per band.
         num_pos = df[df["value"] == 1].groupby("octave_band", observed=False).size()
         num_tot = df[df["value"].isin([1, 2])].groupby("octave_band", observed=False).size()
         value_by_band = (num_pos / num_tot).reindex(bin_labels)
