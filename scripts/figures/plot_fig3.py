@@ -12,7 +12,9 @@ from matplotlib import cm, colors
 
 from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT, to_alias
 
-INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+# INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/frequency_mapping/M_LR_000227_R/scale3"
+FILE_EXTENSION = "png"
 
 TYPE_TO_CHANNEL = {
     "Type-Ia": "CR",
@@ -219,12 +221,15 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
-    fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a_cmap.png"), plot=args.plot, plot_napari=True)
+    fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap.{FILE_EXTENSION}"),
+            plot=args.plot, plot_napari=False)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
-    fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
-    fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
+    # fig_03c_rl(save_path=os.path.join(args.figure_dir, f"fig_03c_runlength.{FILE_EXTENSION}"), plot=args.plot)
+    # fig_03c_octave(tonotopic_data=tonotopic_data,
+    #               save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
+    #               plot=args.plot)
 
     # Panel D: Spatial distribution of SGN sub-types.
     fig_03d_fraction(save_path=os.path.join(args.figure_dir, "fig_03d_fraction.png"), plot=args.plot)

@@ -8,7 +8,7 @@ from flamingo_tools.training import mean_teacher_training
 
 def get_paths():
     root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/SGN"
-    folders = ["2025-06-SGN_domain_gerbil_PV"]
+    folders = ["2025-09-SGN_domain_gerbil_GLR233R"]
     train_paths = []
     val_paths = []
     for folder in folders:
@@ -49,7 +49,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--export_path")
     args = parser.parse_args()
-    name = "sgn-adapted-model_gerbil_PV"
+    name = "sgn-adapted-model_GLR233R_PV"
     if args.export_path is None:
         run_training(name)
     else:

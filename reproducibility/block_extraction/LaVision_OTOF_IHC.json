@@ -1,0 +1,84 @@
+[
+	{
+		"cochlea": "LaVision-OTOF23R",
+		"image_channel": [
+			"CR",
+			"IHC_LOWRES-v2"
+		],
+		"resolution" : [
+			1.887779, 
+			1.887779,
+			3.0 
+		],
+		"halo_size": [
+			128,
+			128,
+			48
+		],
+		"crop_centers": [
+			[
+				1360,
+				3450,
+				732
+			],
+			[
+				2408,
+				913,
+				688
+			],
+			[
+				2700,
+				3220,
+				620
+			]
+		]
+	},
+	{
+		"cochlea": "LaVision-OTOF25R",
+		"image_channel": [
+			"CR",
+			"IHC_LOWRES-v2"
+		],
+		"resolution" : [
+			1.887779, 
+			1.887779,
+			3.0 
+		],
+		"halo_size": [
+			128,
+			128,
+			48
+		],
+		"crop_centers": [
+			[
+				2490,
+				3460,
+				875
+			]
+		]
+	},
+	{
+		"cochlea": "LaVision-OTOF36R",
+		"image_channel": [
+			"CR",
+			"IHC_LOWRES-v2"
+		],
+		"resolution" : [
+			1.887779, 
+			1.887779,
+			3.0 
+		],
+		"halo_size": [
+			128,
+			128,
+			48
+		],
+		"crop_centers": [
+			[
+				2558,
+				3415,
+				871
+			]
+		]
+	}
+]
