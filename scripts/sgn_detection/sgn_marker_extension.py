@@ -24,7 +24,7 @@ def main():
 
     parser.add_argument("--component_labels", type=int, nargs="+", default=[1],
                         help="Component labels of SGN_detect.")
-    parser.add_argument("-d", "--extension_distance", type=float, default=8, help="Extension distance.")
+    parser.add_argument("-d", "--extension_distance", type=float, default=12, help="Extension distance.")
     parser.add_argument("-r", "--resolution", type=float, nargs="+", default=[3.0, 1.887779, 1.887779],
                         help="Resolution of input in micrometer.")
 
@@ -71,7 +71,7 @@ def main():
 
     output = open_file(output_path, mode="a")
     output_dataset = output.create_dataset(
-        output_key, shape=shape, dtype=data.dtype,
+        output_key, shape=shape, dtype=np.dtype("uint32"),
         chunks=chunks, compression="gzip"
     )
 
