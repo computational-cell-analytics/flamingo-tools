@@ -136,18 +136,17 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
 
     main_label_size = 20
     sub_label_size = 16
-    main_tick_size = 12
+    main_tick_size = 16
     legendsize = 16
 
     if plot_by_side:
-        plt.scatter(x, sgns_left, label="SGN count (Left)", marker="o", s=80)
-        plt.scatter(x, sgns_right, label="SGN count (Right)", marker="x", s=80)
+        plt.scatter(x, sgns_left, label="Left", marker="o", s=80)
+        plt.scatter(x, sgns_right, label="Right", marker="x", s=80)
     else:
         plt.scatter(x, sgns, label="SGN count", marker="o", s=80)
 
     # Labels and formatting
     plt.xticks(x, alias, fontsize=sub_label_size)
-    plt.xlabel("Cochlea", fontsize=main_label_size)
     plt.yticks(fontsize=main_tick_size)
     plt.ylabel("SGN count per cochlea", fontsize=main_label_size)
     plt.ylim(4000, 13800)
@@ -224,7 +223,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
 
     main_label_size = 20
     sub_label_size = 16
-    main_tick_size = 12
+    main_tick_size = 16
     legendsize = 16
 
     label = "Intensity" if intensity else "Transduction efficiency"
@@ -237,7 +236,6 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
 
     # Labels and formatting
     plt.xticks(x, alias, fontsize=sub_label_size)
-    plt.xlabel("Cochlea", fontsize=main_label_size)
     plt.yticks(fontsize=main_tick_size)
     plt.ylabel(label, fontsize=main_label_size)
     plt.legend(loc="best", fontsize=sub_label_size)
@@ -262,8 +260,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
         plt.close()
 
 
-def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_alias=True, trendlines=False,
-            trendline_fit="linear_regression"):
+def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_alias=True, trendlines=False):
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for name, values in chreef_data.items():
@@ -312,6 +309,8 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     cochleas = sorted({name_lr[:-1] for name_lr in result["cochlea"].unique()})
     colors = plt.cm.tab10.colors  # pick a colormap
     color_map = {cochlea: colors[i % len(colors)] for i, cochlea in enumerate(cochleas)}
+    if len(cochleas) == 1:
+        color_map = {"L": colors[0], "R": colors[1]}
 
     # Track which cochlea names we have already added to the legend
     legend_added = set()
@@ -323,16 +322,24 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
 
     for name_lr, grp in result.groupby("cochlea"):
         name, side = name_lr[:-1], name_lr[-1]
+        if len(cochleas) == 1:
+            label_name = name_lr
+            color = color_map[side]
+        else:
+            label_name = name
+            color = color_map[name]
+
         x_positions = grp["x_pos"] + offset_map[side]
         ax.scatter(
             x_positions,
             grp["value"],
-            label=name if name not in legend_added else None,
+            label=label_name if label_name not in legend_added else None,
             s=60,
             alpha=0.8,
             marker="o" if side == "L" else "x",
-            color=color_map[name]
+            color=color,
         )
+
         if name not in legend_added:
             legend_added.add(name)
 
@@ -361,43 +368,32 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
         # Trendline left
         x_sorted, y_sorted = get_trendline_values(trend_dict, "L")
 
-        if trendline_fit == "linear_regression":
-            # linear regression
-            coeffs = np.polyfit(x_sorted, y_sorted, 1)
-            poly_fn = np.poly1d(coeffs)
+        trend_l, = ax.plot(
+            x_sorted,
+            y_sorted,
+            linestyle="dotted",
+            color="grey",
+            alpha=0.7
+        )
 
-            ax.plot(
-                x_sorted,
-                poly_fn(x_sorted),
-                linestyle="dotted",
-                color="red",
-                alpha=0.7
-            )
-
-#        if trendline_fit == "LOWESS":
-#            # Fit LOWESS curve, using statsmodels.nonparametric.smoothers_lowess
-#            lowess_fit = lowess(y_sorted, x_sorted, frac=0.4)  # frac for smoothness (0.2 = wiggly, 0.6 = smoother)
-#            x_fit, y_fit = lowess_fit[:, 0], lowess_fit[:, 1]
-#            ax.plot(x_fit, y_fit, linestyle="dotted", color="red", alpha=0.7)
-
-        # Trendline right
         x_sorted, y_sorted = get_trendline_values(trend_dict, "R")
-
-        if trendline_fit == "linear_regression":
-            coeffs = np.polyfit(x_sorted, y_sorted, 1)
-            poly_fn = np.poly1d(coeffs)
-            ax.plot(
-                x_sorted,
-                poly_fn(x_sorted),
-                linestyle="dashed",
-                color="blue",
-                alpha=0.7
-            )
-#        if trendline_fit == "LOWESS":
-#            # Fit LOWESS curve, using statsmodels.nonparametric.smoothers_lowess
-#            lowess_fit = lowess(y_sorted, x_sorted, frac=0.4)  # frac for smoothness (0.2 = wiggly, 0.6 = smoother)
-#            x_fit, y_fit = lowess_fit[:, 0], lowess_fit[:, 1]
-#            ax.plot(x_fit, y_fit, linestyle="dashed", color="blue", alpha=0.7)
+        trend_r, = ax.plot(
+            x_sorted,
+            y_sorted,
+            linestyle="dashed",
+            color="grey",
+            alpha=0.7
+        )
+        trendline_legend = ax.legend(handles=[trend_l, trend_r], loc='lower center')
+        trendline_legend = ax.legend(
+            handles=[trend_l, trend_r],
+            labels=["Left", "Right"],
+            loc="lower center",
+            fontsize=legend_size,
+            title="Trendlines"
+        )
+        # Add the legend manually to the Axes.
+        ax.add_artist(trendline_legend)
 
     # Create combined tick positions & labels
     main_ticks = range(len(bin_labels))
@@ -423,6 +419,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
         ax.set_title("Transduction efficiency per octave band (Left/Right)")
 
     ax.legend(title="Cochlea", fontsize=legend_size)
+
     plt.tight_layout()
 
     if ".png" in save_path:
@@ -471,7 +468,7 @@ def main():
 
     fig_04e(chreef_data,
             save_path=os.path.join(args.figure_dir, f"fig_04e_transduction.{FILE_EXTENSION}"),
-            plot=args.plot, use_alias=use_alias, trendlines=False)
+            plot=args.plot, use_alias=use_alias, trendlines=True)
     fig_04e(chreef_data,
             save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
             plot=args.plot, intensity=True, use_alias=use_alias)

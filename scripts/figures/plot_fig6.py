@@ -59,7 +59,7 @@ def fig_06b(save_path, plot=False):
     ax[0].set_xlim(xmin, xmax)
     lower_y, upper_y = literature_reference_values_gerbil("SGN")
     ax[0].hlines([lower_y, upper_y], xmin, xmax)
-    ax[0].text(1, upper_y + 100, "literature reference", color='C0', fontsize=main_tick_size, ha="center")
+    ax[0].text(1, upper_y - 2000, "literature", color='C0', fontsize=main_tick_size, ha="center")
     ax[0].fill_between([xmin, xmax], lower_y, upper_y, color='C0', alpha=0.05, interpolate=True)
 
     ylim0 = 900
@@ -79,7 +79,6 @@ def fig_06b(save_path, plot=False):
     ax[1].set_xlim(xmin, xmax)
     lower_y, upper_y = literature_reference_values_gerbil("IHC")
     ax[1].hlines([lower_y, upper_y], xmin, xmax)
-    ax[1].text(1, upper_y + 10, "literature reference", color='C0', fontsize=main_tick_size, ha="center")
     ax[1].fill_between([xmin, xmax], lower_y, upper_y, color='C0', alpha=0.05, interpolate=True)
 
     ribbon_synapse_counts = _load_ribbon_synapse_counts()
@@ -100,7 +99,6 @@ def fig_06b(save_path, plot=False):
     lower_y, upper_y = literature_reference_values_gerbil("synapse")
     ax[2].set_xlim(xmin, xmax)
     ax[2].hlines([lower_y, upper_y], xmin, xmax)
-    ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
     ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
     plt.tight_layout()

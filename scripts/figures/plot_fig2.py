@@ -270,7 +270,8 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         ax[0].set_xlim(xmin, xmax)
         lower_y, upper_y = literature_reference_values("SGN")
         ax[0].hlines([lower_y, upper_y], xmin, xmax)
-        ax[0].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
+        ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
+                   color="C0", fontsize=main_tick_size, ha="center")
         ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         ylim0 = 600
@@ -291,7 +292,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         lower_y, upper_y = literature_reference_values("IHC")
         ax[1].set_xlim(xmin, xmax)
         ax[1].hlines([lower_y, upper_y], xmin, xmax)
-        ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
+        # ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
         ax[1].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         if plot_average_ribbon_synapses:
@@ -312,7 +313,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             lower_y, upper_y = literature_reference_values("synapse")
             ax[2].set_xlim(xmin, xmax)
             ax[2].hlines([lower_y, upper_y], xmin, xmax)
-            ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
+            # ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
             ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         plt.tight_layout()
