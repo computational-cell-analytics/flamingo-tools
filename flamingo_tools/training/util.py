@@ -28,6 +28,8 @@ def get_supervised_loader(
     image_key: Optional[str] = None,
     label_key: Optional[str] = None,
     n_samples: Optional[int] = None,
+    raw_transform: Optional[callable] = None,
+    anisotropy: Optional[float] = None,
 ) -> DataLoader:
     """Get a data loader for a supervised segmentation task.
 
@@ -39,14 +41,17 @@ def get_supervised_loader(
         image_key: Internal path for the image data. This is only required for hdf5/zarr/n5 data.
         image_key: Internal path for the label masks. This is only required for hdf5/zarr/n5 data.
         n_samples: The number of samples to use for training.
+        raw_transform: Optional transformation for the raw data.
+        anisotropy: The anisotropy factor for distance target computation.
 
     Returns:
         The data loader.
     """
     assert len(image_paths) == len(label_paths)
     assert len(image_paths) > 0
+    sampling = None if anisotropy is None else (anisotropy, 1.0, 1.0)
     label_transform = torch_em.transform.label.PerObjectDistanceTransform(
-            distances=True, boundary_distances=True, foreground=True,
+            distances=True, boundary_distances=True, foreground=True, sampling=sampling,
         )
     sampler = torch_em.data.sampler.MinInstanceSampler(p_reject=0.8)
     loader = torch_em.default_segmentation_loader(
