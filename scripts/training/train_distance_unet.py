@@ -80,7 +80,7 @@ def select_paths(image_paths, label_paths, split, filter_empty, random_split=Tru
     return image_paths, label_paths
 
 
-def get_loader(root, split, patch_shape, batch_size, filter_empty, separate_folders):
+def get_loader(root, split, patch_shape, batch_size, filter_empty, separate_folders, anisotropy):
     if separate_folders:
         image_paths, label_paths = get_image_and_label_paths_sep_folders(root)
     else:
@@ -96,7 +96,9 @@ def get_loader(root, split, patch_shape, batch_size, filter_empty, separate_fold
         n_samples = 16 * batch_size
 
     return (
-        get_supervised_loader(this_image_paths, this_label_paths, patch_shape, batch_size, n_samples=n_samples),
+        get_supervised_loader(
+            this_image_paths, this_label_paths, patch_shape, batch_size, n_samples=n_samples, anisotropy=anisotropy
+        ),
         this_image_paths,
         this_label_paths
     )
@@ -124,6 +126,10 @@ def main():
     parser.add_argument(
         "--name", help="Optional name for the model to be trained. If not given the current date is used."
     )
+    parser.add_argument(
+        "--anisotropy", help="Anisotropy factor of the Z-Axis (Depth). Will be used to scale distance targets.",
+        type=float,
+    )
     parser.add_argument("--separate_folders", action="store_true")
     args = parser.parse_args()
     root = args.root
@@ -141,10 +147,12 @@ def main():
 
     # Create the training loader with train and val set.
     train_loader, train_images, train_labels = get_loader(
-        root, "train", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders
+        root, "train", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders,
+        anisotropy=args.anisotropy,
     )
     val_loader, val_images, val_labels = get_loader(
-        root, "val", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders
+        root, "val", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders,
+        anisotropy=args.anisotropy,
     )
 
     if check_loaders:
