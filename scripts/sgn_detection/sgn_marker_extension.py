@@ -8,7 +8,7 @@ from elf.io import open_file
 import scipy.ndimage as ndimage
 
 from flamingo_tools.s3_utils import get_s3_path
-from flamingo_tools.segmentation.marker_extension import distance_based_marker_extension
+from flamingo_tools.segmentation.sgn_detection import distance_based_marker_extension
 from flamingo_tools.file_utils import read_image_data
 
 
