@@ -1,7 +1,8 @@
 import math
 import multiprocessing as mp
+import threading
 from concurrent import futures
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import elf.parallel as parallel
 import numpy as np
@@ -15,6 +16,9 @@ from scipy.sparse import csr_matrix
 from scipy.spatial import distance
 from scipy.spatial import cKDTree, ConvexHull
 from skimage import measure
+from skimage.filters import gaussian
+from skimage.feature import peak_local_max
+from skimage.segmentation import find_boundaries, watershed
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
 
@@ -732,3 +736,134 @@ def filter_cochlea_volume(
         combined_dilated[combined_dilated > 0] = 1
 
     return combined_dilated
+
+
+def split_nonconvex_objects(
+    segmentation: np.typing.ArrayLike,
+    output: np.typing.ArrayLike,
+    segmentation_table: pd.DataFrame,
+    min_size: int,
+    resolution: Union[float, Sequence[float]],
+    height_map: Optional[np.typing.ArrayLike] = None,
+    component_labels: Optional[List[int]] = None,
+    n_threads: Optional[int] = None,
+) -> Dict[int, List[int]]:
+    """Split noncovex objects into multiple parts inplace.
+
+    Args:
+        segmentation:
+        output:
+        segmentation_table:
+        min_size:
+        resolution:
+        height_map:
+        component_labels:
+        n_threads:
+    """
+    if isinstance(resolution, float):
+        resolution = [resolution] * 3
+    assert len(resolution) == 3
+    resolution = np.array(resolution)
+
+    lock = threading.Lock()
+    offset = len(segmentation_table)
+
+    def split_object(object_id):
+        nonlocal offset
+
+        row = segmentation_table[segmentation_table.label_id == object_id]
+        if row.n_pixels.values[0] < min_size:
+            # print(object_id, ": min-size")
+            return [object_id]
+
+        bb_min = np.array([
+            row.bb_min_z.values[0], row.bb_min_y.values[0], row.bb_min_x.values[0],
+        ]) / resolution
+        bb_max = np.array([
+            row.bb_max_z.values[0], row.bb_max_y.values[0], row.bb_max_x.values[0],
+        ]) / resolution
+
+        bb_min = np.maximum(bb_min.astype(int) - 1, np.array([0, 0, 0]))
+        bb_max = np.minimum(bb_max.astype(int) + 1, np.array(list(segmentation.shape)))
+        bb = tuple(slice(mi, ma) for mi, ma in zip(bb_min, bb_max))
+
+        # This is due to segmentation artifacts.
+        bb_shape = bb_max - bb_min
+        if (bb_shape > 500).any():
+            print(object_id, "has a too large shape:", bb_shape)
+            return [object_id]
+
+        seg = segmentation[bb]
+        mask = ~find_boundaries(seg)
+        dist = distance_transform_edt(mask, sampling=resolution)
+
+        seg_mask = seg == object_id
+        dist[~seg_mask] = 0
+        dist = gaussian(dist, (0.6, 1.2, 1.2))
+        maxima = peak_local_max(dist, min_distance=3, exclude_border=True)
+
+        if len(maxima) == 1:
+            # print(object_id, ": max len")
+            return [object_id]
+
+        with lock:
+            old_offset = offset
+            offset += len(maxima)
+
+        seeds = np.zeros(seg.shape, dtype=int)
+        for i, pos in enumerate(maxima, 1):
+            seeds[tuple(pos)] = old_offset + i
+
+        if height_map is None:
+            hmap = dist.max() - dist
+        else:
+            hmap = height_map[bb]
+        new_seg = watershed(hmap, markers=seeds, mask=seg_mask)
+
+        seg_ids, sizes = np.unique(new_seg, return_counts=True)
+        seg_ids, sizes = seg_ids[1:], sizes[1:]
+
+        keep_ids = seg_ids[sizes > min_size]
+        if len(keep_ids) < 2:
+            # print(object_id, ": keep-id")
+            return [object_id]
+
+        elif len(keep_ids) != len(seg_ids):
+            new_seg[~np.isin(new_seg, keep_ids)] = 0
+            new_seg = watershed(hmap, markers=new_seg, mask=seg_mask)
+
+        with lock:
+            out = output[bb]
+            out[seg_mask] = new_seg[seg_mask]
+            output[bb] = out
+
+        # print(object_id, ":", len(keep_ids))
+        return keep_ids.tolist()
+
+        # import napari
+        # v = napari.Viewer()
+        # v.add_image(hmap)
+        # v.add_labels(seg)
+        # v.add_labels(new_seg)
+        # v.add_points(maxima)
+        # napari.run()
+
+    if component_labels is None:
+        object_ids = segmentation_table.label_id.values
+    else:
+        object_ids = segmentation_table[segmentation_table.component_labels.isin(component_labels)].label_id.values
+
+    if n_threads is None:
+        n_threads = mp.cpu_count()
+
+    # new_id_mapping = []
+    # for object_id in tqdm(object_ids, desc="Split non-convex objects"):
+    #     new_id_mapping.append(split_object(object_id))
+
+    with futures.ThreadPoolExecutor(n_threads) as tp:
+        new_id_mapping = list(
+            tqdm(tp.map(split_object, object_ids), total=len(object_ids), desc="Split non-convex objects")
+        )
+
+    new_id_mapping = {object_id: mapped_ids for object_id, mapped_ids in zip(object_ids, new_id_mapping)}
+    return new_id_mapping

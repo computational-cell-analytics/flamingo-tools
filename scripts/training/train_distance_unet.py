@@ -1,10 +1,12 @@
 import argparse
+import json
 import os
 from datetime import datetime
 from glob import glob
 
 import torch_em
 from flamingo_tools.training import get_supervised_loader, get_3d_model
+from sklearn.model_selection import train_test_split
 
 ROOT_CLUSTER = "/scratch-grete/usr/nimcpape/data/moser/lightsheet/training"
 
@@ -54,7 +56,7 @@ def get_image_and_label_paths_sep_folders(root):
     return image_paths, label_paths
 
 
-def select_paths(image_paths, label_paths, split, filter_empty):
+def select_paths(image_paths, label_paths, split, filter_empty, random_split=True):
     if filter_empty:
         image_paths = [imp for imp in image_paths if "empty" not in imp]
         label_paths = [imp for imp in label_paths if "empty" not in imp]
@@ -64,10 +66,13 @@ def select_paths(image_paths, label_paths, split, filter_empty):
     train_fraction = 0.85
 
     n_train = int(train_fraction * n_files)
-    if split == "train":
+    if split == "train" and random_split:
+        image_paths, _, label_paths, _ = train_test_split(image_paths, label_paths, train_size=n_train, random_state=42)
+    elif split == "train":
         image_paths = image_paths[:n_train]
         label_paths = label_paths[:n_train]
-
+    elif split == "val" and random_split:
+        _, image_paths, _, label_paths = train_test_split(image_paths, label_paths, train_size=n_train, random_state=42)
     elif split == "val":
         image_paths = image_paths[n_train:]
         label_paths = label_paths[n_train:]
@@ -90,7 +95,11 @@ def get_loader(root, split, patch_shape, batch_size, filter_empty, separate_fold
     elif split == "val":
         n_samples = 16 * batch_size
 
-    return get_supervised_loader(this_image_paths, this_label_paths, patch_shape, batch_size, n_samples=n_samples)
+    return (
+        get_supervised_loader(this_image_paths, this_label_paths, patch_shape, batch_size, n_samples=n_samples),
+        this_image_paths,
+        this_label_paths
+    )
 
 
 def main():
@@ -131,10 +140,10 @@ def main():
     model = get_3d_model()
 
     # Create the training loader with train and val set.
-    train_loader = get_loader(
+    train_loader, train_images, train_labels = get_loader(
         root, "train", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders
     )
-    val_loader = get_loader(
+    val_loader, val_images, val_labels = get_loader(
         root, "val", patch_shape, batch_size, filter_empty=filter_empty, separate_folders=args.separate_folders
     )
 
@@ -146,8 +155,21 @@ def main():
 
     loss = torch_em.loss.distance_based.DiceBasedDistanceLoss(mask_distances_in_bg=True)
 
-    # Create the trainer.
+    # Serialize the train test split.
     name = f"cochlea_distance_unet_{run_name}"
+    ckpt_folder = os.path.join("checkpoints", name)
+    os.makedirs(ckpt_folder, exist_ok=True)
+    split_file = os.path.join(ckpt_folder, "split.json")
+    with open(split_file, "w") as f:
+        json.dump(
+            {
+                "train": {"images": train_images, "labels": train_labels},
+                "val": {"images": val_images, "labels": val_labels},
+            },
+            f, sort_keys=True, indent=2
+        )
+
+    # Create the trainer.
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
