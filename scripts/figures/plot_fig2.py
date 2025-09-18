@@ -11,6 +11,7 @@ from skimage.segmentation import find_boundaries
 from util import literature_reference_values, SYNAPSE_DIR_ROOT
 
 png_dpi = 300
+FILE_EXTENSION = "png"
 
 
 def scramble_instance_labels(arr):
@@ -58,7 +59,10 @@ def plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, bou
     ax.imshow(boundary_overlay)
     ax.axis("off")
     plt.tight_layout()
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
     if plot:
         plt.show()
@@ -149,12 +153,12 @@ def fig_02c(save_path, plot=False, all_versions=False):
         versions = [version_1, version_2, version_3]
         settings = [settings_1, settings_2, settings_3]
         save_suffix = ["_v4b", "_v4c", "_v4c_filter"]
-        save_paths = [save_path + i for i in save_suffix]
+        save_paths = [save_path.split(".")[0] + i + "." + save_path.split(".")[1] for i in save_suffix]
     else:
         versions = [version_2]
         settings = [settings_2]
         save_suffix = ["_v4c"]
-        save_paths = [save_path + i for i in save_suffix]
+        save_paths = [save_path.split(".")[0] + i + "." + save_path.split(".")[1] for i in save_suffix]
 
     for version, setting, save_path in zip(versions, settings, save_paths):
         precision = [i[0] for i in version]
@@ -193,7 +197,11 @@ def fig_02c(save_path, plot=False, all_versions=False):
         plt.grid(axis="y", linestyle="--", alpha=0.5)
 
         plt.tight_layout()
-        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+
+        if ".png" in save_path:
+            plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+        else:
+            plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
         if plot:
             plt.show()
@@ -239,7 +247,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
         ax = axes.flatten()
 
-        save_path_new = save_path + suffix
+        save_path_new = save_path.split(".")[0] + suffix + "." + save_path.split(".")[1]
         ax[0].boxplot(sgn_values)
         ax[1].boxplot(ihc_values)
 
@@ -262,7 +270,8 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         ax[0].set_xlim(xmin, xmax)
         lower_y, upper_y = literature_reference_values("SGN")
         ax[0].hlines([lower_y, upper_y], xmin, xmax)
-        ax[0].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
+        ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
+                   color="C0", fontsize=main_tick_size, ha="center")
         ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         ylim0 = 600
@@ -283,7 +292,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         lower_y, upper_y = literature_reference_values("IHC")
         ax[1].set_xlim(xmin, xmax)
         ax[1].hlines([lower_y, upper_y], xmin, xmax)
-        ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
+        # ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
         ax[1].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         if plot_average_ribbon_synapses:
@@ -304,11 +313,15 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             lower_y, upper_y = literature_reference_values("synapse")
             ax[2].set_xlim(xmin, xmax)
             ax[2].hlines([lower_y, upper_y], xmin, xmax)
-            ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
+            # ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
             ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         plt.tight_layout()
-        plt.savefig(save_path_new, dpi=png_dpi)
+
+        if ".png" in save_path:
+            plt.savefig(save_path_new, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+        else:
+            plt.savefig(save_path_new, bbox_inches='tight', pad_inches=0)
 
         if plot:
             plt.show()
@@ -386,7 +399,11 @@ def fig_02d_02(save_path, filter_zeros=True, plot=False):
     plt.grid(axis="y", linestyle="--", alpha=0.5)
     plt.legend(fontsize=legendsize)
     plt.tight_layout()
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
     if plot:
         plt.show()
@@ -404,14 +421,14 @@ def main():
 
     # Panes A and B: Qualitative comparison of visualization results.
     fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
-    return
     fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
 
     # Panel C: Evaluation of the segmentation results:
-    fig_02c(save_path=os.path.join(args.figure_dir, "fig_02c"), plot=args.plot, all_versions=False)
+    fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
-    fig_02d_01(save_path=os.path.join(args.figure_dir, "fig_02d"), plot=args.plot, plot_average_ribbon_synapses=True)
+    fig_02d_01(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
+               plot=args.plot, plot_average_ribbon_synapses=True)
 
     # Alternative version of synapse distribution for panel D.
     # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02"), plot=args.plot)

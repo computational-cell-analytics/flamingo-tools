@@ -1,5 +1,8 @@
 import argparse
+import json
 import os
+import pickle
+
 import imageio.v3 as imageio
 from glob import glob
 from pathlib import Path
@@ -10,9 +13,12 @@ import numpy as np
 import pandas as pd
 from matplotlib import cm, colors
 
+from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT, to_alias
 
-INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+# INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
+INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/frequency_mapping/M_LR_000227_R/scale3"
+FILE_EXTENSION = "png"
 
 TYPE_TO_CHANNEL = {
     "Type-Ia": "CR",
@@ -21,7 +27,71 @@ TYPE_TO_CHANNEL = {
     "Type-II": "Prph",
 }
 
+FILE_EXTENSION = "png"
+
 png_dpi = 300
+
+# The cochlea for the CHReef analysis.
+COCHLEAE_DICT = {
+    "M_LR_000226_L": {"alias": "M01L", "component": [1]},
+    "M_LR_000226_R": {"alias": "M01R", "component": [1]},
+    "M_LR_000227_L": {"alias": "M02L", "component": [1]},
+    "M_LR_000227_R": {"alias": "M02R", "component": [1]},
+}
+
+
+def get_tonotopic_data():
+    s3 = create_s3_target()
+    source_name = "IHC_v4c"
+    ihc_version = source_name.split("_")[1]
+    cache_path = "./tonotopic_data.pkl"
+    cochleae = [key for key in COCHLEAE_DICT.keys()]
+
+    if os.path.exists(cache_path):
+        with open(cache_path, "rb") as f:
+            return pickle.load(f)
+
+    chreef_data = {}
+    for cochlea in cochleae:
+        print("Processsing cochlea:", cochlea)
+        content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
+        info = json.loads(content.read())
+        sources = info["sources"]
+
+        # Load the seg table and filter the compartments.
+        source = sources[source_name]["segmentation"]
+        rel_path = source["tableData"]["tsv"]["relativePath"]
+        table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
+        table = pd.read_csv(table_content, sep="\t")
+
+        # May need to be adjusted for some cochleae.
+        component_labels = COCHLEAE_DICT[cochlea]["component"]
+        print(cochlea, component_labels)
+        table = table[table.component_labels.isin(component_labels)]
+        ihc_dir = f"ihc_counts_{ihc_version}"
+        synapse_dir = f"/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses/{ihc_dir}"
+        tab_path = os.path.join(synapse_dir, f"ihc_count_{cochlea}.tsv")
+        syn_tab = pd.read_csv(tab_path, sep="\t")
+        syn_ids = syn_tab["label_id"].values
+
+        syn_per_ihc = [0 for _ in range(len(table))]
+        table.loc[:, "syn_per_IHC"] = syn_per_ihc
+        for syn_id in syn_ids:
+            table.loc[table["label_id"] == syn_id, "syn_per_IHC"] = syn_tab.at[syn_tab.index[syn_tab["label_id"] == syn_id][0], "synapse_count"]  # noqa
+
+        # The relevant values for analysis.
+        try:
+            values = table[["label_id", "length[µm]", "frequency[kHz]", "syn_per_IHC"]]
+        except KeyError:
+            print("Could not find the values for", cochlea, "it will be skippped.")
+            continue
+
+        chreef_data[cochlea] = values
+
+    with open(cache_path, "wb") as f:
+        pickle.dump(chreef_data, f)
+    with open(cache_path, "rb") as f:
+        return pickle.load(f)
 
 
 def _plot_colormap(vol, title, plot, save_path):
@@ -51,7 +121,10 @@ def _plot_colormap(vol, title, plot, save_path):
     if plot:
         plt.show()
 
-    plt.savefig(save_path)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
     plt.close()
 
 
@@ -97,26 +170,31 @@ def fig_03c_rl(save_path, plot=False):
     ax.legend(title="cochlea")
     plt.tight_layout()
 
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+
     if plot:
         plt.show()
     else:
         plt.close()
 
 
-def fig_03c_octave(save_path, plot=False):
+def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True):
     ihc_version = "ihc_counts_v4c"
     tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
     assert len(tables) == 4, len(tables)
 
     result = {"cochlea": [], "octave_band": [], "value": []}
-    for tab_path in tables:
-        cochlea = Path(tab_path).stem.lstrip("ihc_count")
-        alias = to_alias(cochlea)
-        tab = pd.read_csv(tab_path, sep="\t")
-        freq = tab["frequency"].values
-        syn_count = tab["synapse_count"].values
+    for name, values in tonotopic_data.items():
+        if use_alias:
+            alias = COCHLEAE_DICT[name]["alias"]
+        else:
+            alias = name.replace("_", "").replace("0", "")
 
+        freq = values["frequency[kHz]"].values
+        syn_count = values["syn_per_IHC"].values
         octave_binned = frequency_mapping(freq, syn_count, animal="mouse")
 
         result["cochlea"].extend([alias] * len(octave_binned))
@@ -140,7 +218,11 @@ def fig_03c_octave(save_path, plot=False):
     ax.set_title("Ribbon synapse count per octave band")
     plt.legend(title="Cochlea")
 
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+
     if plot:
         plt.show()
     else:
@@ -198,7 +280,11 @@ def fig_03d_fraction(save_path, plot):
     ax.set_xlabel("Type")
     ax.legend(title="Cochlea ID")
 
-    plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+
     if plot:
         plt.show()
     else:
@@ -217,18 +303,22 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(args.figure_dir, exist_ok=True)
+    tonotopic_data = get_tonotopic_data()
 
     # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
-    fig_03a(save_path=os.path.join(args.figure_dir, "fig_03a_cmap.png"), plot=args.plot, plot_napari=True)
+    # fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap.{FILE_EXTENSION}"),
+    # plot=args.plot, plot_napari=True)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
-    fig_03c_rl(save_path=os.path.join(args.figure_dir, "fig_03c_runlength.png"), plot=args.plot)
-    fig_03c_octave(save_path=os.path.join(args.figure_dir, "fig_03c_octave.png"), plot=args.plot)
+    # fig_03c_rl(save_path=os.path.join(args.figure_dir, f"fig_03c_runlength.{FILE_EXTENSION}"), plot=args.plot)
+    fig_03c_octave(tonotopic_data=tonotopic_data,
+                   save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
+                   plot=args.plot)
 
     # Panel D: Spatial distribution of SGN sub-types.
-    fig_03d_fraction(save_path=os.path.join(args.figure_dir, "fig_03d_fraction.png"), plot=args.plot)
-    fig_03d_octave(save_path=os.path.join(args.figure_dir, "fig_03d_octave.png"), plot=args.plot)
+    # fig_03d_fraction(save_path=os.path.join(args.figure_dir, f"fig_03d_fraction.{FILE_EXTENSION}"), plot=args.plot)
+    # fig_03d_octave(save_path=os.path.join(args.figure_dir, f"fig_03d_octave.{FILE_EXTENSION}"), plot=args.plot)
 
 
 if __name__ == "__main__":

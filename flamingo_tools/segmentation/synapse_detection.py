@@ -175,6 +175,11 @@ def marker_detection(
     if os.path.exists(output_path) and prediction_key in zarr.open(output_path, "r"):
         skip_prediction = True
 
+    # skip prediction if post-processed output exists
+    detection_path = os.path.join(output_folder, "synapse_detection.tsv")
+    if os.path.exists(detection_path):
+        skip_prediction = True
+
     if not skip_prediction:
         prediction_impl(
             input_path, input_key, output_folder, model_path,
@@ -182,7 +187,6 @@ def marker_detection(
             apply_postprocessing=False, output_channels=1,
         )
 
-    detection_path = os.path.join(output_folder, "synapse_detection.tsv")
     if not os.path.exists(detection_path):
         input_ = zarr.open(output_path, "r")[prediction_key]
         detections = find_local_maxima(

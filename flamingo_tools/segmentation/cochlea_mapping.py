@@ -383,7 +383,7 @@ def measure_run_length_ihcs(
     return total_distance, path, path_dict
 
 
-def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse") -> pd.DataFrame:
+def map_frequency(table: pd.DataFrame, animal: str = "mouse") -> pd.DataFrame:
     """Map the frequency range of SGNs in the cochlea
     using Greenwood function f(x) = A * (10 **(ax) - K).
     Values for humans: a=2.1, k=0.88, A = 165.4 [kHz].
@@ -391,6 +391,7 @@ def map_frequency(table: pd.DataFrame, cell_type: str, animal: str = "mouse") ->
 
     Args:
         table: Dataframe containing the segmentation.
+        animal: Select the Greenwood function parameters specific to a species. Either "mouse" or "gerbil".
 
     Returns:
         Dataframe containing frequency in an additional column 'frequency[kHz]'.
@@ -569,6 +570,7 @@ def tonotopic_mapping(
     component_mapping: Optional[List[int]] = None,
     cell_type: str = "ihc",
     animal: str = "mouse",
+    apex_higher: bool = True,
 ) -> pd.DataFrame:
     """Tonotopic mapping of IHCs by supplying a table with component labels.
     The mapping assigns a tonotopic label to each IHC according to the position along the length of the cochlea.
@@ -591,11 +593,15 @@ def tonotopic_mapping(
         component_mapping = component_label
 
     if cell_type == "ihc":
-        total_distance, _, path_dict = measure_run_length_ihcs(centroids, component_label=component_label)
+        total_distance, _, path_dict = measure_run_length_ihcs(
+            centroids, component_label=component_label, apex_higher=apex_higher,
+        )
 
     else:
         if len(component_mapping) == 1:
-            total_distance, _, path_dict = measure_run_length_sgns(centroids)
+            total_distance, _, path_dict = measure_run_length_sgns(
+                centroids, apex_higher=apex_higher,
+            )
 
         else:
             centroids_components = []
@@ -603,7 +609,9 @@ def tonotopic_mapping(
                 subset = table[table["component_labels"] == label]
                 subset_centroids = list(zip(subset["anchor_x"], subset["anchor_y"], subset["anchor_z"]))
                 centroids_components.append(subset_centroids)
-            total_distance, _, path_dict = measure_run_length_sgns_multi_component(centroids_components)
+            total_distance, _, path_dict = measure_run_length_sgns_multi_component(
+                centroids_components, apex_higher=apex_higher,
+            )
 
     node_dict = node_dict_from_path_dict(path_dict, label_ids, centroids)
 
@@ -622,6 +630,6 @@ def tonotopic_mapping(
 
     table.loc[:, "length[µm]"] = table["length_fraction"] * total_distance
 
-    table = map_frequency(table, cell_type=cell_type, animal=animal)
+    table = map_frequency(table, animal=animal)
 
     return table

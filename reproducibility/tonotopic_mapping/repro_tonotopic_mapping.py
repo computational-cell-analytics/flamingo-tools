@@ -17,6 +17,7 @@ def repro_tonotopic_mapping(
     force_overwrite: Optional[bool] = None,
 ):
     default_cell_type = "ihc"
+    default_apex_position = "apex_higher"
     default_component_list = [1]
 
     remove_columns = ["tonotopic_label",
@@ -56,6 +57,9 @@ def repro_tonotopic_mapping(
         cell_type = dic["type"] if "type" in dic else default_cell_type
         component_list = dic["component_list"] if "component_list" in dic else default_component_list
         component_mapping = dic["component_mapping"] if "component_mapping" in dic else component_list
+        apex_position = dic["apex_position"] if "apex_position" in dic else default_apex_position
+
+        apex_higher = (apex_position == "apex_higher")
 
         for column in remove_columns:
             if column in list(table.columns):
@@ -63,7 +67,8 @@ def repro_tonotopic_mapping(
 
         if not os.path.isfile(output_table_path) or force_overwrite:
             table = tonotopic_mapping(table, component_label=component_list, animal=animal,
-                                      cell_type=cell_type, component_mapping=component_mapping)
+                                      cell_type=cell_type, component_mapping=component_mapping,
+                                      apex_higher=apex_higher)
 
             table.to_csv(output_table_path, sep="\t", index=False)
 
