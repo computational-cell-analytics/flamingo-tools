@@ -16,7 +16,7 @@ import zarr
 
 SERVICE_ENDPOINT = "https://s3.fs.gwdg.de/"
 BUCKET_NAME = "cochlea-lightsheet"
-CREDENTIAL_FILE = "/mnt/vast-nhr/home/pape41/u12086/.aws/credentials"
+CREDENTIAL_FILE = os.path.expanduser("~/.aws/credentials")
 
 
 def read_s3_credentials(credential_file: str) -> Tuple[str, str]:
@@ -71,13 +71,14 @@ def get_ihcs_wo_syn(cochlea, ihc_name, syn_name):
 def _get_mobie_ds(cochlea, data_name):
     internal_path = os.path.join(BUCKET_NAME, cochlea, "images", "ome-zarr", f"{data_name}.ome.zarr")
     s3_filesystem = _get_fs()
-    print(internal_path)
     s3_path = zarr.storage.FSStore(internal_path, fs=s3_filesystem)
     return zarr.open(s3_path, mode="r")["s0"]
 
 
+# TODO also get the synapse detections and visualize them.
 def check_empty_ihcs(cochlea, ihc_name, syn_name, pred_path=None):
     ihc_ids_wo_syn = get_ihcs_wo_syn(cochlea, ihc_name, syn_name)
+    print(len(ihc_ids_wo_syn), "IHCs don't have synapses.")
 
     halo = (96, 192, 192)
     resolution = [0.38] * 3
@@ -92,6 +93,7 @@ def check_empty_ihcs(cochlea, ihc_name, syn_name, pred_path=None):
         position = [row.anchor_z, row.anchor_y, row.anchor_x]
         center = [int(pos / res) for pos, res in zip(position, resolution)]
         bb = tuple(slice(ce - ha, ce + ha) for ce, ha in zip(center, halo))
+        print("Load ID:", row.label_id, "from", center)
 
         ctbp2 = ds_ctbp2[bb]
         vglut3 = ds_vglut[bb]
@@ -100,13 +102,13 @@ def check_empty_ihcs(cochlea, ihc_name, syn_name, pred_path=None):
         if pred_path is not None:
             pred = ds_pred[bb]
 
-        pos_string = "-".join(str(int(pos)) for pos in position)
+        pos_string = "-".join(str(int(pos)) for pos in position[::-1])
 
         v = napari.Viewer()
         v.add_image(vglut3)
         v.add_image(ctbp2)
         v.add_labels(seg)
-        if pred is not None:
+        if pred_path is not None:
             v.add_image(pred)
         v.title = f"ID: {row.label_id} @ {pos_string}"
         napari.run()
@@ -125,6 +127,8 @@ def check_gerbil():
 
     pred_root = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/G_LR_000233_R/synapses_v3"
     pred_path = os.path.join(pred_root, "predictions.zarr")
+    if not os.path.exists(pred_path):
+        pred_path = None
 
     check_empty_ihcs(cochlea, ihc_name, syn_name, pred_path=pred_path)
 
