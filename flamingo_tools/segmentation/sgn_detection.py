@@ -57,8 +57,7 @@ def distance_based_marker_extension(
         outer_block = block.outerBlock
         inner_block = block.innerBlock
 
-        # TODO get the indices and coordinates of the markers in the INNER block
-        # markers_in_block_ids = [int(i) for i in np.unique(inner_block)[1:]]
+        # get the indices and coordinates of the markers in the INNER block
         mask = (
             (inner_block.begin[0] <= markers[:, 0]) & (markers[:, 0] <= inner_block.end[0]) &
             (inner_block.begin[1] <= markers[:, 1]) & (markers[:, 1] <= inner_block.end[1]) &
@@ -67,33 +66,35 @@ def distance_based_marker_extension(
         markers_in_block_ids = np.where(mask)[0]
         markers_in_block_coords = markers[markers_in_block_ids]
 
-        # TODO offset the marker coordinates with respect to the OUTER block
-        markers_in_block_coords = [coord - outer_block.begin for coord in markers_in_block_coords]
-        markers_in_block_coords = [[round(c) for c in coord] for coord in markers_in_block_coords]
-        markers_in_block_coords = np.array(markers_in_block_coords, dtype=int)
-        z, y, x = markers_in_block_coords.T
+        # proceed if detections fall within inner block
+        if len(markers_in_block_coords) > 0:
+            markers_in_block_coords = [coord - outer_block.begin for coord in markers_in_block_coords]
+            markers_in_block_coords = [[round(c) for c in coord] for coord in markers_in_block_coords]
 
-        # Shift index by one so that zero is reserved for background id
-        markers_in_block_ids += 1
+            markers_in_block_coords = np.array(markers_in_block_coords, dtype=int)
+            z, y, x = markers_in_block_coords.T
 
-        # Create the seed volume.
-        outer_block_shape = tuple(end - begin for begin, end in zip(outer_block.begin, outer_block.end))
-        seeds = np.zeros(outer_block_shape, dtype="uint32")
-        seeds[z, y, x] = markers_in_block_ids
+            # Shift index by one so that zero is reserved for background id
+            markers_in_block_ids += 1
 
-        # Compute the distance map.
-        distance = distance_transform_edt(seeds == 0, sampling=sampling)
+            # Create the seed volume.
+            outer_block_shape = tuple(end - begin for begin, end in zip(outer_block.begin, outer_block.end))
+            seeds = np.zeros(outer_block_shape, dtype="uint32")
+            seeds[z, y, x] = markers_in_block_ids
 
-        # And extend the seeds
-        mask = distance < extension_distance
-        segmentation = watershed(distance.max() - distance, markers=seeds, mask=mask)
+            # Compute the distance map.
+            distance = distance_transform_edt(seeds == 0, sampling=sampling)
 
-        # Write the segmentation. Note: we need to lock here because we write outside of our inner block
-        bb = tuple(slice(begin, end) for begin, end in zip(outer_block.begin, outer_block.end))
-        with lock:
-            this_output = output[bb]
-            this_output[mask] = segmentation[mask]
-            output[bb] = this_output
+            # And extend the seeds
+            mask = distance < extension_distance
+            segmentation = watershed(distance.max() - distance, markers=seeds, mask=mask)
+
+            # Write the segmentation. Note: we need to lock here because we write outside of our inner block
+            bb = tuple(slice(begin, end) for begin, end in zip(outer_block.begin, outer_block.end))
+            with lock:
+                this_output = output[bb]
+                this_output[mask] = segmentation[mask]
+                output[bb] = this_output
 
     n_blocks = blocking.numberOfBlocks
     with futures.ThreadPoolExecutor(n_threads) as tp:
@@ -146,10 +147,18 @@ def sgn_detection(
     detection_path = os.path.join(output_folder, "SGN_detection.tsv")
     if not os.path.exists(detection_path):
         input_ = zarr.open(output_path, "r")[prediction_key]
-        detections = find_local_maxima(
+        detections_maxima = find_local_maxima(
             input_, block_shape=block_shape, min_distance=4, threshold_abs=0.5, verbose=True, n_threads=16,
         )
 
+        # Save the result in mobie compatible format.
+        detections = np.concatenate(
+            [np.arange(1, len(detections_maxima) + 1)[:, None], detections_maxima[:, ::-1]], axis=1
+        )
+        detections = pd.DataFrame(detections, columns=["spot_id", "x", "y", "z"])
+        detections.to_csv(detection_path, index=False, sep="\t")
+
+        # extend detection
         shape = input_.shape
         chunks = (128, 128, 128)
         segmentation_path = os.path.join(output_folder, "segmentation.zarr")
@@ -161,7 +170,7 @@ def sgn_detection(
         )
 
         distance_based_marker_extension(
-            markers=detections,
+            markers=detections_maxima,
             output=output_dataset,
             extension_distance=extension_distance,
             sampling=sampling,
@@ -169,9 +178,3 @@ def sgn_detection(
             n_threads=n_threads,
         )
 
-        # Save the result in mobie compatible format.
-        detections = np.concatenate(
-            [np.arange(1, len(detections) + 1)[:, None], detections[:, ::-1]], axis=1
-        )
-        detections = pd.DataFrame(detections, columns=["spot_id", "x", "y", "z"])
-        detections.to_csv(detection_path, index=False, sep="\t")
