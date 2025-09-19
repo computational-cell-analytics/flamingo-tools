@@ -52,7 +52,7 @@ def get_paths(split):
 
 def train():
 
-    model_name = "sgn-low-res-detection-v5"
+    model_name = "sgn-low-res-detection-v6"
 
     train_paths, train_label_paths = get_paths("train")
     val_paths, val_label_paths = get_paths("val")
@@ -78,6 +78,10 @@ def train():
             f, indent=2, sort_keys=True
         )
 
+    # For marmoset model
+    sigma = (0.6, 3, 3)
+    # For mouse model
+    # sigma = (1, 4, 4)
     supervised_training(
         name=model_name,
         train_paths=train_paths,
@@ -92,7 +96,7 @@ def train():
         out_channels=1,
         augmentations=None,
         eps=1e-5,
-        sigma=(1, 4, 4),
+        sigma=sigma,
         lower_bound=None,
         upper_bound=None,
         test_paths=test_paths,
