@@ -6,6 +6,7 @@ channels:
 dependencies:
   - cluster_tools
   - scikit-image
+  - pooch
   - pybdv
   - pytorch
   - s3fs
