@@ -104,6 +104,40 @@ def process_labels_hacky(coords, shape, sigma, eps, bb=None):
     return labels
 
 
+def process_labels_stamped(coords, shape, sigma, eps, bb):
+    offset = 7
+
+    if bb:
+        (z_min, z_max), (y_min, y_max), (x_min, x_max) = [(s.start, s.stop) for s in bb]
+        restricted_shape = (z_max - z_min, y_max - y_min, x_max - x_min)
+        full_shape = tuple(sh + 2 * offset for sh in restricted_shape)
+        labels = np.zeros(full_shape, dtype="float32")
+        shape = restricted_shape
+    else:
+        full_shape = tuple(sh + 2 * offset for sh in shape)
+
+    labels = np.zeros(full_shape, dtype="float32")
+
+    z, y, x = coords
+    if len(z) == 0:
+        return np.zeros(shape, dtype="float32")
+    coordinates = np.concatenate([z[:, None], y[:, None], x[:, None]], axis=1)
+
+    stamp = np.zeros((2*offset, 2*offset, 2*offset), dtype="float32")
+    stamp[offset - 1, offset - 1, offset - 1] = 1
+    stamp = gaussian(stamp, sigma=sigma)
+    stamp /= stamp.max()
+
+    for coord in coordinates:
+        bb = tuple(slice(co + offset - offset, co + offset + offset) for co in coord)
+        val = np.maximum(labels[bb], stamp)
+        labels[bb] = val
+
+    labels = labels[offset:-offset, offset:-offset, offset:-offset]
+    assert labels.shape == shape
+    return labels
+
+
 class DetectionDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500
 
@@ -209,7 +243,8 @@ class DetectionDataset(torch.utils.data.Dataset):
         # label = process_labels(coords, shape, self.sigma, self.eps, bb=bb)
 
         # For SGN detection with data specfic hacks
-        label = process_labels_hacky(coords, shape, self.sigma, self.eps, bb=bb)
+        # label = process_labels_hacky(coords, shape, self.sigma, self.eps, bb=bb)
+        label = process_labels_stamped(coords, shape, self.sigma, self.eps, bb=bb)
         # Having this halo actually makes sense in general!
         gap = 8
         gap_bb = np.s_[gap:-gap, gap:-gap, gap:-gap]

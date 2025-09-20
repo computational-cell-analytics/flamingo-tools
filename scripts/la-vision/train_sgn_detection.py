@@ -12,8 +12,8 @@ sys.path.append("../synapse_marker_detection")
 from utils.training.training import supervised_training  # noqa
 from detection_dataset import DetectionDataset, MinPointSampler  # noqa
 
-# ROOT = "./la-vision-sgn-new"  # noqa
-ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/SGN/sgn-detection"
+ROOT = "./la-vision-sgn-new/train/sgn-detection"  # noqa
+# ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/SGN/sgn-detection"
 
 TRAIN = os.path.join(ROOT, "images")
 TRAIN_EMPTY = os.path.join(ROOT, "empty_images")
@@ -79,7 +79,7 @@ def train():
         )
 
     # For marmoset model
-    sigma = (0.6, 3, 3)
+    sigma = (1.6, 3, 3)
     # For mouse model
     # sigma = (1, 4, 4)
     supervised_training(
