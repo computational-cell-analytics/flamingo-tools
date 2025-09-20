@@ -30,21 +30,23 @@ def run_prediction(position, halo=[32, 384, 384]):
     print(mean, std)
     preproc = partial(standardize, mean=mean, std=std)
 
-    block_shape = (24, 256, 256)
-    halo = (8, 64, 64)
+    block_shape = (12, 128, 128)
+    halo = (10, 64, 64)
 
-    model_path = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/sgn-detection-v1.pt"
+    # model_path = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/trained_models/SGN/sgn-detection-v1.pt"
+    model_path = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/la-vision/checkpoints/sgn-detection-v3.pt"
     model = torch.load(model_path, weights_only=False)
 
-    def postproc(x):
-        x = np.clip(x, 0, 1)
-        max_ = np.percentile(x, 99)
-        x = x / max_
-        return x
+    # def postproc(x):
+    #     x = np.clip(x, 0, 1)
+    #     max_ = np.percentile(x, 99)
+    #     x = x / max_
+    #     return x
+    postproc = None
 
     pred = predict_with_halo(pv, model, [0], block_shape, halo, preprocess=preproc, postprocess=postproc).squeeze()
 
-    pred_name = "pred-v5"
+    pred_name = "pred-v7"
     out_folder = "./debug-pred"
     os.makedirs(out_folder, exist_ok=True)
 

@@ -1,6 +1,8 @@
 import napari
 import zarr
 
+from skimage.feature import peak_local_max
+
 
 resolution = [3.0, 1.887779, 1.887779]
 positions = [
@@ -29,7 +31,7 @@ def _load_prediction(bb):
 
 
 def _load_prediction_debug():
-    path = "./debug-pred/pred-v5.h5"
+    path = "./debug-pred/pred-v7.h5"
     with zarr.open(path, "r") as f:
         pred = f["pred"][:]
     return pred
@@ -45,10 +47,14 @@ def check_detection(position, halo=[32, 384, 384]):
     # pred = _load_prediction(bb)
     pred = _load_prediction_debug()
 
+    print("Runnign detection")
+    det_new = peak_local_max(pred, min_distance=4, threshold_abs=0.5)
+
     v = napari.Viewer()
     v.add_image(pv)
     v.add_image(pred)
     v.add_labels(detections_mobie)
+    v.add_points(det_new)
     napari.run()
 
 

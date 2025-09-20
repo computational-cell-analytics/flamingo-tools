@@ -18,7 +18,7 @@ ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_d
 TRAIN = os.path.join(ROOT, "images")
 TRAIN_EMPTY = os.path.join(ROOT, "empty_images")
 
-LABEL = os.path.join(ROOT, "centroids")
+LABEL = os.path.join(ROOT, "centroids_v2")
 LABEL_EMPTY = os.path.join(ROOT, "empty_centroids")
 
 
@@ -46,13 +46,13 @@ def _get_paths(split, train_folder, label_folder, n=None):
 
 def get_paths(split):
     image_paths, label_paths = _get_paths(split, TRAIN, LABEL)
-    empty_image_paths, empty_label_paths = _get_paths(split, TRAIN_EMPTY, LABEL_EMPTY, n=4)
+    empty_image_paths, empty_label_paths = _get_paths(split, TRAIN_EMPTY, LABEL_EMPTY, n=6)
     return image_paths + empty_image_paths, label_paths + empty_label_paths
 
 
 def train():
 
-    model_name = "sgn-low-res-detection-v1"
+    model_name = "sgn-low-res-detection-v6"
 
     train_paths, train_label_paths = get_paths("train")
     val_paths, val_label_paths = get_paths("val")
@@ -63,8 +63,8 @@ def train():
     print(len(train_paths), "tomograms for training")
     print(len(val_paths), "tomograms for validation")
 
-    patch_shape = [48, 256, 256]
-    batch_size = 8
+    patch_shape = [32, 144, 144]
+    batch_size = 16
     check = False
 
     checkpoint_path = f"./checkpoints/{model_name}"
@@ -78,6 +78,10 @@ def train():
             f, indent=2, sort_keys=True
         )
 
+    # For marmoset model
+    sigma = (0.6, 3, 3)
+    # For mouse model
+    # sigma = (1, 4, 4)
     supervised_training(
         name=model_name,
         train_paths=train_paths,
@@ -92,7 +96,7 @@ def train():
         out_channels=1,
         augmentations=None,
         eps=1e-5,
-        sigma=4,
+        sigma=sigma,
         lower_bound=None,
         upper_bound=None,
         test_paths=test_paths,
