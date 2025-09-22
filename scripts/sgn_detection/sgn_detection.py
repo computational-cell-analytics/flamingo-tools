@@ -47,7 +47,8 @@ def main():
 
     sgn_detection(input_path=input_path, input_key=args.input_key, output_folder=args.output_folder,
                   model_path=args.model, block_shape=block_shape, halo=halo,
-                  extension_distance=args.extension_distance, sampling=resolution)
+                  extension_distance=args.extension_distance, sampling=resolution,
+                  min_distance=2, threshold_abs=0.4)
 
 
 if __name__ == "__main__":

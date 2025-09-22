@@ -113,6 +113,8 @@ def sgn_detection(
     block_shape: Optional[Tuple[int, int, int]] = None,
     halo: Optional[Tuple[int, int, int]] = None,
     n_threads: Optional[int] = None,
+    threshold_abs: float = 0.5,
+    min_distance: int = 4,
 ):
     """Run prediction for SGN detection.
 
@@ -145,10 +147,12 @@ def sgn_detection(
         )
 
     detection_path = os.path.join(output_folder, "SGN_detection.tsv")
+    input_ = zarr.open(output_path, "r")[prediction_key]
     if not os.path.exists(detection_path):
-        input_ = zarr.open(output_path, "r")[prediction_key]
+        block_shape = (128, 128, 128)  # bigger block to avoid edge effects
         detections_maxima = find_local_maxima(
-            input_, block_shape=block_shape, min_distance=4, threshold_abs=0.5, verbose=True, n_threads=16,
+            input_, block_shape=block_shape, min_distance=min_distance, threshold_abs=threshold_abs,
+            verbose=True, n_threads=16,
         )
 
         # Save the result in mobie compatible format.
@@ -157,11 +161,19 @@ def sgn_detection(
         )
         detections = pd.DataFrame(detections, columns=["spot_id", "x", "y", "z"])
         detections.to_csv(detection_path, index=False, sep="\t")
+    else:
+        detections_maxima = None
 
-        # extend detection
+    segmentation_path = os.path.join(output_folder, "segmentation.zarr")
+    # extend detection
+    if not os.path.exists(segmentation_path):
         shape = input_.shape
         chunks = (128, 128, 128)
-        segmentation_path = os.path.join(output_folder, "segmentation.zarr")
+
+        if detections_maxima is None:
+            detections_maxima = pd.read_csv(detection_path, sep="\t")
+            detections_maxima = detections_maxima[["z", "y", "x"]].values
+
         output = open_file(segmentation_path, mode="a")
         segmentation_key = "segmentation"
         output_dataset = output.create_dataset(
@@ -176,5 +188,5 @@ def sgn_detection(
             sampling=sampling,
             block_shape=(128, 128, 128),
             n_threads=n_threads,
+            verbose=True,
         )
-

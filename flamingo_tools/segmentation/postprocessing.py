@@ -404,7 +404,7 @@ def components_sgn(
         min_cells = 20000
         threshold = threshold_erode if threshold_erode is not None else 40
 
-    if iterations_erode != 0:
+    if iterations_erode != 0 and iterations_erode is not None:
         print(f"Using threshold of {threshold} micrometer for eroding segmentation with keyword {keyword}.")
         new_subset = erode_subset(table.copy(), iterations=iterations_erode,
                                   threshold=threshold, min_cells=min_cells, keyword=keyword)

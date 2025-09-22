@@ -17,7 +17,7 @@ def repro_label_components(
     s3_service_endpoint: Optional[str] = None,
     apply_tonotopic_mapping: bool = False,
 ):
-    min_size = 1000
+    min_size = 50
     default_threshold_erode = None
     default_min_length = 50
     default_max_edge_distance = 30
@@ -45,8 +45,9 @@ def repro_label_components(
         # table_name = "PV_SGN_V2_DA"
         # table_name = "CR_SGN_v2"
         # table_name = "Ntng1_SGN_v2"
+        table_name = "SGN_detect_v10"
 
-        table_name = f"{cell_type.upper()}_{unet_version}"
+        # table_name = f"{cell_type.upper()}_{unet_version}"
 
         s3_path = os.path.join(f"{cochlea}", "tables", table_name, "default.tsv")
         tsv_path, fs = get_s3_path(s3_path, bucket_name=s3_bucket_name,
