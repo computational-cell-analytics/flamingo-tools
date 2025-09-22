@@ -5,7 +5,6 @@ import pickle
 
 import imageio.v3 as imageio
 from glob import glob
-from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ import pandas as pd
 from matplotlib import cm, colors
 
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
-from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT, to_alias
+from util import sliding_runlength_sum, frequency_mapping, prism_style, prism_cleanup_axes, SYNAPSE_DIR_ROOT
 
 # INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
 INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/frequency_mapping/M_LR_000227_R/scale3"
@@ -181,7 +180,8 @@ def fig_03c_rl(save_path, plot=False):
         plt.close()
 
 
-def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True):
+def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendlines=False):
+    prism_style()
     ihc_version = "ihc_counts_v4c"
     tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
     assert len(tables) == 4, len(tables)
@@ -207,16 +207,55 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True):
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
     fig, ax = plt.subplots(figsize=(8, 4))
+    trend_dict = {}
     for name, grp in result.groupby("cochlea"):
         ax.scatter(grp["x_pos"], grp["value"], label=name, s=60, alpha=0.8)
+
+        if trendlines:
+            x_positions = grp["x_pos"]
+            sorted_idx = np.argsort(x_positions)
+            x_sorted = np.array(x_positions)[sorted_idx]
+            y_sorted = np.array(grp["value"])[sorted_idx]
+            trend_dict[name] = {"x_sorted": x_sorted,
+                                "y_sorted": y_sorted,
+                                }
+
+    if trendlines:
+        def get_trendline_values(trend_dict):
+            x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys()][0]
+            y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys()]
+            y_sorted = []
+            for num in range(len(x_sorted)):
+                y_sorted.append(np.mean([y[num] for y in y_sorted_all]))
+            return x_sorted, y_sorted
+
+        # Trendline left
+        x_sorted, y_sorted = get_trendline_values(trend_dict)
+
+        trend, = ax.plot(
+            x_sorted,
+            y_sorted,
+            linestyle="dotted",
+            color="grey",
+            alpha=0.7
+        )
+
+        # trendline_legend = ax.legend(handles=[trend], loc='lower center')
+        # trendline_legend = ax.legend(
+        #     handles=[trend],
+        #     labels=["Trendline"],
+        #     loc="upper left"
+        # )
+        # # Add the legend manually to the Axes.
+        # ax.add_artist(trendline_legend)
 
     ax.set_xticks(range(len(bin_labels)))
     ax.set_xticklabels(bin_labels)
     ax.set_xlabel("Octave band (kHz)")
 
-    ax.set_ylabel("Average Ribbon Synapse Count per IHC")
-    ax.set_title("Ribbon synapse count per octave band")
+    ax.set_ylabel("Average Ribbon Synapse Count per IHC", fontsize=10)
     plt.legend(title="Cochlea")
+    prism_cleanup_axes(ax)
 
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -314,7 +353,7 @@ def main():
     # fig_03c_rl(save_path=os.path.join(args.figure_dir, f"fig_03c_runlength.{FILE_EXTENSION}"), plot=args.plot)
     fig_03c_octave(tonotopic_data=tonotopic_data,
                    save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
-                   plot=args.plot)
+                   plot=args.plot, trendlines=True)
 
     # Panel D: Spatial distribution of SGN sub-types.
     # fig_03d_fraction(save_path=os.path.join(args.figure_dir, f"fig_03d_fraction.{FILE_EXTENSION}"), plot=args.plot)

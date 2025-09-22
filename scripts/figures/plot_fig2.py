@@ -9,6 +9,7 @@ from matplotlib import colors
 from skimage.segmentation import find_boundaries
 
 from util import literature_reference_values, SYNAPSE_DIR_ROOT
+from util import prism_style, prism_cleanup_axes
 
 png_dpi = 300
 FILE_EXTENSION = "png"
@@ -122,6 +123,7 @@ def fig_02c(save_path, plot=False, all_versions=False):
     """Scatter plot showing the precision, recall, and F1-score of SGN (distance U-Net, manual),
     IHC (distance U-Net, manual), and synapse detection (U-Net).
     """
+    prism_style()
     # precision, recall, f1-score
     sgn_unet = [0.887, 0.88, 0.884]
     sgn_annotator = [0.95, 0.849, 0.9]
@@ -172,7 +174,7 @@ def fig_02c(save_path, plot=False, all_versions=False):
         offset = 0.08  # horizontal shift for scatter separation
 
         # Plot
-        plt.figure(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=(8, 5))
 
         main_label_size = 22
         sub_label_size = 16
@@ -192,11 +194,12 @@ def fig_02c(save_path, plot=False, all_versions=False):
         plt.yticks(fontsize=main_tick_size)
         plt.ylabel("Value", fontsize=main_label_size)
         plt.ylim(0.76, 1)
-        plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.11),
-                   ncol=3, fancybox=True, shadow=False, framealpha=0.8, fontsize=legendsize)
+        plt.legend(loc="lower right",
+                   fontsize=legendsize)
         plt.grid(axis="y", linestyle="--", alpha=0.5)
 
         plt.tight_layout()
+        prism_cleanup_axes(ax)
 
         if ".png" in save_path:
             plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)

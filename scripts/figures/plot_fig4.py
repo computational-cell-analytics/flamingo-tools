@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 
-from util import frequency_mapping  # , literature_reference_values
+from util import frequency_mapping, prism_style, prism_cleanup_axes  # , literature_reference_values
 
 # from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -117,6 +117,7 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
     # cochlea = ["M_LR_000144_L", "M_LR_000145_L", "M_LR_000151_R"]
     # alias = ["c01", "c02", "c03"]
     # sgns = [7796, 6119, 9225]
+    prism_style()
 
     # TODO have central function for alias for all plots?
     if use_alias:
@@ -132,16 +133,16 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
     x = np.arange(len(alias))
 
     # Plot
-    plt.figure(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(5, 5))
 
     main_label_size = 20
     sub_label_size = 16
     main_tick_size = 16
-    legendsize = 16
+    legendsize = 12
 
     if plot_by_side:
-        plt.scatter(x, sgns_left, label="Left", marker="o", s=80)
-        plt.scatter(x, sgns_right, label="Right", marker="x", s=80)
+        plt.scatter(x, sgns_left, label="Injected", marker="o", s=80)
+        plt.scatter(x, sgns_right, label="Non-Injected", marker="x", s=80)
     else:
         plt.scatter(x, sgns, label="SGN count", marker="o", s=80)
 
@@ -149,10 +150,8 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
     plt.xticks(x, alias, fontsize=sub_label_size)
     plt.yticks(fontsize=main_tick_size)
     plt.ylabel("SGN count per cochlea", fontsize=main_label_size)
-    plt.ylim(4000, 13800)
-    plt.legend(loc="best", fontsize=sub_label_size)
-    plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.11),
-               ncol=3, fancybox=True, shadow=False, framealpha=0.8, fontsize=legendsize)
+    plt.ylim(4000, 15800)
+    plt.legend(loc="upper right", fontsize=legendsize)
 
     xmin = -0.5
     xmax = len(alias) - 0.5
@@ -172,11 +171,13 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
     lower_y = sgn_value - 1.96 * sgn_std
 
     plt.hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
-    plt.text(1.5, upper_y + 100, "healthy cochleae (95% confidence interval)",
-             color="C1", fontsize=main_tick_size, ha="center")
+    plt.text(2, upper_y + 200, "untreated cochleae\n(95% confidence interval)",
+             color="C1", fontsize=14, ha="center")
     plt.fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
 
     plt.tight_layout()
+
+    prism_cleanup_axes(ax)
 
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -192,6 +193,7 @@ def fig_04c(chreef_data, save_path, plot=False, plot_by_side=False, use_alias=Tr
 def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=False, gerbil=False, use_alias=True):
     """Transduction efficiency per cochlea.
     """
+    prism_style()
     if use_alias:
         alias = [COCHLEAE_DICT[k]["alias"] for k in chreef_data.keys()]
     else:
@@ -219,18 +221,18 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     x = np.arange(len(alias))
 
     # Plot
-    plt.figure(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(5, 5))
 
     main_label_size = 20
     sub_label_size = 16
     main_tick_size = 16
-    legendsize = 16
+    legendsize = 12
 
     label = "Intensity" if intensity else "Transduction efficiency"
 
     if plot_by_side:
-        plt.scatter(x, values_left, label="Left", marker="o", s=80)
-        plt.scatter(x, values_right, label="Right", marker="x", s=80)
+        plt.scatter(x, values_left, label="Injected", marker="o", s=80)
+        plt.scatter(x, values_right, label="Non-Injected", marker="x", s=80)
     else:
         plt.scatter(x, values, label=label, marker="o", s=80)
 
@@ -238,9 +240,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
     plt.xticks(x, alias, fontsize=sub_label_size)
     plt.yticks(fontsize=main_tick_size)
     plt.ylabel(label, fontsize=main_label_size)
-    plt.legend(loc="best", fontsize=sub_label_size)
-    plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.11),
-               ncol=3, fancybox=True, shadow=False, framealpha=0.8, fontsize=legendsize)
+    plt.legend(loc="upper right", fontsize=legendsize)
     if not intensity:
         if gerbil:
             plt.ylim(0.3, 1.05)
@@ -248,6 +248,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
             plt.ylim(0.5, 1.05)
 
     plt.tight_layout()
+    prism_cleanup_axes(ax)
 
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -261,6 +262,7 @@ def fig_04d(chreef_data, save_path, plot=False, plot_by_side=False, intensity=Fa
 
 
 def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_alias=True, trendlines=False):
+    prism_style()
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for name, values in chreef_data.items():
@@ -295,7 +297,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     if intensity:
         band_label_offset_y = 0.09
     else:
-        band_label_offset_y = 0.07
+        band_label_offset_y = 0.09
         if gerbil:
             ax.set_ylim(0.05, 1.05)
         else:
@@ -303,7 +305,6 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
 
     # Offsets within each octave band
     offset_map = {"L": -0.15, "R": 0.15}
-    sublabels = {"L": "L", "R": "R"}
 
     # Assign a color to each cochlea (ignoring side)
     cochleas = sorted({name_lr[:-1] for name_lr in result["cochlea"].unique()})
@@ -314,9 +315,6 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
 
     # Track which cochlea names we have already added to the legend
     legend_added = set()
-
-    all_x_positions = []
-    all_x_labels = []
 
     trend_dict = {}
 
@@ -352,10 +350,6 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
                                    "side": side,
                                    }
 
-        # Store for sublabel ticks
-        all_x_positions.extend(x_positions)
-        all_x_labels.extend([sublabels[side]] * len(x_positions))
-
     if trendlines:
         def get_trendline_values(trend_dict, side):
             x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side][0]
@@ -387,7 +381,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
         trendline_legend = ax.legend(handles=[trend_l, trend_r], loc='lower center')
         trendline_legend = ax.legend(
             handles=[trend_l, trend_r],
-            labels=["Left", "Right"],
+            labels=["Injected", "Non-Injected"],
             loc="lower center",
             fontsize=legend_size,
             title="Trendlines"
@@ -398,10 +392,9 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     # Create combined tick positions & labels
     main_ticks = range(len(bin_labels))
     # add a final tick for label '>64k'
-    ax.set_xticks([pos + offset_map["L"] for pos in main_ticks[:-1]] +
-                  [pos + offset_map["R"] for pos in main_ticks[:-1]] +
-                  [pos for pos in main_ticks[-1:]])
-    ax.set_xticklabels(["L"] * len(main_ticks[:-1]) + ["R"] * len(main_ticks[:-1]) + [""], fontsize=sub_tick_label_size)
+    ax.set_xticks([pos + offset_map["L"] for pos in main_ticks] +
+                  [pos + offset_map["R"] for pos in main_ticks])
+    ax.set_xticklabels(["I"] * len(main_ticks) + ["N"] * len(main_ticks), fontsize=sub_tick_label_size)
 
     # Add main octave band labels above sublabels
     for i, label in enumerate(bin_labels):
@@ -416,11 +409,11 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
         ax.set_title("Intensity per octave band (Left/Right)")
     else:
         ax.set_ylabel("Transduction Efficiency", fontsize=label_size)
-        ax.set_title("Transduction efficiency per octave band (Left/Right)")
 
     ax.legend(title="Cochlea", fontsize=legend_size)
 
     plt.tight_layout()
+    prism_cleanup_axes(ax)
 
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -462,33 +455,33 @@ def main():
     fig_04d(chreef_data,
             save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, use_alias=use_alias)
-    fig_04d(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04d_intensity.{FILE_EXTENSION}"),
-            plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
+    # fig_04d(chreef_data,
+    #         save_path=os.path.join(args.figure_dir, f"fig_04d_intensity.{FILE_EXTENSION}"),
+    #         plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
     fig_04e(chreef_data,
             save_path=os.path.join(args.figure_dir, f"fig_04e_transduction.{FILE_EXTENSION}"),
             plot=args.plot, use_alias=use_alias, trendlines=True)
-    fig_04e(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
-            plot=args.plot, intensity=True, use_alias=use_alias)
+    # fig_04e(chreef_data,
+    #         save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
+    #         plot=args.plot, intensity=True, use_alias=use_alias)
 
     chreef_data_gerbil = get_chreef_data(animal="gerbil")
     fig_04d(chreef_data_gerbil,
             save_path=os.path.join(args.figure_dir, f"fig_04d_gerbil_transduction.{FILE_EXTENSION}"),
             plot=args.plot, plot_by_side=True, gerbil=True, use_alias=use_alias)
 
-    fig_04d(chreef_data_gerbil,
-            save_path=os.path.join(args.figure_dir, f"fig_04d_gerbil_intensity.{FILE_EXTENSION}"),
-            plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
+    # fig_04d(chreef_data_gerbil,
+    #         save_path=os.path.join(args.figure_dir, f"fig_04d_gerbil_intensity.{FILE_EXTENSION}"),
+    #         plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
     fig_04e(chreef_data_gerbil,
             save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction.{FILE_EXTENSION}"),
             plot=args.plot, gerbil=True, use_alias=use_alias)
 
-    fig_04e(chreef_data_gerbil,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_intensity.{FILE_EXTENSION}"),
-            plot=args.plot, intensity=True, use_alias=use_alias)
+    # fig_04e(chreef_data_gerbil,
+    #         save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_intensity.{FILE_EXTENSION}"),
+    #         plot=args.plot, intensity=True, use_alias=use_alias)
 
 
 if __name__ == "__main__":

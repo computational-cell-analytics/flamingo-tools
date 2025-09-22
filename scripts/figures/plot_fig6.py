@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from util import literature_reference_values_gerbil, SYNAPSE_DIR_ROOT
+from util import literature_reference_values_gerbil, prism_cleanup_axes, prism_style, SYNAPSE_DIR_ROOT
 
 FILE_EXTENSION = "png"
 png_dpi = 300
@@ -25,14 +25,14 @@ def _load_ribbon_synapse_counts():
 def fig_06b(save_path, plot=False):
     """Box plot showing the counts for SGN and IHC per gerbil cochlea in comparison to literature values.
     """
-    main_tick_size = 12
-    main_label_size = 16
+    main_tick_size = 20
+    main_label_size = 20
+    prism_style()
 
     rows = 1
     columns = 3
 
-    fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
-    ax = axes.flatten()
+    fig, ax = plt.subplots(rows, columns, figsize=(columns*3, rows*4))
 
     sgn_values = [20050, 21995]
     ihc_values = [1100]
@@ -102,6 +102,8 @@ def fig_06b(save_path, plot=False):
     ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
     plt.tight_layout()
+    prism_cleanup_axes(ax)
+
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     else:

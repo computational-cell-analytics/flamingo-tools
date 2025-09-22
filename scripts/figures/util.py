@@ -1,9 +1,91 @@
-import pandas as pd
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 # Directory with synapse measurement tables
 SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
 # SYNAPSE_DIR_ROOT = "./synapses"
+
+
+def ax_prism_boxplot(ax, data, positions=None, color="tab:blue"):
+    """
+    Draw a Prism-style boxplot on the given Axes.
+    """
+    bp = ax.boxplot(
+        data,
+        positions=positions,
+        widths=0.6,
+        patch_artist=True,     # to allow facecolor
+        boxprops=dict(color="black", linewidth=1.2),
+        whiskerprops=dict(color="black", linewidth=1.2),
+        capprops=dict(color="black", linewidth=1.2),
+        medianprops=dict(color="black", linewidth=1.2),
+        flierprops=dict(marker="o", markersize=4, markerfacecolor="black", alpha=0.5)
+    )
+
+    # Optional: light fill color (like Prism pastels)
+    for patch in bp["boxes"]:
+        patch.set_facecolor(color)
+        patch.set_alpha(0.2)
+
+    return bp
+
+
+def prism_style():
+    plt.style.use("default")  # reset any active styles
+    plt.rcParams.update({
+        # Fonts
+        "font.family": "sans-serif",
+        "font.sans-serif": ["DejaVu Sans"],
+        # "font.sans-serif": ["Arial"],  # Prism uses Arial by default
+        "font.size": 12,
+
+        # Axes
+        "axes.linewidth": 1.2,
+        "axes.labelsize": 14,
+        "axes.labelweight": "bold",
+
+        # Ticks
+        "xtick.direction": "out",
+        "ytick.direction": "out",
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "xtick.major.size": 5,
+        "ytick.major.size": 5,
+
+        # Grid
+        "axes.grid": False,
+
+        # Legend
+        "legend.frameon": True,
+        "legend.fontsize": 10,
+
+        # Error bars (Prism-style)
+        "errorbar.capsize": 3,   # short caps
+
+        # Markers
+        "lines.markersize": 6,
+        "lines.linewidth": 1.5,
+
+        # Savefig
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight"
+    })
+
+
+def prism_cleanup_axes(ax):
+    """
+    Apply Prism-style cleanup to one or multiple axes.
+    """
+    # If ax is an array (from plt.subplots), flatten it
+    if isinstance(ax, (np.ndarray, list)):
+        for a in np.ravel(ax):
+            prism_cleanup_axes(a)  # recurse
+        return
+
+    # Otherwise ax is a single matplotlib Axes
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
 
 
 # Define the animal specific octave bands.
