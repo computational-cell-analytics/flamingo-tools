@@ -45,8 +45,9 @@ def repro_label_components(
         # table_name = "PV_SGN_V2_DA"
         # table_name = "CR_SGN_v2"
         # table_name = "Ntng1_SGN_v2"
+        table_name = "SGN_detect-v6b"
 
-        table_name = f"{cell_type.upper()}_{unet_version}"
+        # table_name = f"{cell_type.upper()}_{unet_version}"
 
         s3_path = os.path.join(f"{cochlea}", "tables", table_name, "default.tsv")
         tsv_path, fs = get_s3_path(s3_path, bucket_name=s3_bucket_name,

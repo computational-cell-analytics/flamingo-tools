@@ -12,8 +12,8 @@ sys.path.append("../synapse_marker_detection")
 from utils.training.training import supervised_training  # noqa
 from detection_dataset import DetectionDataset, MinPointSampler  # noqa
 
-ROOT = "./la-vision-sgn-new/train/sgn-detection"  # noqa
-# ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/SGN/sgn-detection"
+# ROOT = "./la-vision-sgn-new/train/sgn-detection"  # noqa
+ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/training_data/SGN/sgn-detection"
 
 TRAIN = os.path.join(ROOT, "images")
 TRAIN_EMPTY = os.path.join(ROOT, "empty_images")
@@ -52,7 +52,7 @@ def get_paths(split):
 
 def train():
 
-    model_name = "sgn-low-res-detection-v6"
+    model_name = "sgn-low-res-detection-v7"
 
     train_paths, train_label_paths = get_paths("train")
     val_paths, val_label_paths = get_paths("val")
