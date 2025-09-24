@@ -192,7 +192,7 @@ def _regionprops_features(seg_id, table, image, segmentation, resolution, backgr
     return features
 
 
-def get_object_measures_from_table(arr_seg, table):
+def get_object_measures_from_table(arr_seg, table, keyword="median"):
     """Return object measurements for label IDs wthin array.
     """
     # iterate through segmentation ids in reference mask
@@ -202,11 +202,11 @@ def get_object_measures_from_table(arr_seg, table):
     if len(object_ids) < len(ref_ids):
         warnings.warn(f"Not all IDs were found in measurement table. Using {len(object_ids)}/{len(ref_ids)}.")
 
-    median_values = [table.at[table.index[table["label_id"] == label_id][0], "median"] for label_id in object_ids]
+    measure_values = [table.at[table.index[table["label_id"] == label_id][0], keyword] for label_id in object_ids]
 
     measures = pd.DataFrame({
         "label_id": object_ids,
-        "median": median_values,
+        keyword: measure_values,
     })
     return measures
 

@@ -15,7 +15,7 @@ from magicgui import magicgui
 from elf.parallel.distance_transform import distance_transform
 from elf.parallel.seeded_watershed import seeded_watershed
 
-from flamingo_tools.measurements import compute_object_measures_impl, get_object_measures_from_table
+from flamingo_tools.measurements import get_object_measures_from_table
 from flamingo_tools.s3_utils import get_s3_path
 
 
@@ -134,29 +134,21 @@ def _create_mask(seg_extended, stain):
     return mask
 
 
-def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=False, seg_version=None):
-    assert background_norm in (None, "division", "subtraction")
+def sgn_subtype_annotation(prefix, subtype, seg_version="SGN_v2", default_stat="median"):
 
     direc = os.path.dirname(os.path.abspath(prefix))
-    basename = os.path.basename(prefix)
     file_names = [entry.name for entry in os.scandir(direc)]
-    if is_otof:  # OTOF cochlea with VGlut3, Alphatag and IHC segmentation.
-        stain1_file = [name for name in file_names if basename in name and "pha" in name][0]
-        stain2_file = [name for name in file_names if basename in name and "lut3" in name][0]
-        seg_file = [name for name in file_names if basename in name and "IHC" in name][0]
 
-        stain1_name = "Alphatag"
-        stain2_name = "Vglut3"
-        seg_name = "IHC"
+    stain1_file = [name for name in file_names if prefix in name and subtype in name][0]
+    stain2_file = [name for name in file_names if prefix in name and "PV.tif" in name][0]
+    seg_file = [name for name in file_names if prefix in name and "SGN" in name][0]
 
-    else:  # ChReef cochlea with PV, GFP and SGN segmentation
-        stain1_file = [name for name in file_names if basename in name and "GFP" in name][0]
-        stain2_file = [name for name in file_names if basename in name and "PV" in name][0]
-        seg_file = [name for name in file_names if basename in name and "SGN" in name][0]
+    if "PV" in seg_file:
+        seg_version = f"PV_{seg_version}"
 
-        stain1_name = "GFP"
-        stain2_name = "PV"
-        seg_name = "SGN"
+    stain1_name = subtype
+    stain2_name = "PV"
+    seg_name = "SGN"
 
     stain1 = imageio.imread(os.path.join(direc, stain1_file))
     stain2 = imageio.imread(os.path.join(direc, stain2_file))
@@ -170,34 +162,19 @@ def gfp_annotation(prefix, default_stat="median", background_norm=None, is_otof=
     # sgns_extended = _extend_seg(gfp, sgns)
     # TODO we need to integrate this directly in the object measurement to efficiently do it at scale.
     seg_extended = _extend_seg_simple(stain1, seg, dilation=4)
-    if is_otof:
-        seg_extended = seg.copy()
-
     # Compute the intensity statistics.
-    if background_norm is None:
-        mask = None
-        feature_set = "default"
-    else:
-        mask = _create_mask(seg_extended, stain1)
-        assert mask.shape == seg_extended.shape
-        feature_set = "default_background_norm" if background_norm == "division" else "default_background_subtract"
+    mask = None
 
-    if seg_version is not None:
-        seg_string = "-".join(seg_version.split("_"))
-        cochlea = os.path.basename(prefix).split("_crop_")[0]
+    cochlea = os.path.basename(stain2_file).split("_crop_")[0]
 
-        table_measurement_path = f"{cochlea}/tables/{seg_version}/{stain1_name}_{seg_string}_object-measures.tsv"
-        table_path_s3, fs = get_s3_path(table_measurement_path)
-        with fs.open(table_path_s3, "r") as f:
-            table_measurement = pd.read_csv(f, sep="\t")
+    table_measurement_path = f"{cochlea}/tables/{seg_version}/subtype_ratio.tsv"
+    print(table_measurement_path)
+    table_path_s3, fs = get_s3_path(table_measurement_path)
+    with fs.open(table_path_s3, "r") as f:
+        table_measurement = pd.read_csv(f, sep="\t")
 
-        statistics = get_object_measures_from_table(seg, table=table_measurement)
-
-    else:
-        statistics = compute_object_measures_impl(
-            stain1, seg_extended, feature_set=feature_set, background_mask=mask, median_only=True
-        )
-
+    subtype_ratio = f"{subtype}_ratio_PV"
+    statistics = get_object_measures_from_table(seg, table=table_measurement, keyword=subtype_ratio)
     # Open the napari viewer.
     v = napari.Viewer()
 
@@ -289,18 +266,13 @@ def main():
         description="Start a GUI for determining an intensity threshold for positive "
         "/ negative transduction in segmented cells.")
     parser.add_argument("prefix", help="The prefix of the files to open with the annotation tool.")
-    parser.add_argument("-b", "--background_norm",
-                        help="How to normalize the intensity values for background intensity."
-                        "Valid options are 'division' and 'subtraction'."
-                        "If nothing is passed then the intensity values are not normalized.")
-    parser.add_argument("--otof", action="store_true",
-                        help="Whether to run the annotation tool for otof samples with VGlut3, "
-                        "Alphatag and IHC segmentation.")  # noqa
-    parser.add_argument("--seg_version", type=str, default=None,
+    parser.add_argument("--subtype", type=str, default=None,
+                        help="Supply SGN subtype, e.g. Calb1, Prph, Lypd1, ...")
+    parser.add_argument("--seg_version", type=str, default="SGN_v2",
                         help="Supply segmentation version, e.g. SGN_v2, to use intensities from object measure table.")
     args = parser.parse_args()
 
-    gfp_annotation(args.prefix, background_norm=args.background_norm, is_otof=args.otof, seg_version=args.seg_version)
+    sgn_subtype_annotation(args.prefix, args.subtype, seg_version=args.seg_version)
 
 
 if __name__ == "__main__":

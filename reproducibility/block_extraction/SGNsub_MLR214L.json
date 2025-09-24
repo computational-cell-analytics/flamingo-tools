@@ -1,0 +1,49 @@
+[
+	{
+		"cochlea": "M_LR_000214_L",
+		"image_channel": [
+			"PV",
+			"Calb1",
+			"CR",
+			"PV_SGN_v2"
+		],
+		"segmentation_channel": "PV_SGN_v2",
+		"type": "sgn",
+		"n_blocks": 6,
+		"halo_size": [
+			256,
+			256,
+			50
+		],
+		"component_list": [
+			1
+		],
+		"crop_centers": [
+			[
+				617,
+				914,
+				690
+			],
+			[
+				614,
+				709,
+				477
+			],
+			[
+				311,
+				747,
+				472
+			],
+			[
+				283,
+				634,
+				772
+			],
+			[
+				424,
+				332,
+				780
+			]
+		]
+	}
+]
