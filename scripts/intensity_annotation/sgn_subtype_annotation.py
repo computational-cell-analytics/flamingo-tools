@@ -137,11 +137,12 @@ def _create_mask(seg_extended, stain):
 def sgn_subtype_annotation(prefix, subtype, seg_version="SGN_v2", default_stat="median"):
 
     direc = os.path.dirname(os.path.abspath(prefix))
+    basename = os.path.basename(prefix)
     file_names = [entry.name for entry in os.scandir(direc)]
 
-    stain1_file = [name for name in file_names if prefix in name and subtype in name][0]
-    stain2_file = [name for name in file_names if prefix in name and "PV.tif" in name][0]
-    seg_file = [name for name in file_names if prefix in name and "SGN" in name][0]
+    stain1_file = [name for name in file_names if basename in name and subtype in name][0]
+    stain2_file = [name for name in file_names if basename in name and "PV.tif" in name][0]
+    seg_file = [name for name in file_names if basename in name and "SGN" in name][0]
 
     if "PV" in seg_file:
         seg_version = f"PV_{seg_version}"
