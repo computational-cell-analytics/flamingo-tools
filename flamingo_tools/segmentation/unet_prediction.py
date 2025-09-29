@@ -230,6 +230,10 @@ def find_mask(
         upper_percentile = 99
         min_intensity = 150
         print(f"Calculating mask for segmentation class {seg_class}.")
+    elif seg_class == "ihc_low":
+        upper_percentile = 99.5
+        min_intensity = 100
+        print(f"Calculating mask for segmentation class {seg_class}.")
     else:
         upper_percentile = 95
         min_intensity = 200

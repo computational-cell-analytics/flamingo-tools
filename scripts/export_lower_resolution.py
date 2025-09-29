@@ -165,6 +165,9 @@ def export_lower_resolution(args):
                 if "PV" in channel:
                     max_intensity = 1400
                     data[data > max_intensity] = 0
+                if "CTBP2" in channel:
+                    max_intensity = 1400
+                    data[data > max_intensity] = 300
 
             if args.binarize:
                 data = (data > 0).astype("uint16")

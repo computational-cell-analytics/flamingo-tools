@@ -149,7 +149,7 @@ def sgn_detection(
     detection_path = os.path.join(output_folder, "SGN_detection.tsv")
     input_ = zarr.open(output_path, "r")[prediction_key]
     if not os.path.exists(detection_path):
-        block_shape = (128, 128, 128)  # bigger block to avoid edge effects
+        block_shape = (12, 128, 128)  # bigger block to avoid edge effects
         detections_maxima = find_local_maxima(
             input_, block_shape=block_shape, min_distance=min_distance, threshold_abs=threshold_abs,
             verbose=True, n_threads=16,
