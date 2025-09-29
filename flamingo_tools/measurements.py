@@ -25,7 +25,7 @@ import flamingo_tools.s3_utils as s3_utils
 
 def _measure_volume_and_surface(mask, resolution):
     # Use marching_cubes for 3D data
-    verts, faces, normals, _ = marching_cubes(mask, spacing=(resolution,) * 3)
+    verts, faces, normals, _ = marching_cubes(mask, spacing=resolution)
 
     mesh = trimesh.Trimesh(vertices=verts, faces=faces, vertex_normals=normals)
     surface = mesh.area
@@ -61,9 +61,9 @@ def _get_bounding_box_and_center(table, seg_id, resolution, shape, dilation):
     )
 
     center = (
-        int(row.anchor_z.item() / resolution),
-        int(row.anchor_y.item() / resolution),
-        int(row.anchor_x.item() / resolution),
+        int(row.anchor_z.item() / resolution[0]),
+        int(row.anchor_y.item() / resolution[1]),
+        int(row.anchor_x.item() / resolution[2]),
     )
 
     return bb, center
@@ -236,7 +236,7 @@ def compute_object_measures_impl(
     image: np.typing.ArrayLike,
     segmentation: np.typing.ArrayLike,
     n_threads: Optional[int] = None,
-    resolution: float = 0.38,
+    resolution: Optional[Tuple[float, float, float]] = (0.38, 0.38, 0.38),
     table: Optional[pd.DataFrame] = None,
     feature_set: str = "default",
     background_mask: Optional[np.typing.ArrayLike] = None,
@@ -307,7 +307,7 @@ def compute_object_measures(
     image_key: Optional[str] = None,
     segmentation_key: Optional[str] = None,
     n_threads: Optional[int] = None,
-    resolution: float = 0.38,
+    resolution: Optional[Tuple[float, float, float]] = (0.38, 0.38, 0.38),
     force: bool = False,
     feature_set: str = "default",
     s3_flag: bool = False,

@@ -4,6 +4,7 @@ import os
 from multiprocessing import cpu_count
 from typing import Optional
 
+import numpy as np
 import flamingo_tools.s3_utils as s3_utils
 from flamingo_tools.measurements import compute_object_measures, compute_sgn_background_mask
 
@@ -18,6 +19,7 @@ def repro_object_measures(
 ):
     s3_flag = True
     input_key = "s0"
+    default_resolution = 0.38
     default_component_list = [1]
     default_bg_mask = None
 
@@ -29,9 +31,14 @@ def repro_object_measures(
         cochlea = dic["cochlea"]
         image_channels = dic["image_channel"] if isinstance(dic["image_channel"], list) else [dic["image_channel"]]
         seg_channel = dic["segmentation_channel"]
+        resolution = tuple(dic["resolution"]) if "resolution" in dic else default_resolution
         component_list = dic["component_list"] if "component_list" in dic else default_component_list
         bg_mask = dic["background_mask"] if "background_mask" in dic else default_bg_mask
         print(f"Processing cochlea {cochlea}")
+
+        if not isinstance(resolution, float):
+            assert len(resolution) == 3
+            resolution = np.array(resolution)[::-1]
 
         for img_channel in image_channels:
 
@@ -88,6 +95,7 @@ def repro_object_measures(
                     median_only=median_only,
                     background_mask=bg_mask,
                     n_threads=n_threads,
+                    resolution=resolution,
                 )
 
 
