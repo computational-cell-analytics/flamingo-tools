@@ -13,11 +13,9 @@ import pandas as pd
 from matplotlib import cm, colors
 
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
-from util import sliding_runlength_sum, frequency_mapping, prism_style, prism_cleanup_axes, SYNAPSE_DIR_ROOT
+from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT
 
-# INPUT_ROOT = "/home/pape/Work/my_projects/flamingo-tools/scripts/M_LR_000227_R/scale3"
-INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/frequency_mapping/M_LR_000227_R/scale3"
-FILE_EXTENSION = "png"
+INPUT_ROOT = "/home/martin/Documents/lightsheet-cochlea/M_LR_000227_R"
 
 TYPE_TO_CHANNEL = {
     "Type-Ia": "CR",
@@ -93,7 +91,7 @@ def get_tonotopic_data():
         return pickle.load(f)
 
 
-def _plot_colormap(vol, title, plot, save_path):
+def _plot_colormap(vol, title, plot, save_path, cmap="viridis"):
     # before creating the figure:
     matplotlib.rcParams.update({
         "font.size": 14,          # base font size
@@ -110,10 +108,16 @@ def _plot_colormap(vol, title, plot, save_path):
 
     freq_min = np.min(np.nonzero(vol))
     freq_max = vol.max()
-    norm = colors.Normalize(vmin=freq_min, vmax=freq_max, clip=True)
-    cmap = plt.get_cmap("viridis")
+    # norm = colors.Normalize(vmin=freq_min, vmax=freq_max, clip=True)
+    norm = colors.LogNorm(vmin=freq_min, vmax=freq_max, clip=True)
+    tick_values = np.array([10, 20, 40, 80])
 
-    cb = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax, orientation="horizontal")
+    cmap = plt.get_cmap(cmap)
+
+    cb = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax, orientation="horizontal",
+                      ticks=tick_values)
+    cb.ax.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    cb.ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
     cb.set_label("Frequency [kHz]")
     plt.title(title)
     plt.tight_layout()
@@ -127,19 +131,29 @@ def _plot_colormap(vol, title, plot, save_path):
     plt.close()
 
 
-def fig_03a(save_path, plot, plot_napari):
+def fig_03a(save_path, plot, plot_napari, cmap="viridis"):
     path_ihc = os.path.join(INPUT_ROOT, "frequencies_IHC_v4c.tif")
     path_sgn = os.path.join(INPUT_ROOT, "frequencies_SGN_v2.tif")
     sgn = imageio.imread(path_sgn)
     ihc = imageio.imread(path_ihc)
-    _plot_colormap(sgn, title="Tonotopic Mapping", plot=plot, save_path=save_path)
+    _plot_colormap(sgn, title="Tonotopic Mapping", plot=plot, save_path=save_path, cmap=cmap)
 
     # Show the image in napari for rendering.
     if plot_napari:
         import napari
+        from napari.utils import Colormap
+        # cmap = plt.get_cmap(cmap)
+        mpl_cmap = plt.get_cmap(cmap)
+
+        # Sample it into an array of RGBA values
+        colors = mpl_cmap(np.linspace(0, 1, 256))
+
+        # Wrap into napari Colormap
+        napari_cmap = Colormap(colors, name=f"{cmap}_custom")
+
         v = napari.Viewer()
-        v.add_image(ihc, colormap="viridis")
-        v.add_image(sgn, colormap="viridis")
+        v.add_image(ihc, colormap=napari_cmap)
+        v.add_image(sgn, colormap=napari_cmap)
         napari.run()
 
 
@@ -180,8 +194,7 @@ def fig_03c_rl(save_path, plot=False):
         plt.close()
 
 
-def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendlines=False):
-    prism_style()
+def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True):
     ihc_version = "ihc_counts_v4c"
     tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
     assert len(tables) == 4, len(tables)
@@ -207,55 +220,16 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendl
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    trend_dict = {}
     for name, grp in result.groupby("cochlea"):
         ax.scatter(grp["x_pos"], grp["value"], label=name, s=60, alpha=0.8)
-
-        if trendlines:
-            x_positions = grp["x_pos"]
-            sorted_idx = np.argsort(x_positions)
-            x_sorted = np.array(x_positions)[sorted_idx]
-            y_sorted = np.array(grp["value"])[sorted_idx]
-            trend_dict[name] = {"x_sorted": x_sorted,
-                                "y_sorted": y_sorted,
-                                }
-
-    if trendlines:
-        def get_trendline_values(trend_dict):
-            x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys()][0]
-            y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys()]
-            y_sorted = []
-            for num in range(len(x_sorted)):
-                y_sorted.append(np.mean([y[num] for y in y_sorted_all]))
-            return x_sorted, y_sorted
-
-        # Trendline left
-        x_sorted, y_sorted = get_trendline_values(trend_dict)
-
-        trend, = ax.plot(
-            x_sorted,
-            y_sorted,
-            linestyle="dotted",
-            color="grey",
-            alpha=0.7
-        )
-
-        # trendline_legend = ax.legend(handles=[trend], loc='lower center')
-        # trendline_legend = ax.legend(
-        #     handles=[trend],
-        #     labels=["Trendline"],
-        #     loc="upper left"
-        # )
-        # # Add the legend manually to the Axes.
-        # ax.add_artist(trendline_legend)
 
     ax.set_xticks(range(len(bin_labels)))
     ax.set_xticklabels(bin_labels)
     ax.set_xlabel("Octave band (kHz)")
 
-    ax.set_ylabel("Average Ribbon Synapse Count per IHC", fontsize=10)
+    ax.set_ylabel("Average Ribbon Synapse Count per IHC")
+    ax.set_title("Ribbon synapse count per octave band")
     plt.legend(title="Cochlea")
-    prism_cleanup_axes(ax)
 
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -345,15 +319,16 @@ def main():
     tonotopic_data = get_tonotopic_data()
 
     # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
-    # fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap.{FILE_EXTENSION}"),
-    # plot=args.plot, plot_napari=True)
+    cmap = "plasma"
+    fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap_{cmap}.{FILE_EXTENSION}"),
+            plot=args.plot, plot_napari=True, cmap=cmap)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
     # fig_03c_rl(save_path=os.path.join(args.figure_dir, f"fig_03c_runlength.{FILE_EXTENSION}"), plot=args.plot)
     fig_03c_octave(tonotopic_data=tonotopic_data,
-                   save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
-                   plot=args.plot, trendlines=True)
+                    save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
+                    plot=args.plot)
 
     # Panel D: Spatial distribution of SGN sub-types.
     # fig_03d_fraction(save_path=os.path.join(args.figure_dir, f"fig_03d_fraction.{FILE_EXTENSION}"), plot=args.plot)

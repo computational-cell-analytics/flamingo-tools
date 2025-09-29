@@ -31,6 +31,20 @@ def ax_prism_boxplot(ax, data, positions=None, color="tab:blue"):
     return bp
 
 
+prism_palette = [
+    "#4E79A7",  # blue
+    "#F28E2B",  # orange
+    "#E15759",  # red
+    "#76B7B2",  # teal
+    "#59A14F",  # green
+    "#EDC948",  # yellow
+    "#B07AA1",  # purple
+    "#FF9DA7",  # pink
+    "#9C755F",  # brown
+    "#BAB0AC"   # gray
+]
+
+
 def prism_style():
     plt.style.use("default")  # reset any active styles
     plt.rcParams.update({
@@ -44,6 +58,7 @@ def prism_style():
         "axes.linewidth": 1.2,
         "axes.labelsize": 14,
         "axes.labelweight": "bold",
+        "axes.prop_cycle": plt.cycler("color", prism_palette),
 
         # Ticks
         "xtick.direction": "out",

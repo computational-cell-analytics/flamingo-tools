@@ -309,16 +309,21 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
     # Assign a color to each cochlea (ignoring side)
     cochleas = sorted({name_lr[:-1] for name_lr in result["cochlea"].unique()})
     colors = plt.cm.tab10.colors  # pick a colormap
+    colors = ["#DB5748", "#DB4B6F", "#DB49C6", "#B748DB", "#8748DB"]
+
     color_map = {cochlea: colors[i % len(colors)] for i, cochlea in enumerate(cochleas)}
+
+
     if len(cochleas) == 1:
         color_map = {"L": colors[0], "R": colors[1]}
 
     # Track which cochlea names we have already added to the legend
     legend_added = set()
 
+    offset = 0.02
     trend_dict = {}
 
-    for name_lr, grp in result.groupby("cochlea"):
+    for num, (name_lr, grp) in enumerate(result.groupby("cochlea")):
         name, side = name_lr[:-1], name_lr[-1]
         if len(cochleas) == 1:
             label_name = name_lr
@@ -327,7 +332,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False, use_ali
             label_name = name
             color = color_map[name]
 
-        x_positions = grp["x_pos"] + offset_map[side]
+        x_positions = grp["x_pos"] + offset_map[side] - len(cochleas) / 2 * offset + offset * num
         ax.scatter(
             x_positions,
             grp["value"],

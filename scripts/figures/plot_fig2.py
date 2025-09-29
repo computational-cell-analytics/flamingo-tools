@@ -135,81 +135,73 @@ def fig_02c(save_path, plot=False, all_versions=False):
     ihc_annotator = [0.958, 0.956, 0.957]
     syn_unet = [0.931, 0.905, 0.918]
 
-    # This is the version with IHC v4b segmentation:
-    # 4th version of the network with optimized segmentation params
-    version_1 = [sgn_unet, sgn_annotator, ihc_v4b, ihc_annotator, syn_unet]
-    settings_1 = ["automatic", "manual", "automatic", "manual", "automatic"]
+    setting = ["SGN", "IHC", "Synapse"]
 
     # This is the version with IHC v4c segmentation:
     # 4th version of the network with optimized segmentation params and split of falsely merged IHCs
-    version_2 = [sgn_unet, sgn_annotator, ihc_v4c, ihc_annotator, syn_unet]
-    settings_2 = ["automatic", "manual", "automatic", "manual", "automatic"]
+    manual = [sgn_annotator, ihc_annotator]
+    automatic = [sgn_unet, ihc_v4c, syn_unet]
 
-    # This is the version with IHC v4c + filter segmentation:
-    # 4th version of the network with optimized segmentation params and split of falsely merged IHCs
-    # + filtering out IHCs with zero mapped synapses.
-    version_3 = [sgn_unet, sgn_annotator, ihc_v4c_filter, ihc_annotator, syn_unet]
-    settings_3 = ["automatic", "manual", "automatic", "manual", "automatic"]
+    precision_manual = [i[0] for i in manual]
+    recall_manual = [i[1] for i in manual]
+    f1score_manual = [i[2] for i in manual]
 
-    if all_versions:
-        versions = [version_1, version_2, version_3]
-        settings = [settings_1, settings_2, settings_3]
-        save_suffix = ["_v4b", "_v4c", "_v4c_filter"]
-        save_paths = [save_path.split(".")[0] + i + "." + save_path.split(".")[1] for i in save_suffix]
+    precision_automatic = [i[0] for i in automatic]
+    recall_automatic = [i[1] for i in automatic]
+    f1score_automatic = [i[2] for i in automatic]
+
+    descr_y = 0.72
+
+    # Convert setting labels to numerical x positions
+    x = np.array([0.8, 1.2, 1.8, 2.2, 3])
+    x_manual = np.array([0.8, 1.8])
+    x_automatic = np.array([1.2, 2.2, 3])
+    offset = 0.08  # horizontal shift for scatter separation
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    main_label_size = 22
+    sub_label_size = 16
+    main_tick_size = 16
+    legendsize = 18
+
+    color_pm = "#3AA67E"
+    color_pa = "#17E69A"
+    color_rm = "#438CA7"
+    color_ra = "#17AEE6"
+    color_fm = "#694BA6"
+    color_fa = "#6322E6"
+
+    plt.scatter(x_manual - offset, precision_manual, label="Precision manual", color=color_pm, marker="o", s=80)
+    plt.scatter(x_manual,         recall_manual, label="Recall manual", color=color_rm, marker="o", s=80)
+    plt.scatter(x_manual + offset, f1score_manual, label="F1-score manual", color=color_fm, marker="o", s=80)
+
+    plt.scatter(x_automatic - offset, precision_automatic, label="Precision automatic", color=color_pa, marker="s", s=80)
+    plt.scatter(x_automatic,         recall_automatic, label="Recall automatic", color=color_ra, marker="s", s=80)
+    plt.scatter(x_automatic + offset, f1score_automatic, label="F1-score automatic", color=color_fa, marker="s", s=80)
+
+    # Labels and formatting
+    plt.xticks([1,2,3], setting, fontsize=main_label_size)
+    plt.yticks(fontsize=main_tick_size)
+    plt.ylabel("Value", fontsize=main_label_size)
+    plt.ylim(0.76, 1)
+    plt.legend(loc="lower right",
+                fontsize=legendsize)
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+
+    plt.tight_layout()
+    prism_cleanup_axes(ax)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     else:
-        versions = [version_2]
-        settings = [settings_2]
-        save_suffix = ["_v4c"]
-        save_paths = [save_path.split(".")[0] + i + "." + save_path.split(".")[1] for i in save_suffix]
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
-    for version, setting, save_path in zip(versions, settings, save_paths):
-        precision = [i[0] for i in version]
-        recall = [i[1] for i in version]
-        f1score = [i[2] for i in version]
-
-        descr_y = 0.72
-
-        # Convert setting labels to numerical x positions
-        x = np.array([0.8, 1.2, 1.8, 2.2, 3])
-        offset = 0.08  # horizontal shift for scatter separation
-
-        # Plot
-        fig, ax = plt.subplots(figsize=(8, 5))
-
-        main_label_size = 22
-        sub_label_size = 16
-        main_tick_size = 16
-        legendsize = 18
-
-        plt.scatter(x - offset, precision, label="Precision", marker="o", s=80)
-        plt.scatter(x,         recall, label="Recall", marker="^", s=80)
-        plt.scatter(x + offset, f1score, label="F1-score", marker="*", s=80)
-
-        plt.text(1, descr_y, "SGN", fontsize=main_label_size, horizontalalignment="center")
-        plt.text(2, descr_y, "IHC", fontsize=main_label_size, horizontalalignment="center")
-        plt.text(3, descr_y, "Synapse", fontsize=main_label_size, horizontalalignment="center")
-
-        # Labels and formatting
-        plt.xticks(x, setting, fontsize=sub_label_size)
-        plt.yticks(fontsize=main_tick_size)
-        plt.ylabel("Value", fontsize=main_label_size)
-        plt.ylim(0.76, 1)
-        plt.legend(loc="lower right",
-                   fontsize=legendsize)
-        plt.grid(axis="y", linestyle="--", alpha=0.5)
-
-        plt.tight_layout()
-        prism_cleanup_axes(ax)
-
-        if ".png" in save_path:
-            plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
-        else:
-            plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
-
-        if plot:
-            plt.show()
-        else:
-            plt.close()
+    if plot:
+        plt.show()
+    else:
+        plt.close()
 
 
 # Load the synapse counts for all IHCs from the relevant tables.
@@ -423,8 +415,8 @@ def main():
     os.makedirs(args.figure_dir, exist_ok=True)
 
     # Panes A and B: Qualitative comparison of visualization results.
-    fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
-    fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
+    # fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
+    # fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
 
     # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
