@@ -20,6 +20,7 @@ def repro_equidistant_centers(
     default_component_list = [1]
     default_halo_size = [256, 256, 128]
     default_n_blocks = 6
+    default_max_edge_distance = 30
 
     with open(input_path, 'r') as myfile:
         data = myfile.read()
@@ -57,8 +58,13 @@ def repro_equidistant_centers(
         component_list = update_dic(dic, "component_list", default_component_list)
         _ = update_dic(dic, "halo_size", default_halo_size)
         n_blocks = update_dic(dic, "n_blocks", default_n_blocks)
+        max_edge_distance = update_dic(dic, "max_edge_distance", default_max_edge_distance)
 
-        centers = equidistant_centers(table, component_label=component_list, cell_type=cell_type, n_blocks=n_blocks)
+        centers = equidistant_centers(
+            table, component_label=component_list, cell_type=cell_type,
+            n_blocks=n_blocks, max_edge_distance=max_edge_distance
+        )
+
         centers = [[round(c) for c in center] for center in centers]
 
         dic["crop_centers"] = centers

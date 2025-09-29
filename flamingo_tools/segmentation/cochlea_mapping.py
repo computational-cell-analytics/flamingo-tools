@@ -275,6 +275,141 @@ def measure_run_length_sgns(
     return total_distance, path, path_dict
 
 
+def measure_run_length_ihcs_multi_component(
+    centroids_components: List[np.ndarray],
+    max_edge_distance: float = 30,
+    apex_higher: bool = True,
+    component_label: List[int] = [1],
+) -> Tuple[float, np.ndarray, dict]:
+    """Adaptation of measure_run_length_sgns_multi_component to IHCs.
+
+    """
+    total_path = []
+    print(f"Evaluating {len(centroids_components)} components.")
+    # 1) Process centroids for each component
+    for centroids in centroids_components:
+        graph = nx.Graph()
+        coords = {}
+        labels = [int(i) for i in range(len(centroids))]
+        for index, element in zip(labels, centroids):
+            coords[index] = element
+
+        for num, pos in coords.items():
+            graph.add_node(num, pos=pos)
+
+        # create edges between points whose distance is less than threshold max_edge_distance
+        for num_i, pos_i in coords.items():
+            for num_j, pos_j in coords.items():
+                if num_i < num_j:
+                    dist = math.dist(pos_i, pos_j)
+                    if dist <= max_edge_distance:
+                        graph.add_edge(num_i, num_j, weight=dist)
+
+        components = [list(c) for c in nx.connected_components(graph)]
+        len_c = [len(c) for c in components]
+        len_c, components = zip(*sorted(zip(len_c, components), reverse=True))
+
+        # combine separate connected components by adding edges between nodes which are closest together
+        if len(components) > 1:
+            print(f"Graph consists of {len(components)} connected components.")
+            if len(component_label) != len(components):
+                raise ValueError(f"Length of graph components {len(components)} "
+                                f"does not match number of component labels {len(component_label)}. "
+                                "Check max_edge_distance and post-processing.")
+
+            # Order connected components in order of component labels
+            # e.g. component_labels = [7, 4, 1, 11] and len_c = [600, 400, 300, 55]
+            # get re-ordered to [300, 400, 600, 55]
+            components_sorted = [
+                c[1] for _, c in sorted(zip(sorted(range(len(component_label)), key=lambda i: component_label[i]),
+                                            sorted(zip(len_c, components), key=lambda x: x[0], reverse=True)))]
+
+            # Connect nodes of neighboring components that are closest together
+            for num in range(0, len(components_sorted) - 1):
+                min_dist = float("inf")
+                closest_pair = None
+
+                # Compare only nodes between two neighboring components
+                for node_a in components_sorted[num]:
+                    for node_b in components_sorted[num + 1]:
+                        dist = math.dist(graph.nodes[node_a]["pos"], graph.nodes[node_b]["pos"])
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_pair = (node_a, node_b)
+                graph.add_edge(closest_pair[0], closest_pair[1], weight=min_dist)
+
+            print("Connect components in order of component labels.")
+
+        start_node, end_node = find_most_distant_nodes(graph)
+
+        # compare y-value to not get into confusion with MoBIE dimensions
+        if graph.nodes[start_node]["pos"][1] > graph.nodes[end_node]["pos"][1]:
+            apex_node = start_node if apex_higher else end_node
+            base_node = end_node if apex_higher else start_node
+        else:
+            apex_node = end_node if apex_higher else start_node
+            base_node = start_node if apex_higher else end_node
+
+        path = nx.shortest_path(graph, source=apex_node, target=base_node)
+        path_pos = np.array([graph.nodes[p]["pos"] for p in path])
+        path = moving_average_3d(path_pos, window=5)
+        total_path.append(path)
+
+    # 2) Order paths to have consistent start/end points
+    # Find starting order of first two components
+    c1a = total_path[0][0, :]
+    c1b = total_path[0][-1, :]
+
+    c2a = total_path[1][0, :]
+    c2b = total_path[1][-1, :]
+
+    distances = [math.dist(c1a, c2a), math.dist(c1a, c2b), math.dist(c1b, c2a), math.dist(c1b, c2b)]
+    min_index = distances.index(min(distances))
+    if min_index in [0, 1]:
+        total_path[0] = np.flip(total_path[0], axis=0)
+
+    # Order other components from start to end
+    for num in range(0, len(total_path) - 1):
+        dist_connecting_nodes_1 = math.dist(total_path[num][-1, :], total_path[num+1][0, :])
+        dist_connecting_nodes_2 = math.dist(total_path[num][-1, :], total_path[num+1][-1, :])
+        if dist_connecting_nodes_2 < dist_connecting_nodes_1:
+            total_path[num+1] = np.flip(total_path[num+1], axis=0)
+
+    # 3) Assign base/apex position to path
+    # compare y-value to not get into confusion with MoBIE dimensions
+    if total_path[0][0, 1] > total_path[-1][-1, 1]:
+        if not apex_higher:
+            total_path.reverse()
+            total_path = [np.flip(t) for t in total_path]
+    elif apex_higher:
+        total_path.reverse()
+        total_path = [np.flip(t) for t in total_path]
+
+    # 4) Assign distance of nodes by skipping intermediate space between separate components
+    total_distance = sum([math.dist(p[num + 1], p[num]) for p in total_path for num in range(len(p) - 1)])
+    path_dict = {}
+    accumulated = 0
+    index = 0
+    for num, pa in enumerate(total_path):
+        if num == 0:
+            path_dict[0] = {"pos": total_path[0][0], "length_fraction": 0}
+        else:
+            path_dict[index] = {"pos": total_path[num][0], "length_fraction": path_dict[index-1]["length_fraction"]}
+
+        index += 1
+        for enum, p in enumerate(pa[1:]):
+            distance = math.dist(total_path[num][enum], p)
+            accumulated += distance
+            rel_dist = accumulated / total_distance
+            path_dict[index] = {"pos": p, "length_fraction": rel_dist}
+            index += 1
+    path_dict[index-1] = {"pos": total_path[-1][-1, :], "length_fraction": 1}
+
+    # 5) Concatenate individual paths to form total path
+    path = np.concatenate(total_path, axis=0)
+
+    return total_distance, path, path_dict
+
 def measure_run_length_ihcs(
     centroids: np.ndarray,
     max_edge_distance: float = 30,
@@ -445,8 +580,13 @@ def get_centers_from_path(
         target_s = [s for num, s in enumerate(target_s) if num % 2 == 1]
     else:
         target_s = np.linspace(0, total_distance, n_blocks)
-    f = interp1d(cum_len, path, axis=0)  # fill_value="extrapolate"
-    centers = f(target_s)
+    try:
+        f = interp1d(cum_len, path, axis=0)  # fill_value="extrapolate"
+        centers = f(target_s)
+    except ValueError as ve:
+        print("Using extrapolation to fill values.")
+        f = interp1d(cum_len, path, axis=0, fill_value="extrapolate")
+        centers = f(target_s)
     return centers
 
 
@@ -527,6 +667,7 @@ def equidistant_centers(
     component_label: List[int] = [1],
     cell_type: str = "sgn",
     n_blocks: int = 10,
+    max_edge_distance: float = 30,
     offset_blocks: bool = True,
 ) -> np.ndarray:
     """Find equidistant centers within the central path of the Rosenthal's canal.
@@ -546,8 +687,21 @@ def equidistant_centers(
     centroids = list(zip(new_subset["anchor_x"], new_subset["anchor_y"], new_subset["anchor_z"]))
 
     if cell_type == "ihc":
-        total_distance, path, _ = measure_run_length_ihcs(centroids, component_label=component_label)
-        return get_centers_from_path(path,  total_distance, n_blocks=n_blocks, offset_blocks=offset_blocks)
+        if len(component_label) == 1:
+            total_distance, path, _ = measure_run_length_ihcs(
+                centroids, component_label=component_label, max_edge_distance=max_edge_distance
+            )
+            return get_centers_from_path(path, total_distance, n_blocks=n_blocks, offset_blocks=offset_blocks)
+        else:
+            centroids_components = []
+            for label in component_label:
+                subset = table[table["component_labels"] == label]
+                subset_centroids = list(zip(subset["anchor_x"], subset["anchor_y"], subset["anchor_z"]))
+                centroids_components.append(subset_centroids)
+            total_distance, path, path_dict = measure_run_length_ihcs_multi_component(
+                centroids_components, max_edge_distance=max_edge_distance
+            )
+            return get_centers_from_path_dict(path_dict, n_blocks=n_blocks, offset_blocks=offset_blocks)
 
     else:
         if len(component_label) == 1:
