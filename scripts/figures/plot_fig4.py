@@ -33,12 +33,20 @@ COCHLEAE_DICT = {
     "G_EK_000049_R": {"alias": "G1R", "component": [1, 2]},
 }
 
-COLORS_ANIMAL = {
+COLORS_ANIMAL_01 = {
     "M05" : "#DB3000",
     "M06" : "#DB0063",
     "M07" : "#8F00DB",
     "M08" : "#0004DB",
     "M09" : "#0093DB"
+}
+
+COLORS_ANIMAL = {
+    "M05" : "#9C5027",
+    "M06" : "#279C52",
+    "M07" : "#67279C",
+    "M08" : "#27339C",
+    "M09" : "#9C276F"
 }
 
 COLORS_LEFT = {
@@ -294,17 +302,17 @@ def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=
 
     elif grouping == "side_multi":
         for num, key in enumerate(COLORS_LEFT.keys()):
-            plt.scatter(x_pos_inj[num], values_left[num], label="Injected",
+            plt.scatter(x_pos_inj[num], values_left[num], label=f"{alias[num]}L",
                         color=COLORS_LEFT[key], marker=MARKER_LEFT, s=80, zorder=1)
         for num, key in enumerate(COLORS_RIGHT.keys()):
-            plt.scatter(x_pos_non[num], values_right[num], label="Non-Injected",
+            plt.scatter(x_pos_non[num], values_right[num], label=f"{alias[num]}R",
                         color=COLORS_RIGHT[key], marker=MARKER_RIGHT, s=80, zorder=1)
 
     elif grouping == "animal":
         for num, key in enumerate(COLORS_ANIMAL.keys()):
-            plt.scatter(x_pos_inj[num], values_left[num], label="Injected",
+            plt.scatter(x_pos_inj[num], values_left[num], label=f"{alias[num]}",
                         color=COLORS_ANIMAL[key], marker=MARKER_LEFT, s=80, zorder=1)
-            plt.scatter(x_pos_non[num], values_right[num], label="Non-Injected",
+            plt.scatter(x_pos_non[num], values_right[num],
                         color=COLORS_ANIMAL[key], marker=MARKER_RIGHT, s=80, zorder=1)
 
     else:
@@ -315,7 +323,6 @@ def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=
     plt.yticks(y_ticks, fontsize=main_tick_size)
     plt.ylabel("SGN count per cochlea", fontsize=main_label_size)
     plt.ylim(5000, 14000)
-    # plt.legend(loc="upper right", fontsize=legendsize)
 
     xmin = 0.5
     xmax = 2.5
@@ -401,17 +408,17 @@ def fig_04d(chreef_data, save_path, plot=False, grouping="animal", intensity=Fal
 
     elif grouping == "side_multi":
         for num, key in enumerate(COLORS_LEFT.keys()):
-            plt.scatter(x_pos_inj[num], values_left[num], label="Injected",
+            plt.scatter(x_pos_inj[num], values_left[num], label=f"{alias[num]}L",
                         color=COLORS_LEFT[key], marker=MARKER_LEFT, s=80, zorder=1)
         for num, key in enumerate(COLORS_RIGHT.keys()):
-            plt.scatter(x_pos_non[num], values_right[num], label="Non-Injected",
+            plt.scatter(x_pos_non[num], values_right[num], label=f"{alias[num]}R",
                         color=COLORS_RIGHT[key], marker=MARKER_RIGHT, s=80, zorder=1)
 
     elif grouping == "animal":
         for num, key in enumerate(COLORS_ANIMAL.keys()):
-            plt.scatter(x_pos_inj[num], values_left[num], label="Injected",
+            plt.scatter(x_pos_inj[num], values_left[num], label=f"{alias[num]}",
                         color=COLORS_ANIMAL[key], marker=MARKER_LEFT, s=80, zorder=1)
-            plt.scatter(x_pos_non[num], values_right[num], label="Non-Injected",
+            plt.scatter(x_pos_non[num], values_right[num],
                         color=COLORS_ANIMAL[key], marker=MARKER_RIGHT, s=80, zorder=1)
 
     else:
@@ -509,6 +516,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
     prism_style()
 
     result = {"cochlea": [], "octave_band": [], "value": []}
+    aliases = []
     for name, values in chreef_data.items():
         if use_alias:
             alias = COCHLEAE_DICT[name]["alias"]
@@ -526,13 +534,32 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
         result["cochlea"].extend([alias] * len(octave_binned))
         result["octave_band"].extend(octave_binned.axes[0].values.tolist())
         result["value"].extend(octave_binned.values.tolist())
+        aliases.append(alias)
+
+    if gerbil:
+        values = []
+        for vals in chreef_data.values():
+            if intensity:
+                intensities = vals["median"].values
+                values.append(intensities.mean())
+            else:
+                # marker labels
+                # 0: unlabeled - no median intensity in object_measures table
+                # 1: positive
+                # 2: negative
+                marker_labels = vals["marker_labels"].values
+                n_pos = (marker_labels == 1).sum()
+                n_neg = (marker_labels == 2).sum()
+                eff = float(n_pos) / (n_pos + n_neg)
+                values.append(eff)
+        alias, values_left, values_right = group_lr(aliases, values)
 
     result = pd.DataFrame(result)
     bin_labels = pd.unique(result["octave_band"])
     band_to_x = {band: i for i, band in enumerate(bin_labels)}
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     sub_tick_label_size = 8
     tick_label_size = 12
@@ -623,92 +650,127 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                                    }
 
     if trendlines:
-        def get_trendline_values(trend_dict, side):
-            x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side][0]
-            y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side]
-            y_sorted = []
-            for num in range(len(x_sorted)):
-                y_sorted.append(np.mean([y[num] for y in y_sorted_all]))
-            return x_sorted, y_sorted
+        if not gerbil:
+            def get_trendline_values(trend_dict, side):
+                x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side][0]
+                y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side]
+                y_sorted = []
+                for num in range(len(x_sorted)):
+                    y_sorted.append(np.mean([y[num] for y in y_sorted_all]))
+                return x_sorted, y_sorted
 
-        # Trendline Injected (Left)
-        x_sorted, y_sorted = get_trendline_values(trend_dict, "L")
-        x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict, "L")
+            # Trendline Injected (Left)
+            x_sorted, y_sorted = get_trendline_values(trend_dict, "L")
+            x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict, "L")
 
-        # central line
-        trend_l, = ax.plot(
-            x_sorted,
-            y_sorted,
-            linestyle="dotted",
-            color=COLOR_LEFT,
-            alpha=0.7,
-            zorder=0
-        )
+            if grouping == "animal":
+                color_trend_l = "gray"
+                color_trend_r = "gray"
+            else:
+                color_trend_l = COLOR_LEFT
+                color_trend_r = COLOR_RIGHT
 
-        if trendline_std:
-            # upper and lower standard deviation
-            trend_l_upper, = ax.plot(
+            # central line
+            trend_l, = ax.plot(
                 x_sorted,
-                y_sorted_upper,
-                linestyle="solid",
-                color=COLOR_LEFT,
-                alpha=0.08,
+                y_sorted,
+                linestyle="dotted",
+                color=color_trend_l,
+                alpha=0.7,
                 zorder=0
             )
-            trend_l_lower, = ax.plot(
+
+            if trendline_std:
+                # upper and lower standard deviation
+                trend_l_upper, = ax.plot(
+                    x_sorted,
+                    y_sorted_upper,
+                    linestyle="solid",
+                    color=color_trend_l,
+                    alpha=0.08,
+                    zorder=0
+                )
+                trend_l_lower, = ax.plot(
+                    x_sorted,
+                    y_sorted_lower,
+                    linestyle="solid",
+                    color=color_trend_l,
+                    alpha=0.08,
+                    zorder=0
+                )
+                plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper, color=COLOR_LEFT, alpha=0.05, interpolate=True)
+
+            # Trendline Non-Injected (Right)
+            x_sorted, y_sorted = get_trendline_values(trend_dict, "R")
+            x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict, "R")
+            # central line
+            trend_r, = ax.plot(
                 x_sorted,
-                y_sorted_lower,
-                linestyle="solid",
-                color=COLOR_LEFT,
-                alpha=0.08,
+                y_sorted,
+                linestyle="dashed",
+                color=color_trend_r,
+                alpha=0.7,
                 zorder=0
             )
-            plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper, color=COLOR_LEFT, alpha=0.05, interpolate=True)
 
-        # Trendline Non-Injected (Right)
-        x_sorted, y_sorted = get_trendline_values(trend_dict, "R")
-        x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict, "R")
-        # central line
-        trend_r, = ax.plot(
-            x_sorted,
-            y_sorted,
-            linestyle="dashed",
-            color=COLOR_RIGHT,
-            alpha=0.7,
-            zorder=0
-        )
+            if trendline_std:
+                # upper and lower standard deviation
+                trend_r_upper, = ax.plot(
+                    x_sorted,
+                    y_sorted_upper,
+                    linestyle="solid",
+                    color=color_trend_r,
+                    alpha=0.08,
+                    zorder=0
+                )
+                trend_r_lower, = ax.plot(
+                    x_sorted,
+                    y_sorted_lower,
+                    linestyle="solid",
+                    color=color_trend_r,
+                    alpha=0.08,
+                    zorder=0
+                )
+                plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper, color=COLOR_RIGHT, alpha=0.05, interpolate=True)
 
-        if trendline_std:
-            # upper and lower standard deviation
-            trend_r_upper, = ax.plot(
+            # Trendline legend
+            trendline_legend = ax.legend(handles=[trend_l, trend_r], loc='lower center')
+            trendline_legend = ax.legend(
+                handles=[trend_l, trend_r],
+                labels=["Injected", "Non-Injected"],
+                loc="lower left",
+                fontsize=legend_size,
+                title="Trendlines"
+            )
+            # Add the legend manually to the Axes.
+            ax.add_artist(trendline_legend)
+        else:
+            x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == "L"][0]
+            y_left = [values_left[0] for _ in x_sorted]
+            y_right = [values_right[0] for _ in x_sorted]
+            if grouping == "animal":
+                color_trend_l = "gray"
+                color_trend_r = "gray"
+            else:
+                color_trend_l = COLOR_LEFT
+                color_trend_r = COLOR_RIGHT
+            trend_l, = ax.plot(
                 x_sorted,
-                y_sorted_upper,
-                linestyle="solid",
-                color=COLOR_RIGHT,
-                alpha=0.08,
+                y_left,
+                linestyle="dotted",
+                color=color_trend_l,
+                alpha=0.7,
                 zorder=0
             )
-            trend_r_lower, = ax.plot(
+            x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == "R"][0]
+            trend_r, = ax.plot(
                 x_sorted,
-                y_sorted_lower,
-                linestyle="solid",
-                color=COLOR_RIGHT,
-                alpha=0.08,
+                y_right,
+                linestyle="dashed",
+                color=color_trend_r,
+                alpha=0.7,
                 zorder=0
             )
-            plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper, color=COLOR_RIGHT, alpha=0.05, interpolate=True)
-
-        # Trendline legend
-        trendline_legend = ax.legend(handles=[trend_l, trend_r], loc='lower center')
-        trendline_legend = ax.legend(
-            handles=[trend_l, trend_r],
-            labels=["Injected", "Non-Injected"],
-            loc="lower center",
-            fontsize=legend_size,
-            title="Trendlines"
-        )
-        # Add the legend manually to the Axes.
-        ax.add_artist(trendline_legend)
 
     # Create combined tick positions & labels
     main_ticks = range(len(bin_labels))
@@ -778,20 +840,24 @@ def main():
     # C: The SGN count compared to reference values from literature and healthy
     # Maybe remove literature reference from plot?
     fig_04c(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04c.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_04c_{grouping}.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias)
 
     # D: The transduction efficiency. We also plot GFP intensities.
     fig_04d(chreef_data,
-            save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction_{grouping}.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias)
     # fig_04d(chreef_data,
     #         save_path=os.path.join(args.figure_dir, f"fig_04d_intensity.{FILE_EXTENSION}"),
     #         plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
     fig_04e(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction_{grouping}.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias, trendlines=True)
+
+    fig_04e(chreef_data,
+            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction_std_{grouping}.{FILE_EXTENSION}"),
+            plot=args.plot, grouping=grouping, use_alias=use_alias, trendlines=True, trendline_std=True)
     # fig_04e(chreef_data,
     #         save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
     #         plot=args.plot, intensity=True, use_alias=use_alias)
@@ -802,8 +868,8 @@ def main():
             plot=args.plot, grouping="side_mono", gerbil=True, use_alias=use_alias)
 
     fig_04e(chreef_data_gerbil,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction.{FILE_EXTENSION}"),
-            plot=args.plot, gerbil=True, use_alias=use_alias)
+            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction_{grouping}.{FILE_EXTENSION}"),
+            plot=args.plot, gerbil=True, use_alias=use_alias, trendlines=True)
 
     # fig_04e(chreef_data_gerbil,
     #         save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_intensity.{FILE_EXTENSION}"),
