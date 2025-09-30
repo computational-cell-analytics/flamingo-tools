@@ -156,6 +156,94 @@ def group_lr(names_lr, values):
 
     return names, values_left, values_right
 
+def plot_legend(chreef_data, save_path, grouping="side_mono", use_alias=True,
+                alignment="horizontal"):
+    """Plot common legend for figures 4c, 4d, and 4e.
+
+    Args:
+        chreef_data: Data of ChReef cochleae.
+        save_path: save path to save legend.
+        grouping: Grouping for cochleae.
+            "side_mono" for division in Injected and Non-Injected.
+            "side_multi" for division per cochlea.
+            "animal" for division per animal.
+        use_alias: Use alias.
+    """
+    if use_alias:
+        alias = [COCHLEAE_DICT[k]["alias"] for k in chreef_data.keys()]
+    else:
+        alias = [name.replace("_", "").replace("0", "") for name in chreef_data.keys()]
+
+    sgns = [len(vals) for vals in chreef_data.values()]
+    alias, values_left, values_right = group_lr(alias, sgns)
+
+    colors = ["crimson", "purple", "gold"]
+    if grouping == "side_mono":
+        colors = [COLOR_LEFT, COLOR_RIGHT]
+        labels = ["Injected", "Non-Injected"]
+        markers = [MARKER_LEFT, MARKER_RIGHT]
+        ncol = 2
+
+    elif grouping == "side_multi":
+        colors = []
+        labels = []
+        markers = []
+        keys_left = list(COLORS_LEFT.keys())
+        keys_right = list(COLORS_RIGHT.keys())
+        for num in range(len(COLORS_LEFT)):
+            colors.append(COLORS_LEFT[keys_left[num]])
+            colors.append(COLORS_RIGHT[keys_right[num]])
+            labels.append(f"{alias[num]}L")
+            labels.append(f"{alias[num]}R")
+            markers.append(MARKER_LEFT)
+            markers.append(MARKER_RIGHT)
+        if alignment == "vertical":
+            colors = colors[::2] + colors[1::2]
+            labels = labels[::2] + labels[1::2]
+            markers = markers[::2] + markers[1::2]
+            ncol = 2
+        else:
+            ncol = 5
+
+    elif grouping == "animal":
+        colors = []
+        labels = []
+        markers = []
+        ncol = 5
+        keys_animal = list(COLORS_ANIMAL.keys())
+        for num in range(len(COLORS_ANIMAL)):
+            colors.append(COLORS_ANIMAL[keys_animal[num]])
+            colors.append(COLORS_ANIMAL[keys_animal[num]])
+            labels.append(f"{alias[num]}L")
+            labels.append(f"{alias[num]}R")
+            markers.append(MARKER_LEFT)
+            markers.append(MARKER_RIGHT)
+        if alignment == "vertical":
+            colors = colors[::2] + colors[1::2]
+            labels = labels[::2] + labels[1::2]
+            markers = markers[::2] + markers[1::2]
+            ncol = 2
+        else:
+            ncol = 5
+
+    else:
+        raise ValueError("Choose a correct 'grouping' parameter.")
+
+    f = lambda m,c: plt.plot([],[], marker=m, color=c, ls="none")[0]
+    handles = [f(marker, color) for (color, marker) in zip(colors, markers)]
+    legend = plt.legend(handles, labels, loc=3, ncol=ncol, framealpha=1, frameon=False)
+
+    def export_legend(legend, filename="fig_04_legend.png"):
+        legend.axes.axis("off")
+        fig = legend.figure
+        fig.canvas.draw()
+        bbox = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        fig.savefig(filename, bbox_inches=bbox, dpi=png_dpi)
+
+    export_legend(legend, save_path)
+    legend.remove()
+    plt.close()
+
 
 def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=True):
     """Box plot showing the SGN counts of ChReef treated cochleae compared to healthy ones.
@@ -676,6 +764,13 @@ def main():
     chreef_data.pop("M_LR_000143_L")
     # remove other cochlea to have only pairs remaining
     chreef_data.pop("M_LR_000143_R")
+
+    plot_legend(chreef_data, grouping="side_mono",
+                save_path=os.path.join(args.figure_dir, f"fig_04_legend_mono.{FILE_EXTENSION}"))
+    plot_legend(chreef_data, grouping="side_multi",
+                save_path=os.path.join(args.figure_dir, f"fig_04_legend_multi.{FILE_EXTENSION}"))
+    plot_legend(chreef_data, grouping="animal",
+                save_path=os.path.join(args.figure_dir, f"fig_04_legend_animal.{FILE_EXTENSION}"))
 
     # Create the panels:
     grouping = "side_multi"
