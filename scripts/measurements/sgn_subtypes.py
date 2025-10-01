@@ -173,8 +173,8 @@ def require_missing_tables(missing_tables):
             img_s3 = f"{cochlea}/images/ome-zarr/{channel}.ome.zarr"
             seg_s3 = f"{cochlea}/images/ome-zarr/{seg_name}.ome.zarr"
             seg_table_s3 = f"{cochlea}/tables/{seg_name}/default.tsv"
-            img_path, _ = get_s3_path(img_s3)
-            seg_path, _ = get_s3_path(seg_s3)
+            # img_path, _ = get_s3_path(img_s3)
+            # seg_path, _ = get_s3_path(seg_s3)
 
             output_folder = os.path.join(output_root, cochlea)
             os.makedirs(output_folder, exist_ok=True)
@@ -182,8 +182,8 @@ def require_missing_tables(missing_tables):
                 output_folder, f"{channel}_{seg_name.replace('_', '-')}_object-measures.tsv"
             )
             compute_object_measures(
-                image_path=img_path,
-                segmentation_path=seg_path,
+                image_path=img_s3,
+                segmentation_path=seg_s3,
                 segmentation_table_path=seg_table_s3,
                 output_table_path=output_table_path,
                 image_key="s0",
@@ -215,6 +215,7 @@ def compile_data_for_subtype_analysis():
             assert "CR" in channels
             reference_channel = "CR"
             seg_name = "CR_SGN_v2"
+        print(cochlea)
 
         content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
         info = json.loads(content.read())
@@ -537,16 +538,69 @@ def analyze_subtype_data_regular(show_plots=True):
     combined_analysis(results, show_plots=show_plots)
 
 
+def export_for_annotation():
+    files = sorted(glob("./subtype_analysis/*.tsv"))
+    out_folder = "./subtype_analysis/for_mobie_annotation"
+    os.makedirs(out_folder, exist_ok=True)
+
+    all_thresholds = {}
+    for ff in files:
+        cochlea = os.path.basename(ff)[:-len("_subtype_analysis.tsv")]
+        if cochlea not in REGULAR_COCHLEAE:
+            continue
+
+        print(cochlea)
+        channels = COCHLEAE_FOR_SUBTYPES[cochlea]
+        reference_channel = "PV"
+        assert channels[0] == reference_channel
+        tab = pd.read_csv(ff, sep="\t")
+
+        tab_for_export = {"label_id": tab.label_id.values}
+        classification = []
+        thresholds = {}
+
+        for chan in channels[1:]:
+            data = tab[f"{chan}_ratio_PV"].values
+            tab_for_export[f"{chan}_ratio_PV"] = data
+            threshold = threshold_otsu(data)
+            thresholds[chan] = threshold
+
+            c0, c1 = f"{chan}-", f"{chan}+"
+            classification.append([c0 if datum < threshold else c1 for datum in data])
+
+        all_thresholds[cochlea] = thresholds
+
+        if len(classification) == 2:
+            cls1, cls2 = classification
+            classification = [f"{c1} / {c2}" for c1, c2 in zip(cls1, cls2)]
+        else:
+            classification = classification[0]
+        classification = [stain_to_type(cls) for cls in classification]
+        classification = [f"{stype} ({stain})" for stype, stain in classification]
+
+        tab_for_export["classification"] = classification
+        tab_for_export = pd.DataFrame(tab_for_export)
+        tab_for_export.to_csv(os.path.join(out_folder, f"{cochlea}.tsv"), sep="\t", index=False)
+
+    with open(os.path.join(out_folder, "thresholds.json"), "w") as f:
+        json.dump(all_thresholds, f, indent=2, sort_keys=True)
+
+
 # More TODO:
 # > It's good to see that for the N mice the Ntng1C and Lypd1 separate from CR so well on the thresholds.
 # Can I visualize these samples ones segmentation masks are done to verify the Ntng1C thresholds?
 # As this is a quite clear signal I'm not sure if taking the middle of the histogram would be the best choice.
 # The segmentations are in MoBIE already. I need to send you the tables for analyzing the signals. Will send them later.
 def main():
-    # missing_tables = check_processing_status()
-    # require_missing_tables(missing_tables)
-    # compile_data_for_subtype_analysis()
+    # These scripts are for computing the intensity tables etc.
+    missing_tables = check_processing_status()
+    require_missing_tables(missing_tables)
+    compile_data_for_subtype_analysis()
 
+    # This script is for exporting the tables for annotation in MoBIE.
+    export_for_annotation()
+
+    # This script is for running the analysis and creating the plots.
     analyze_subtype_data_regular(show_plots=False)
 
     # TODO

@@ -3,7 +3,7 @@ import os
 import warnings
 from concurrent import futures
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -60,10 +60,13 @@ def _get_bounding_box_and_center(table, seg_id, resolution, shape, dilation):
         for bmin, bmax, sh in zip(bb_min, bb_max, shape)
     )
 
+    if isinstance(resolution, float):
+        resolution = (resolution,) * 3
+
     center = (
-        int(row.anchor_z.item() / resolution),
-        int(row.anchor_y.item() / resolution),
-        int(row.anchor_x.item() / resolution),
+        int(row.anchor_z.item() / resolution[0]),
+        int(row.anchor_y.item() / resolution[1]),
+        int(row.anchor_x.item() / resolution[2]),
     )
 
     return bb, center
@@ -307,7 +310,7 @@ def compute_object_measures(
     image_key: Optional[str] = None,
     segmentation_key: Optional[str] = None,
     n_threads: Optional[int] = None,
-    resolution: float = 0.38,
+    resolution: Union[float, Tuple[float, ...]] = 0.38,
     force: bool = False,
     feature_set: str = "default",
     s3_flag: bool = False,
@@ -359,8 +362,8 @@ def compute_object_measures(
         table = table[table["component_labels"].isin(component_list)]
 
     # Then, open the volumes.
-    image = read_image_data(image_path, image_key)
-    segmentation = read_image_data(segmentation_path, segmentation_key)
+    image = read_image_data(image_path, image_key, from_s3=s3_flag)
+    segmentation = read_image_data(segmentation_path, segmentation_key, from_s3=s3_flag)
 
     measures = compute_object_measures_impl(
         image, segmentation, n_threads, resolution, table=table, feature_set=feature_set,
