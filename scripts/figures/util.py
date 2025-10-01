@@ -108,12 +108,12 @@ def _get_mapping(animal):
     if animal == "mouse":
         bin_edges = [0, 2, 4, 8, 16, 32, 64, np.inf]
         bin_labels = [
-            "<2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", "32–64 k", ">64 k"
+            "<2", "2–4", "4–8", "8–16", "16–32", "32–64", ">64"
         ]
     elif animal == "gerbil":
         bin_edges = [0, 0.5, 1, 2, 4, 8, 16, 32, np.inf]
         bin_labels = [
-            "<0.5 k", "0.5–1 k", "1–2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", ">32 k"
+            "<0.5", "0.5–1", "1–2", "2–4", "4–8", "8–16", "16–32", ">32"
         ]
     else:
         raise ValueError

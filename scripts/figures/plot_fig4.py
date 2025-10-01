@@ -274,7 +274,7 @@ def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=
     main_label_size = 20
     sub_label_size = 16
     main_tick_size = 16
-    legendsize = 12
+
     offset = 0.08
     x_left = 1
     x_right = 2
@@ -390,9 +390,8 @@ def fig_04d(chreef_data, save_path, plot=False, grouping="animal", intensity=Fal
     main_label_size = 20
     sub_label_size = 16
     main_tick_size = 16
-    legendsize = 12
 
-    label = "Intensity" if intensity else "Transduction efficiency"
+    label = "Intensity" if intensity else "Expression efficiency"
     x_left = 1
     x_right = 2
     offset = 0.08
@@ -515,6 +514,11 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
             trendline_std=False):
     prism_style()
 
+    if gerbil:
+        animal = "gerbil"
+    else:
+        animal = "mouse"
+
     result = {"cochlea": [], "octave_band": [], "value": []}
     aliases = []
     for name, values in chreef_data.items():
@@ -526,10 +530,10 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
         freq = values["frequency[kHz]"].values
         if intensity:
             intensity_values = values["median"].values
-            octave_binned = frequency_mapping(freq, intensity_values, animal="mouse")
+            octave_binned = frequency_mapping(freq, intensity_values, animal=animal)
         else:
             marker_labels = values["marker_labels"].values
-            octave_binned = frequency_mapping(freq, marker_labels, animal="mouse", transduction_efficiency=True)
+            octave_binned = frequency_mapping(freq, marker_labels, animal=animal, transduction_efficiency=True)
 
         result["cochlea"].extend([alias] * len(octave_binned))
         result["octave_band"].extend(octave_binned.axes[0].values.tolist())
@@ -562,8 +566,8 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
     fig, ax = plt.subplots(figsize=(8, 5))
 
     sub_tick_label_size = 8
-    tick_label_size = 12
-    label_size = 12
+    tick_label_size = 14
+    label_size = 20
     legend_size = 8
     if intensity:
         band_label_offset_y = 0.09
@@ -575,7 +579,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
             ax.set_ylim(0.45, 1.05)
 
     # Offsets within each octave band
-    offset_map = {"L": -0.18, "R": 0.18}
+    offset_map = {"L": -0.2, "R": 0.2}
 
     # Assign a color to each cochlea (ignoring side)
     cochleas = sorted({name_lr[:-1] for name_lr in result["cochlea"].unique()})
@@ -650,6 +654,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                                    }
 
     if trendlines:
+        trendline_width = 3
         if not gerbil:
             def get_trendline_values(trend_dict, side):
                 x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side][0]
@@ -676,8 +681,9 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                 y_sorted,
                 linestyle="dotted",
                 color=color_trend_l,
-                alpha=0.7,
-                zorder=0
+                alpha=0.6,
+                linewidth=trendline_width,
+                zorder=2
             )
 
             if trendline_std:
@@ -710,6 +716,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                 linestyle="dashed",
                 color=color_trend_r,
                 alpha=0.7,
+                linewidth=trendline_width,
                 zorder=0
             )
 
@@ -791,7 +798,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
         ax.set_ylabel("Marker Intensity", fontsize=label_size)
         ax.set_title("Intensity per octave band (Left/Right)")
     else:
-        ax.set_ylabel("Transduction Efficiency", fontsize=label_size)
+        ax.set_ylabel("Expression efficiency", fontsize=label_size)
 
     if grouping == "side_mono":
         ax.legend(title="Cochlea", fontsize=legend_size)
@@ -835,7 +842,7 @@ def main():
                 save_path=os.path.join(args.figure_dir, f"fig_04_legend_animal.{FILE_EXTENSION}"))
 
     # Create the panels:
-    grouping = "side_multi"
+    grouping = "animal"
 
     # C: The SGN count compared to reference values from literature and healthy
     # Maybe remove literature reference from plot?

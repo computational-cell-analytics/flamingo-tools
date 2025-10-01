@@ -118,6 +118,119 @@ def fig_02b_ihc(save_dir, plot=False):
 
         plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
 
+def supp_fig_02(save_path, plot=False, segm="SGN"):
+    # SGN
+    value_dict = {
+        "SGN": {
+            "distance_unet" : {
+                "label" : "CochleaNet",
+                "precision": 0.886,
+                "recall" : 0.804,
+                "f1-score": 0.837
+            },
+            "micro_sam" : {
+                "label" : "µSAM",
+                "precision": 0.140,
+                "recall" : 0.782,
+                "f1-score": 0.228
+            },
+            "cellpose_sam" : {
+                "label" : "Cellpose-SAM",
+                "precision": 0.250,
+                "recall" : 0.003,
+                "f1-score": 0.005
+            },
+            "cellpose_3" : {
+                "label" : "Cellpose 3",
+                "precision": 0.117,
+                "recall" : 0.607,
+                "f1-score": 0.186
+            },
+            "stardist" : {
+                "label" : "Stardist",
+                "precision": 0.706,
+                "recall" : 0.630,
+                "f1-score": 0.628
+            },
+        },
+        "IHC": {
+            "distance_unet" : {
+                "label" : "CochleaNet",
+                "precision": 0.664,
+                "recall" : 	0.661,
+                "f1-score": 0.659
+            },
+            "micro_sam" : {
+                "label" : "µSAM",
+                "precision": 0.053,
+                "recall" : 0.684,
+                "f1-score": 0.094
+            },
+            "cellpose_sam" : {
+                "label" : "Cellpose-SAM",
+                "precision": 0.636,
+                "recall" : 0.025,
+                "f1-score": 0.047
+            },
+            "cellpose_3" : {
+                "label" : "Cellpose 3",
+                "precision": 0.375,
+                "recall" : 0.554,
+                "f1-score": 0.329
+            },
+        }
+    }
+
+    # SGN
+    precision = [value_dict[segm][key]["precision"] for key in value_dict[segm].keys()]
+    recall = [value_dict[segm][key]["recall"] for key in value_dict[segm].keys()]
+    f1 = [value_dict[segm][key]["f1-score"] for key in value_dict[segm].keys()]
+    labels = [value_dict[segm][key]["label"] for key in value_dict[segm].keys()]
+
+    x_pos = np.array([i * 2 for i in range(len(precision))])
+
+    # Convert setting labels to numerical x positions
+    x = np.array([0.8, 1.2, 1.8, 2.2, 3])
+    x_manual = np.array([0.8, 1.8])
+    x_automatic = np.array([1.2, 2.2, 3])
+    offset = 0.08  # horizontal shift for scatter separation
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    main_label_size = 22
+    main_tick_size = 16
+
+    color_p = "#3AA67E"
+    color_r = "#438CA7"
+    color_f = "#694BA6"
+
+    plt.scatter(x_pos - offset, precision, label="Precision", color=color_p, marker="^", s=80)
+    plt.scatter(x_pos,          recall, label="Recall", color=color_r, marker="o", s=80)
+    plt.scatter(x_pos + offset, f1, label="F1-score manual", color=color_f, marker="s", s=80)
+
+    # Labels and formatting
+    plt.xticks(x_pos, labels, fontsize=16)
+    plt.yticks(fontsize=main_tick_size)
+    plt.ylabel("Value", fontsize=main_label_size)
+    plt.ylim(-0.1, 1)
+    # plt.legend(loc="lower right", fontsize=legendsize)
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+
+    plt.tight_layout()
+    prism_cleanup_axes(ax)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+
+    if plot:
+        plt.show()
+    else:
+        plt.close()
+
+
 
 def fig_02c(save_path, plot=False, all_versions=False):
     """Scatter plot showing the precision, recall, and F1-score of SGN (distance U-Net, manual),
@@ -128,9 +241,7 @@ def fig_02c(save_path, plot=False, all_versions=False):
     sgn_unet = [0.887, 0.88, 0.884]
     sgn_annotator = [0.95, 0.849, 0.9]
 
-    ihc_v4b = [0.91, 0.819, 0.862]
     ihc_v4c = [0.905, 0.831, 0.866]
-    ihc_v4c_filter = [0.919, 0.775, 0.841]
 
     ihc_annotator = [0.958, 0.956, 0.957]
     syn_unet = [0.931, 0.905, 0.918]
@@ -186,8 +297,7 @@ def fig_02c(save_path, plot=False, all_versions=False):
     plt.yticks(fontsize=main_tick_size)
     plt.ylabel("Value", fontsize=main_label_size)
     plt.ylim(0.76, 1)
-    plt.legend(loc="lower right",
-                fontsize=legendsize)
+    # plt.legend(loc="lower right", fontsize=legendsize)
     plt.grid(axis="y", linestyle="--", alpha=0.5)
 
     plt.tight_layout()
@@ -420,6 +530,9 @@ def main():
 
     # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
+
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn.{FILE_EXTENSION}"), segm="SGN")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc.{FILE_EXTENSION}"), segm="IHC")
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
     fig_02d_01(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
