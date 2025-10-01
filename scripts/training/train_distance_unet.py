@@ -38,7 +38,7 @@ def get_image_and_label_paths(root):
             label_paths.append(label_path)
 
     assert len(image_paths) == len(label_paths)
-    return image_paths, label_paths
+    return image_paths, label_paths, None
 
 
 def get_image_and_label_paths_sep_folders(root):
@@ -46,10 +46,11 @@ def get_image_and_label_paths_sep_folders(root):
     label_paths = sorted(glob(os.path.join(root, "labels", "**", "*.tif"), recursive=True))
     assert len(image_paths) == len(label_paths)
 
-    return image_paths, label_paths
+    stratify = [os.path.basename(os.path.dirname(f)) for f in image_paths]
+    return image_paths, label_paths, stratify
 
 
-def select_paths(image_paths, label_paths, split, filter_empty, random_split=True):
+def select_paths(image_paths, label_paths, split, filter_empty, stratify, random_split=True):
     if filter_empty:
         image_paths = [imp for imp in image_paths if "empty" not in imp]
         label_paths = [imp for imp in label_paths if "empty" not in imp]
@@ -60,12 +61,16 @@ def select_paths(image_paths, label_paths, split, filter_empty, random_split=Tru
 
     n_train = int(train_fraction * n_files)
     if split == "train" and random_split:
-        image_paths, _, label_paths, _ = train_test_split(image_paths, label_paths, train_size=n_train, random_state=42)
+        image_paths, _, label_paths, _ = train_test_split(
+            image_paths, label_paths, train_size=n_train, random_state=42, stratify=stratify
+        )
     elif split == "train":
         image_paths = image_paths[:n_train]
         label_paths = label_paths[:n_train]
     elif split == "val" and random_split:
-        _, image_paths, _, label_paths = train_test_split(image_paths, label_paths, train_size=n_train, random_state=42)
+        _, image_paths, _, label_paths = train_test_split(
+            image_paths, label_paths, train_size=n_train, random_state=42, stratify=stratify
+        )
     elif split == "val":
         image_paths = image_paths[n_train:]
         label_paths = label_paths[n_train:]
@@ -75,13 +80,14 @@ def select_paths(image_paths, label_paths, split, filter_empty, random_split=Tru
 
 def get_loader(root, split, patch_shape, batch_size, filter_empty, separate_folders, anisotropy):
     if separate_folders:
-        image_paths, label_paths = get_image_and_label_paths_sep_folders(root)
+        image_paths, label_paths, stratify = get_image_and_label_paths_sep_folders(root)
     else:
-        image_paths, label_paths = get_image_and_label_paths(root)
-    this_image_paths, this_label_paths = select_paths(image_paths, label_paths, split, filter_empty)
+        image_paths, label_paths, stratify = get_image_and_label_paths(root)
+    this_image_paths, this_label_paths = select_paths(image_paths, label_paths, split, filter_empty, stratify=stratify)
 
     assert len(this_image_paths) == len(this_label_paths)
     assert len(this_image_paths) > 0
+    print(split, ":", len(this_image_paths), "image crops")
 
     if split == "train":
         n_samples = 250 * batch_size
@@ -133,10 +139,11 @@ def main():
 
     # Parameters for training on A100.
     n_iterations = int(1e5)
-    patch_shape = (48, 128, 128)
+    patch_shape = (48, 128, 128) if anisotropy is None else (24, 128, 128)
 
     # The U-Net.
-    model = get_3d_model()
+    scale_factors = None if args.anisotropy is None else [[1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]
+    model = get_3d_model(scale_factors=scale_factors)
 
     # Create the training loader with train and val set.
     train_loader, train_images, train_labels = get_loader(

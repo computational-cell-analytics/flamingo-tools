@@ -1,12 +1,14 @@
-from typing import Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import torch.nn as nn
 import torch_em
-from torch_em.model import UNet3d
+from torch_em.model import UNet3d, AnisotropicUNet
 from torch.utils.data import DataLoader
 
 
-def get_3d_model(out_channels: int = 3, final_activation: Optional[str] = "Sigmoid") -> nn.Module:
+def get_3d_model(
+    out_channels: int = 3, final_activation: Optional[str] = "Sigmoid", scale_factors: Optional[List[List[int]]] = None
+) -> nn.Module:
     """Get a 3D U-Net for segmentation or detection tasks.
 
     Args:
@@ -17,7 +19,13 @@ def get_3d_model(out_channels: int = 3, final_activation: Optional[str] = "Sigmo
     Returns:
         The 3D U-Net.
     """
-    return UNet3d(in_channels=1, out_channels=out_channels, initial_features=32, final_activation=final_activation)
+    if scale_factors is None:
+        return UNet3d(in_channels=1, out_channels=out_channels, initial_features=32, final_activation=final_activation)
+    else:
+        return AnisotropicUNet(
+            in_channels=1, out_channels=out_channels, initial_features=32,
+            final_activation=final_activation, scale_factors=scale_factors
+        )
 
 
 def get_supervised_loader(
@@ -57,6 +65,6 @@ def get_supervised_loader(
     loader = torch_em.default_segmentation_loader(
         raw_paths=image_paths, raw_key=image_key, label_paths=label_paths, label_key=label_key,
         batch_size=batch_size, patch_shape=patch_shape, label_transform=label_transform,
-        n_samples=n_samples, num_workers=4, shuffle=True, sampler=sampler
+        n_samples=n_samples, num_workers=8, shuffle=True, sampler=sampler
     )
     return loader
