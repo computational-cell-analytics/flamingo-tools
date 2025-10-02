@@ -571,6 +571,8 @@ def run_unet_prediction_slurm(
     """
     os.makedirs(output_folder, exist_ok=True)
     prediction_instances = int(prediction_instances)
+    if isinstance(scale, str):
+        scale = float(scale)
     slurm_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
 
     if s3 is not None:
