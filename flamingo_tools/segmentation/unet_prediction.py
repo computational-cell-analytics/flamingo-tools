@@ -281,7 +281,7 @@ def distance_watershed_implementation(
     input_path: str,
     output_folder: Optional[str] = None,
     min_size: int = 1000,
-    center_distance_threshold: float = 0.4,
+    center_distance_threshold: Optional[float] = 0.4,
     boundary_distance_threshold: Optional[float] = None,
     fg_threshold: float = 0.5,
     distance_smoothing: float = 0.0,
@@ -342,12 +342,16 @@ def distance_watershed_implementation(
         )
 
     # Compute the seed inputs:
-    # First, threshold the center distances.
-    seed_inputs = ThresholdWrapper(center_distances, threshold=center_distance_threshold, operator=np.less)
-    # Then, if a boundary distance threshold was passed threshold the boundary distances and combine both.
-    if boundary_distance_threshold is not None:
+    if boundary_distance_threshold is None and center_distance_threshold is None:
+        raise ValueError("Either boundary_distance_threshold, center_distance_threshold, or both have to be specifie.")
+    elif boundary_distance_threshold is None:
+        seed_inputs = ThresholdWrapper(center_distances, threshold=center_distance_threshold, operator=np.less)
+    elif center_distance_threshold is None:
+        seed_inputs = ThresholdWrapper(boundary_distances, threshold=boundary_distance_threshold, operator=np.less)
+    else:
+        seed_inputs1 = ThresholdWrapper(center_distances, threshold=center_distance_threshold, operator=np.less)
         seed_inputs2 = ThresholdWrapper(boundary_distances, threshold=boundary_distance_threshold, operator=np.less)
-        seed_inputs = MultiTransformationWrapper(np.logical_and, seed_inputs, seed_inputs2)
+        seed_inputs = MultiTransformationWrapper(np.logical_and, seed_inputs1, seed_inputs2)
 
     # Compute the seeds via connected components on the seed inputs.
     parallel.label(
@@ -611,6 +615,7 @@ def run_unet_segmentation_slurm(
     boundary_distance_threshold: float = 0.5,
     fg_threshold: float = 0.5,
     distance_smoothing: float = 0.0,
+    original_shape: Optional[Tuple[int, int, int]] = None,
 ) -> None:
     """Create segmentation from prediction.
 
@@ -623,9 +628,10 @@ def run_unet_segmentation_slurm(
         fg_threshold: The threshold applied to the foreground prediction for deriving the watershed mask.
         distance_smoothing: The sigma value for smoothing the distance predictions with a gaussian kernel.
             This may help to reduce border artifacts. If set to 0 (the default) smoothing is not applied.
+        original_shape: The original shape of the output, in case the prediction was resized.
     """
     min_size = int(min_size)
-    center_distance_threshold = float(center_distance_threshold)
+    center_distance_threshold = None if center_distance_threshold is None else float(center_distance_threshold)
     boundary_distance_threshold = float(boundary_distance_threshold)
     distance_smoothing = float(distance_smoothing)
     pmap_out = os.path.join(output_folder, "predictions.zarr")
@@ -633,4 +639,5 @@ def run_unet_segmentation_slurm(
                                       boundary_distance_threshold=boundary_distance_threshold,
                                       fg_threshold=fg_threshold,
                                       distance_smoothing=distance_smoothing,
-                                      min_size=min_size)
+                                      min_size=min_size,
+                                      original_shape=original_shape)
