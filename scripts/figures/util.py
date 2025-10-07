@@ -5,6 +5,7 @@ import pandas as pd
 # Directory with synapse measurement tables
 SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
 # SYNAPSE_DIR_ROOT = "./synapses"
+png_dpi = 300
 
 
 def ax_prism_boxplot(ax, data, positions=None, color="tab:blue"):
@@ -43,6 +44,28 @@ prism_palette = [
     "#9C755F",  # brown
     "#BAB0AC"   # gray
 ]
+
+
+def custom_formatter_1(x, pos):
+    if np.isclose(x, 1.0):
+        return '1'  # no decimal
+    else:
+        return f"{x:.1f}"
+
+
+def custom_formatter_2(x, pos):
+    if np.isclose(x, 1.0):
+        return '1'  # no decimal
+    else:
+        return f"{x:.2f}"
+
+
+def export_legend(legend, filename="legend.png"):
+    legend.axes.axis("off")
+    fig = legend.figure
+    fig.canvas.draw()
+    bbox = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(filename, bbox_inches=bbox, dpi=png_dpi)
 
 
 def prism_style():

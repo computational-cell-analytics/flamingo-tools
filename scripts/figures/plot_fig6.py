@@ -34,8 +34,8 @@ def fig_06b(save_path, plot=False):
 
     fig, ax = plt.subplots(rows, columns, figsize=(columns*3, rows*4))
 
-    sgn_values = [20050, 21995]
-    ihc_values = [1100]
+    sgn_values = [18541]
+    ihc_values = [1180]
 
     ax[0].boxplot(sgn_values)
     ax[1].boxplot(ihc_values)
@@ -88,7 +88,7 @@ def fig_06b(save_path, plot=False):
     y_ticks = [i for i in range((((ylim0 - 1) // ytick_gap) + 1) * ytick_gap, ylim1 + 1, ytick_gap)]
 
     ax[2].boxplot(ribbon_synapse_counts)
-    ax[2].set_xticklabels(["Ribbon Syn. per IHC"], fontsize=main_label_size)
+    ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
     ax[2].set_yticks(y_ticks)
     ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
     ax[2].set_ylim(ylim0, ylim1)

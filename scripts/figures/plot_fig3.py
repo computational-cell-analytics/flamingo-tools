@@ -14,6 +14,7 @@ from matplotlib import cm, colors
 
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT
+from util import prism_style, prism_cleanup_axes, export_legend
 
 INPUT_ROOT = "/home/martin/Documents/lightsheet-cochlea/M_LR_000227_R"
 
@@ -166,7 +167,13 @@ def fig_03c_rl(save_path, plot=False):
 
     width = 50  # micron
 
-    for tab_path in tables:
+    colors = ["#664970",    # M01L
+              "#704954",    # M01R
+              "#537049",    # M02L
+              "#49705B",    # M02R
+              ]
+
+    for num, tab_path in enumerate(tables):
         # TODO map to alias
         alias = os.path.basename(tab_path)[10:-4].replace("_", "").replace("0", "")
         tab = pd.read_csv(tab_path, sep="\t")
@@ -175,7 +182,7 @@ def fig_03c_rl(save_path, plot=False):
 
         # Compute the running sum of 10 micron.
         run_length, syn_count_running = sliding_runlength_sum(run_length, syn_count, width=width)
-        ax.plot(run_length, syn_count_running, label=alias)
+        ax.plot(run_length, syn_count_running, label=alias, color=colors[num])
 
     ax.set_xlabel("Length [µm]")
     ax.set_ylabel("Synapse Count")
@@ -194,10 +201,86 @@ def fig_03c_rl(save_path, plot=False):
         plt.close()
 
 
-def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True):
+def plot_legend_fig03c(figure_dir):
+    color_dict = {
+        "M01L": "#9C5027",
+        "M01R": "#279C52",
+        "M02L": "#67279C",
+        "M02R": "#27339C",
+    }
+    save_path = os.path.join(figure_dir, f"fig_03c_legend.{FILE_EXTENSION}")
+    marker = ["o" for _ in color_dict]
+    label = list(color_dict.keys())
+    color = [color_dict[key] for key in color_dict.keys()]
+
+    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
+    handles = [f(m, c) for (c, m) in zip(color, marker)]
+    legend = plt.legend(handles, label, loc=3, ncol=2, framealpha=1, frameon=False)
+    export_legend(legend, save_path)
+    legend.remove()
+    plt.close()
+
+
+def _get_trendline_params3(y_values):
+    means = []
+    std = []
+    for i in range(len(y_values[0])):
+        means.append(np.mean([yval[i] for yval in y_values]))
+        std.append(np.std([yval[i] for yval in y_values]))
+    return means, std
+
+
+def _get_trendline_dict(trend_dict,):
+    x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys()]
+    x_dict = {}
+    for num in range(len(x_sorted[0])):
+        x_dict[num] = {"pos": num, "values": []}
+
+    for s in x_sorted:
+        for num, pos in enumerate(s):
+            x_dict[num]["values"].append(pos)
+
+    y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys()]
+    y_dict = {}
+    for num in range(len(x_sorted[0])):
+        y_dict[num] = {"pos": num, "values": []}
+
+    for num in range(len(x_sorted[0])):
+        y_dict[num]["mean"] = np.mean([y[num] for y in y_sorted_all])
+        y_dict[num]["stdv"] = np.std([y[num] for y in y_sorted_all])
+    return x_dict, y_dict
+
+
+def _get_trendline_params(trend_dict):
+    x_dict, y_dict = _get_trendline_dict(trend_dict)
+
+    x_values = []
+    for key in x_dict.keys():
+        x_values.append(min(x_dict[key]["values"]))
+        x_values.append(max(x_dict[key]["values"]))
+
+    y_values_center = []
+    y_values_upper = []
+    y_values_lower = []
+    for key in y_dict.keys():
+        y_values_center.append(y_dict[key]["mean"])
+        y_values_center.append(y_dict[key]["mean"])
+
+        y_values_upper.append(y_dict[key]["mean"] + y_dict[key]["stdv"])
+        y_values_upper.append(y_dict[key]["mean"] + y_dict[key]["stdv"])
+
+        y_values_lower.append(y_dict[key]["mean"] - y_dict[key]["stdv"])
+        y_values_lower.append(y_dict[key]["mean"] - y_dict[key]["stdv"])
+
+    return x_values, y_values_center, y_values_upper, y_values_lower
+
+
+def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendline=False):
     ihc_version = "ihc_counts_v4c"
+    prism_style()
     tables = glob(os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_LR*.tsv"))
     assert len(tables) == 4, len(tables)
+    label_size = 20
 
     result = {"cochlea": [], "octave_band": [], "value": []}
     for name, values in tonotopic_data.items():
@@ -219,17 +302,76 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True):
     band_to_x = {band: i for i, band in enumerate(bin_labels)}
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
+    colors = {
+        "M01L": "#9C5027",
+        "M01R": "#279C52",
+        "M02L": "#67279C",
+        "M02R": "#27339C",
+    }
+
     fig, ax = plt.subplots(figsize=(8, 4))
-    for name, grp in result.groupby("cochlea"):
-        ax.scatter(grp["x_pos"], grp["value"], label=name, s=60, alpha=0.8)
+
+    offset = 0.08
+    y_values = []
+    trend_dict = {}
+    for num, (name, grp) in enumerate(result.groupby("cochlea")):
+        x_sorted = grp["x_pos"]
+        x_positions = [x - len(grp["x_pos"]) // 2 * offset + offset * num for x in grp["x_pos"]]
+        ax.scatter(x_positions, grp["value"], marker="o", label=name, s=80, alpha=1, color=colors[name])
+
+        # y_values.append(list(grp["value"]))
+
+        if trendline:
+            sorted_idx = np.argsort(x_positions)
+            x_sorted = np.array(x_positions)[sorted_idx]
+            y_sorted = np.array(grp["value"])[sorted_idx]
+            trend_dict[name] = {"x_sorted": x_sorted,
+                                "y_sorted": y_sorted,
+                                }
 
     ax.set_xticks(range(len(bin_labels)))
     ax.set_xticklabels(bin_labels)
-    ax.set_xlabel("Octave band (kHz)")
+    ax.set_xlabel("Octave band [kHz]", fontsize=label_size)
 
-    ax.set_ylabel("Average Ribbon Synapse Count per IHC")
-    ax.set_title("Ribbon synapse count per octave band")
-    plt.legend(title="Cochlea")
+    # central line
+    if trendline:
+        #mean, std = _get_trendline_params(y_values)
+        x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict)
+        trend_center, = ax.plot(
+            x_sorted,
+            y_sorted,
+            linestyle="dotted",
+            color="gray",
+            alpha=0.6,
+            linewidth=3,
+            zorder=2
+        )
+        # y_sorted_upper = np.array(mean) + np.array(std)
+        # y_sorted_lower = np.array(mean) - np.array(std)
+        # upper and lower standard deviation
+        trend_upper, = ax.plot(
+            x_sorted,
+            y_sorted_upper,
+            linestyle="solid",
+            color="gray",
+            alpha=0.08,
+            zorder=0
+        )
+        trend_lower, = ax.plot(
+            x_sorted,
+            y_sorted_lower,
+            linestyle="solid",
+            color="gray",
+            alpha=0.08,
+            zorder=0
+        )
+        plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper,
+                         color="gray", alpha=0.05, interpolate=True)
+
+    ax.set_ylabel("Ribbon synapses per IHC")
+    # plt.legend(title="Cochlea")
+    plt.tight_layout()
+    prism_cleanup_axes(ax)
 
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
@@ -320,15 +462,17 @@ def main():
 
     # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
     cmap = "plasma"
-    fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap_{cmap}.{FILE_EXTENSION}"),
-            plot=args.plot, plot_napari=True, cmap=cmap)
+    # fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap_{cmap}.{FILE_EXTENSION}"),
+    #         plot=args.plot, plot_napari=True, cmap=cmap)
 
     # Panel C: Spatial distribution of synapses across the cochlea.
     # We have two options: running sum over the runlength or per octave band
     # fig_03c_rl(save_path=os.path.join(args.figure_dir, f"fig_03c_runlength.{FILE_EXTENSION}"), plot=args.plot)
     fig_03c_octave(tonotopic_data=tonotopic_data,
-                    save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
-                    plot=args.plot)
+                   save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
+                   plot=args.plot, trendline=True)
+
+    plot_legend_fig03c(args.figure_dir)
 
     # Panel D: Spatial distribution of SGN sub-types.
     # fig_03d_fraction(save_path=os.path.join(args.figure_dir, f"fig_03d_fraction.{FILE_EXTENSION}"), plot=args.plot)

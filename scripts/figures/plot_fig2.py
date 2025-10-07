@@ -4,15 +4,21 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from matplotlib.lines import Line2D
 import tifffile
 from matplotlib import colors
 from skimage.segmentation import find_boundaries
 
 from util import literature_reference_values, SYNAPSE_DIR_ROOT
-from util import prism_style, prism_cleanup_axes
+from util import prism_style, prism_cleanup_axes, export_legend, custom_formatter_2
 
 png_dpi = 300
 FILE_EXTENSION = "png"
+
+COLOR_P = "#9C5027"
+COLOR_R = "#67279C"
+COLOR_F = "#9C276F"
 
 
 def scramble_instance_labels(arr):
@@ -118,64 +124,65 @@ def fig_02b_ihc(save_dir, plot=False):
 
         plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
 
+
 def supp_fig_02(save_path, plot=False, segm="SGN"):
     # SGN
     value_dict = {
         "SGN": {
-            "distance_unet" : {
-                "label" : "CochleaNet",
+            "distance_unet": {
+                "label": "CochleaNet",
                 "precision": 0.886,
-                "recall" : 0.804,
+                "recall": 0.804,
                 "f1-score": 0.837
             },
-            "micro_sam" : {
-                "label" : "µSAM",
+            "micro_sam": {
+                "label": "µSAM",
                 "precision": 0.140,
-                "recall" : 0.782,
+                "recall": 0.782,
                 "f1-score": 0.228
             },
-            "cellpose_sam" : {
-                "label" : "Cellpose-SAM",
+            "cellpose_sam": {
+                "label": "Cellpose-SAM",
                 "precision": 0.250,
-                "recall" : 0.003,
+                "recall": 0.003,
                 "f1-score": 0.005
             },
-            "cellpose_3" : {
-                "label" : "Cellpose 3",
+            "cellpose_3": {
+                "label": "Cellpose 3",
                 "precision": 0.117,
-                "recall" : 0.607,
+                "recall": 0.607,
                 "f1-score": 0.186
             },
-            "stardist" : {
-                "label" : "Stardist",
+            "stardist": {
+                "label": "Stardist",
                 "precision": 0.706,
-                "recall" : 0.630,
+                "recall": 0.630,
                 "f1-score": 0.628
             },
         },
         "IHC": {
-            "distance_unet" : {
-                "label" : "CochleaNet",
+            "distance_unet": {
+                "label": "CochleaNet",
                 "precision": 0.664,
-                "recall" : 	0.661,
+                "recall": 	0.661,
                 "f1-score": 0.659
             },
-            "micro_sam" : {
-                "label" : "µSAM",
+            "micro_sam": {
+                "label": "µSAM",
                 "precision": 0.053,
-                "recall" : 0.684,
+                "recall": 0.684,
                 "f1-score": 0.094
             },
-            "cellpose_sam" : {
-                "label" : "Cellpose-SAM",
+            "cellpose_sam": {
+                "label": "Cellpose-SAM",
                 "precision": 0.636,
-                "recall" : 0.025,
+                "recall": 0.025,
                 "f1-score": 0.047
             },
-            "cellpose_3" : {
-                "label" : "Cellpose 3",
+            "cellpose_3": {
+                "label": "Cellpose 3",
                 "precision": 0.375,
-                "recall" : 0.554,
+                "recall": 0.554,
                 "f1-score": 0.329
             },
         }
@@ -190,9 +197,6 @@ def supp_fig_02(save_path, plot=False, segm="SGN"):
     x_pos = np.array([i * 2 for i in range(len(precision))])
 
     # Convert setting labels to numerical x positions
-    x = np.array([0.8, 1.2, 1.8, 2.2, 3])
-    x_manual = np.array([0.8, 1.8])
-    x_automatic = np.array([1.2, 2.2, 3])
     offset = 0.08  # horizontal shift for scatter separation
 
     # Plot
@@ -201,13 +205,9 @@ def supp_fig_02(save_path, plot=False, segm="SGN"):
     main_label_size = 22
     main_tick_size = 16
 
-    color_p = "#3AA67E"
-    color_r = "#438CA7"
-    color_f = "#694BA6"
-
-    plt.scatter(x_pos - offset, precision, label="Precision", color=color_p, marker="^", s=80)
-    plt.scatter(x_pos,          recall, label="Recall", color=color_r, marker="o", s=80)
-    plt.scatter(x_pos + offset, f1, label="F1-score manual", color=color_f, marker="s", s=80)
+    plt.scatter(x_pos - offset, precision, label="Precision", color=COLOR_P, marker="^", s=80)
+    plt.scatter(x_pos,          recall, label="Recall", color=COLOR_R, marker="o", s=80)
+    plt.scatter(x_pos + offset, f1, label="F1-score manual", color=COLOR_F, marker="s", s=80)
 
     # Labels and formatting
     plt.xticks(x_pos, labels, fontsize=16)
@@ -215,7 +215,7 @@ def supp_fig_02(save_path, plot=False, segm="SGN"):
     plt.ylabel("Value", fontsize=main_label_size)
     plt.ylim(-0.1, 1)
     # plt.legend(loc="lower right", fontsize=legendsize)
-    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.grid(axis="y", linestyle="solid", alpha=0.5)
 
     plt.tight_layout()
     prism_cleanup_axes(ax)
@@ -230,6 +230,44 @@ def supp_fig_02(save_path, plot=False, segm="SGN"):
     else:
         plt.close()
 
+
+def plot_legend_fig02c(figure_dir):
+    """Plot common legend for figure 2c.
+
+    Args:
+        chreef_data: Data of ChReef cochleae.
+        save_path: save path to save legend.
+        grouping: Grouping for cochleae.
+            "side_mono" for division in Injected and Non-Injected.
+            "side_multi" for division per cochlea.
+            "animal" for division per animal.
+        use_alias: Use alias.
+    """
+    save_path_shapes = os.path.join(figure_dir, f"fig_02c_legend_shapes.{FILE_EXTENSION}")
+    save_path_colors = os.path.join(figure_dir, f"fig_02c_legend_colors.{FILE_EXTENSION}")
+
+    # Shapes
+    color = ["black", "black"]
+    marker = ["o", "s"]
+    label = ["Manual", "Automatic"]
+
+    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
+    handles = [f(m, c) for (c, m) in zip(color, marker)]
+    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+    export_legend(legend, save_path_shapes)
+    legend.remove()
+    plt.close()
+
+    # Colors
+    color = [COLOR_P, COLOR_R, COLOR_F]
+    label = ["Precision", "Recall", "F1-score"]
+
+    fl = lambda c: Line2D([], [], lw=3, color=c)
+    handles = [fl(c) for c in color]
+    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+    export_legend(legend, save_path_colors)
+    legend.remove()
+    plt.close()
 
 
 def fig_02c(save_path, plot=False, all_versions=False):
@@ -261,44 +299,33 @@ def fig_02c(save_path, plot=False, all_versions=False):
     recall_automatic = [i[1] for i in automatic]
     f1score_automatic = [i[2] for i in automatic]
 
-    descr_y = 0.72
-
     # Convert setting labels to numerical x positions
-    x = np.array([0.8, 1.2, 1.8, 2.2, 3])
     x_manual = np.array([0.8, 1.8])
     x_automatic = np.array([1.2, 2.2, 3])
     offset = 0.08  # horizontal shift for scatter separation
 
     # Plot
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(8, 4.5))
 
-    main_label_size = 22
-    sub_label_size = 16
+    main_label_size = 20
     main_tick_size = 16
-    legendsize = 18
 
-    color_pm = "#3AA67E"
-    color_pa = "#17E69A"
-    color_rm = "#438CA7"
-    color_ra = "#17AEE6"
-    color_fm = "#694BA6"
-    color_fa = "#6322E6"
+    plt.scatter(x_manual - offset, precision_manual, label="Precision manual", color=COLOR_P, marker="o", s=80)
+    plt.scatter(x_manual,         recall_manual, label="Recall manual", color=COLOR_R, marker="o", s=80)
+    plt.scatter(x_manual + offset, f1score_manual, label="F1-score manual", color=COLOR_F, marker="o", s=80)
 
-    plt.scatter(x_manual - offset, precision_manual, label="Precision manual", color=color_pm, marker="o", s=80)
-    plt.scatter(x_manual,         recall_manual, label="Recall manual", color=color_rm, marker="o", s=80)
-    plt.scatter(x_manual + offset, f1score_manual, label="F1-score manual", color=color_fm, marker="o", s=80)
-
-    plt.scatter(x_automatic - offset, precision_automatic, label="Precision automatic", color=color_pa, marker="s", s=80)
-    plt.scatter(x_automatic,         recall_automatic, label="Recall automatic", color=color_ra, marker="s", s=80)
-    plt.scatter(x_automatic + offset, f1score_automatic, label="F1-score automatic", color=color_fa, marker="s", s=80)
+    plt.scatter(x_automatic - offset, precision_automatic, label="Precision automatic", color=COLOR_P, marker="s", s=80)
+    plt.scatter(x_automatic,         recall_automatic, label="Recall automatic", color=COLOR_R, marker="s", s=80)
+    plt.scatter(x_automatic + offset, f1score_automatic, label="F1-score automatic", color=COLOR_F, marker="s", s=80)
 
     # Labels and formatting
-    plt.xticks([1,2,3], setting, fontsize=main_label_size)
+    plt.xticks([1, 2, 3], setting, fontsize=main_label_size)
     plt.yticks(fontsize=main_tick_size)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(custom_formatter_2))
     plt.ylabel("Value", fontsize=main_label_size)
     plt.ylim(0.76, 1)
     # plt.legend(loc="lower right", fontsize=legendsize)
-    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.grid(axis="y", linestyle="solid", alpha=0.5)
 
     plt.tight_layout()
     prism_cleanup_axes(ax)
@@ -329,27 +356,21 @@ def _load_ribbon_synapse_counts():
 def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_synapses=False):
     """Box plot showing the counts for SGN and IHC per (mouse) cochlea in comparison to literature values.
     """
-    main_tick_size = 20
-    main_label_size = 26
+    prism_style()
+    main_tick_size = 16
+    main_label_size = 20
 
     rows = 1
     columns = 3 if plot_average_ribbon_synapses else 2
 
     sgn_values = [11153, 11398, 10333, 11820]
-    ihc_v4b_values = [836, 808, 796, 901]
     ihc_v4c_values = [712, 710, 721, 675]
-    ihc_v4c_filtered_values = [562, 647, 626, 628]
 
-    if all_versions:
-        ihc_list = [ihc_v4b_values, ihc_v4c_values, ihc_v4c_filtered_values]
-        suffixes = ["_v4b", "_v4c", "_v4c_filtered"]
-        assert not plot_average_ribbon_synapses
-    else:
-        ihc_list = [ihc_v4c_values]
-        suffixes = ["_v4c"]
+    ihc_list = [ihc_v4c_values]
+    suffixes = ["_v4c"]
 
     for (ihc_values, suffix) in zip(ihc_list, suffixes):
-        fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
+        fig, axes = plt.subplots(rows, columns, figsize=(10, 4.5))
         ax = axes.flatten()
 
         save_path_new = save_path.split(".")[0] + suffix + "." + save_path.split(".")[1]
@@ -376,7 +397,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         lower_y, upper_y = literature_reference_values("SGN")
         ax[0].hlines([lower_y, upper_y], xmin, xmax)
         ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
-                   color="C0", fontsize=main_tick_size, ha="center")
+                   color="C0", fontsize=main_label_size, ha="center")
         ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         ylim0 = 600
@@ -407,7 +428,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             y_ticks = [0, 10, 20, 30, 40, 50]
 
             ax[2].boxplot(ribbon_synapse_counts)
-            ax[2].set_xticklabels(["Ribbon Syn. per IHC"], fontsize=main_label_size)
+            ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
             ax[2].set_yticks(y_ticks)
             ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
             ax[2].set_ylim(ylim0, ylim1)
@@ -421,6 +442,7 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             # ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
             ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
+        prism_cleanup_axes(axes)
         plt.tight_layout()
 
         if ".png" in save_path:
@@ -501,7 +523,7 @@ def fig_02d_02(save_path, filter_zeros=True, plot=False):
 
     plt.title("Average Synapses per IHC for a Dataset of 4 Cochleae")
 
-    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.grid(axis="y", linestyle="solid", alpha=0.5)
     plt.legend(fontsize=legendsize)
     plt.tight_layout()
 
@@ -530,6 +552,7 @@ def main():
 
     # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
+    plot_legend_fig02c(figure_dir=args.figure_dir)
 
     supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn.{FILE_EXTENSION}"), segm="SGN")
     supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc.{FILE_EXTENSION}"), segm="IHC")

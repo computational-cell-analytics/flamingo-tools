@@ -3,13 +3,13 @@ import json
 import os
 import pickle
 
-import matplotlib.markers as mmarkers
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 
-from util import frequency_mapping, prism_style, prism_cleanup_axes  # , literature_reference_values
+from util import frequency_mapping, prism_style, prism_cleanup_axes, export_legend, custom_formatter_1
 
 # from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -34,51 +34,51 @@ COCHLEAE_DICT = {
 }
 
 COLORS_ANIMAL_01 = {
-    "M05" : "#DB3000",
-    "M06" : "#DB0063",
-    "M07" : "#8F00DB",
-    "M08" : "#0004DB",
-    "M09" : "#0093DB"
+    "M05": "#DB3000",
+    "M06": "#DB0063",
+    "M07": "#8F00DB",
+    "M08": "#0004DB",
+    "M09": "#0093DB"
 }
 
 COLORS_ANIMAL = {
-    "M05" : "#9C5027",
-    "M06" : "#279C52",
-    "M07" : "#67279C",
-    "M08" : "#27339C",
-    "M09" : "#9C276F"
+    "M05": "#9C5027",
+    "M06": "#279C52",
+    "M07": "#67279C",
+    "M08": "#27339C",
+    "M09": "#9C276F"
 }
 
 COLORS_LEFT = {
-    "M05R" : "#A600FF",
-    "M06R" : "#8F00DB",
-    "M07R" : "#7D1DB1",
-    "M08R" : "#672D86",
-    "M09R" : "#4C2E5C"
+    "M05R": "#A600FF",
+    "M06R": "#8F00DB",
+    "M07R": "#7D1DB1",
+    "M08R": "#672D86",
+    "M09R": "#4C2E5C"
 }
 
 COLORS_LEFT_01 = {
-    "M05L" : "#00D3DB",
-    "M06L" : "#1DACB1",
-    "M07L" : "#2D8386",
-    "M08L" : "#2E5A5C",
-    "M09L" : "#223233"
+    "M05L": "#00D3DB",
+    "M06L": "#1DACB1",
+    "M07L": "#2D8386",
+    "M08L": "#2E5A5C",
+    "M09L": "#223233"
 }
 
 COLORS_RIGHT = {
-    "M05L" : "#FF0063",
-    "M06L" : "#DB0063",
-    "M07L" : "#B11D60",
-    "M08L" : "#862D55",
-    "M09L" : "#5C2E43"
+    "M05L": "#FF0063",
+    "M06L": "#DB0063",
+    "M07L": "#B11D60",
+    "M08L": "#862D55",
+    "M09L": "#5C2E43"
 }
 
 COLORS_RIGHT_01 = {
-    "M05R" : "#00DB50",
-    "M06R" : "#1DB153",
-    "M07R" : "#2D864E",
-    "M08R" : "#2E5C3F",
-    "M09R" : "#223328"
+    "M05R": "#00DB50",
+    "M06R": "#1DB153",
+    "M07R": "#2D864E",
+    "M08R": "#2E5C3F",
+    "M09R": "#223328"
 }
 
 FILE_EXTENSION = "png"
@@ -164,6 +164,7 @@ def group_lr(names_lr, values):
 
     return names, values_left, values_right
 
+
 def plot_legend(chreef_data, save_path, grouping="side_mono", use_alias=True,
                 alignment="horizontal"):
     """Plot common legend for figures 4c, 4d, and 4e.
@@ -237,18 +238,38 @@ def plot_legend(chreef_data, save_path, grouping="side_mono", use_alias=True,
     else:
         raise ValueError("Choose a correct 'grouping' parameter.")
 
-    f = lambda m,c: plt.plot([],[], marker=m, color=c, ls="none")[0]
+    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
     handles = [f(marker, color) for (color, marker) in zip(colors, markers)]
     legend = plt.legend(handles, labels, loc=3, ncol=ncol, framealpha=1, frameon=False)
 
-    def export_legend(legend, filename="fig_04_legend.png"):
-        legend.axes.axis("off")
-        fig = legend.figure
-        fig.canvas.draw()
-        bbox = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        fig.savefig(filename, bbox_inches=bbox, dpi=png_dpi)
-
     export_legend(legend, save_path)
+    legend.remove()
+    plt.close()
+
+
+def plot_legend_fig04e_gerbil(figure_dir):
+    """Plot common legend for figure 4e gerbil.
+
+    Args:
+        chreef_data: Data of ChReef cochleae.
+        save_path: save path to save legend.
+        grouping: Grouping for cochleae.
+            "side_mono" for division in Injected and Non-Injected.
+            "side_multi" for division per cochlea.
+            "animal" for division per animal.
+        use_alias: Use alias.
+    """
+    save_path_shapes = os.path.join(figure_dir, f"fig_04e_gerbil_legend.{FILE_EXTENSION}")
+
+    # Shapes
+    color = [COLOR_LEFT, COLOR_RIGHT]
+    marker = ["o", "^"]
+    label = ["G1L", "G1R"]
+
+    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
+    handles = [f(m, c) for (c, m) in zip(color, marker)]
+    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+    export_legend(legend, save_path_shapes)
     legend.remove()
     plt.close()
 
@@ -280,8 +301,8 @@ def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=
     x_right = 2
     y_ticks = [i for i in range(6000, 13000, 2000)]
 
-    x_pos_inj = [x_left - len(values_left) // 2 * offset + offset * i  for i in range(len(values_left))]
-    x_pos_non = [x_right - len(values_right) // 2 * offset + offset * i  for i in range(len(values_right))]
+    x_pos_inj = [x_left - len(values_left) // 2 * offset + offset * i for i in range(len(values_left))]
+    x_pos_non = [x_right - len(values_right) // 2 * offset + offset * i for i in range(len(values_right))]
 
     # lines between cochleae of same animal
     for num, (left, right) in enumerate(zip(values_left, values_right)):
@@ -319,7 +340,10 @@ def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=
         raise ValueError("Choose a correct 'grouping' parameter.")
 
     # Labels and formatting
-    plt.xticks([x_left, x_right], ["Inj", "Non-Inj"], fontsize=sub_label_size)
+    plt.xticks([x_left, x_right], ["Injected", "Non-\nInjected"], fontsize=sub_label_size)
+    for label in plt.gca().get_xticklabels():
+        label.set_verticalalignment('center')
+    ax.tick_params(axis='x', which='major', pad=16)
     plt.yticks(y_ticks, fontsize=main_tick_size)
     plt.ylabel("SGN count per cochlea", fontsize=main_label_size)
     plt.ylim(5000, 14000)
@@ -357,7 +381,8 @@ def fig_04c(chreef_data, save_path, plot=False, grouping="side_mono", use_alias=
         plt.close()
 
 
-def fig_04d(chreef_data, save_path, plot=False, grouping="animal", intensity=False, gerbil=False, use_alias=True):
+def fig_04d(chreef_data, save_path, plot=False, grouping="animal",
+            intensity=False, gerbil=False, use_alias=True):
     """Transduction efficiency per cochlea.
     """
     prism_style()
@@ -396,8 +421,8 @@ def fig_04d(chreef_data, save_path, plot=False, grouping="animal", intensity=Fal
     x_right = 2
     offset = 0.08
 
-    x_pos_inj = [x_left - len(values_left) // 2 * offset + offset * i  for i in range(len(values_left))]
-    x_pos_non = [x_right - len(values_right) // 2 * offset + offset * i  for i in range(len(values_right))]
+    x_pos_inj = [x_left - len(values_left) // 2 * offset + offset * i for i in range(len(values_left))]
+    x_pos_non = [x_right - len(values_right) // 2 * offset + offset * i for i in range(len(values_right))]
 
     if grouping == "side_mono":
         plt.scatter(x_pos_inj, values_left, label="Injected",
@@ -436,15 +461,19 @@ def fig_04d(chreef_data, save_path, plot=False, grouping="animal", intensity=Fal
 
     if not intensity:
         if gerbil:
-            plt.ylim(0.3, 1.05)
-            plt.yticks(np.arange(0.3, 1, 0.1), fontsize=main_tick_size)
+            plt.ylim(0.25, 0.65)
+            plt.yticks(np.arange(0.3, 0.7, 0.1), fontsize=main_tick_size)
         else:
             plt.ylim(0.65, 1.05)
             plt.yticks(np.arange(0.7, 1, 0.1), fontsize=main_tick_size)
 
     # Labels and formatting
-    plt.xticks([x_left, x_right], ["Inj", "Non-Inj"], fontsize=sub_label_size)
+    plt.xticks([x_left, x_right], ["Injected", "Non-\nInjected"], fontsize=sub_label_size)
+    for la in plt.gca().get_xticklabels():
+        la.set_verticalalignment('center')
+    ax.tick_params(axis='x', which='major', pad=16)
     plt.ylabel(label, fontsize=main_label_size)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(custom_formatter_1))
 
     xmin = 0.5
     xmax = 2.5
@@ -465,11 +494,12 @@ def fig_04d(chreef_data, save_path, plot=False, grouping="animal", intensity=Fal
     else:
         plt.close()
 
+
 def _get_trendline_dict(trend_dict, side):
     x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side]
     x_dict = {}
     for num in range(len(x_sorted[0])):
-        x_dict[num] = {"pos" : num, "values" : []}
+        x_dict[num] = {"pos": num, "values": []}
 
     for s in x_sorted:
         for num, pos in enumerate(s):
@@ -478,12 +508,13 @@ def _get_trendline_dict(trend_dict, side):
     y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side]
     y_dict = {}
     for num in range(len(x_sorted[0])):
-        y_dict[num] = {"pos" : num, "values" : []}
+        y_dict[num] = {"pos": num, "values": []}
 
     for num in range(len(x_sorted[0])):
         y_dict[num]["mean"] = np.mean([y[num] for y in y_sorted_all])
         y_dict[num]["stdv"] = np.std([y[num] for y in y_sorted_all])
     return x_dict, y_dict
+
 
 def _get_trendline_params(trend_dict, side):
     x_dict, y_dict = _get_trendline_dict(trend_dict, side)
@@ -567,6 +598,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
 
     sub_tick_label_size = 8
     tick_label_size = 14
+    yaxis_tick_size = 16
     label_size = 20
     legend_size = 8
     if intensity:
@@ -574,8 +606,12 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
     else:
         band_label_offset_y = 0.09
         if gerbil:
-            ax.set_ylim(0.05, 1.05)
+            ymin = 0.1
+            ymax = 0.81
+            ax.set_ylim(0.05, 0.95)
         else:
+            ymin = 0.5
+            ymax = 1.01
             ax.set_ylim(0.45, 1.05)
 
     # Offsets within each octave band
@@ -656,16 +692,6 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
     if trendlines:
         trendline_width = 3
         if not gerbil:
-            def get_trendline_values(trend_dict, side):
-                x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side][0]
-                y_sorted_all = [trend_dict[k]["y_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == side]
-                y_sorted = []
-                for num in range(len(x_sorted)):
-                    y_sorted.append(np.mean([y[num] for y in y_sorted_all]))
-                return x_sorted, y_sorted
-
-            # Trendline Injected (Left)
-            x_sorted, y_sorted = get_trendline_values(trend_dict, "L")
             x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict, "L")
 
             if grouping == "animal":
@@ -704,10 +730,10 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                     alpha=0.08,
                     zorder=0
                 )
-                plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper, color=COLOR_LEFT, alpha=0.05, interpolate=True)
+                plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper,
+                                 color=COLOR_LEFT, alpha=0.05, interpolate=True)
 
             # Trendline Non-Injected (Right)
-            x_sorted, y_sorted = get_trendline_values(trend_dict, "R")
             x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict, "R")
             # central line
             trend_r, = ax.plot(
@@ -738,7 +764,8 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                     alpha=0.08,
                     zorder=0
                 )
-                plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper, color=COLOR_RIGHT, alpha=0.05, interpolate=True)
+                plt.fill_between(x_sorted, y_sorted_lower, y_sorted_upper,
+                                 color=COLOR_RIGHT, alpha=0.05, interpolate=True)
 
             # Trendline legend
             trendline_legend = ax.legend(handles=[trend_l, trend_r], loc='lower center')
@@ -751,10 +778,12 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
             )
             # Add the legend manually to the Axes.
             ax.add_artist(trendline_legend)
+
         else:
             x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == "L"][0]
-            y_left = [values_left[0] for _ in x_sorted]
-            y_right = [values_right[0] for _ in x_sorted]
+            y_left = [values_left[0], values_left[0]]
+            y_right = [values_right[0], values_right[0]]
+            xlim_left, xlim_right = ax.get_xlim()
             if grouping == "animal":
                 color_trend_l = "gray"
                 color_trend_r = "gray"
@@ -762,16 +791,23 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                 color_trend_l = COLOR_LEFT
                 color_trend_r = COLOR_RIGHT
             trend_l, = ax.plot(
-                x_sorted,
+                [xlim_left, xlim_right],
                 y_left,
                 linestyle="dotted",
                 color=color_trend_l,
                 alpha=0.7,
                 zorder=0
             )
+            x_offset = 0.5
+            y_offset = 0.01
+            ax.text(xlim_left + x_offset, y_left[0] + y_offset, "mean",
+                    color=color_trend_l, fontsize=tick_label_size, ha="center")
+            ax.text(xlim_left + x_offset, y_right[0] + y_offset, "mean",
+                    color=color_trend_r, fontsize=tick_label_size, ha="center")
             x_sorted = [trend_dict[k]["x_sorted"] for k in trend_dict.keys() if trend_dict[k]["side"] == "R"][0]
+            plt.xlim(xlim_left, xlim_right)
             trend_r, = ax.plot(
-                x_sorted,
+                [xlim_left, xlim_right],
                 y_right,
                 linestyle="dashed",
                 color=color_trend_r,
@@ -781,6 +817,10 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
 
     # Create combined tick positions & labels
     main_ticks = range(len(bin_labels))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(custom_formatter_1))
+    plt.yticks(np.arange(ymin, ymax, 0.1), fontsize=yaxis_tick_size)
+    plt.grid(axis="y", linestyle="solid", alpha=0.5)
+
     # add a final tick for label '>64k'
     ax.set_xticks([pos + offset_map["L"] for pos in main_ticks] +
                   [pos + offset_map["R"] for pos in main_ticks])
@@ -791,7 +831,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
         ax.text(i, ax.get_ylim()[0] - band_label_offset_y*(ax.get_ylim()[1]-ax.get_ylim()[0]),
                 label, ha='center', va='top', fontsize=tick_label_size, fontweight='bold')
 
-    ax.set_xlabel("Octave band (kHz)", fontsize=label_size)
+    ax.set_xlabel("Octave band [kHz]", fontsize=label_size)
     ax.xaxis.set_label_coords(.5, -.16)
 
     if intensity:
@@ -799,9 +839,6 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
         ax.set_title("Intensity per octave band (Left/Right)")
     else:
         ax.set_ylabel("Expression efficiency", fontsize=label_size)
-
-    if grouping == "side_mono":
-        ax.legend(title="Cochlea", fontsize=legend_size)
 
     plt.tight_layout()
     prism_cleanup_axes(ax)
@@ -847,23 +884,23 @@ def main():
     # C: The SGN count compared to reference values from literature and healthy
     # Maybe remove literature reference from plot?
     fig_04c(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04c_{grouping}.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_04c.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias)
 
     # D: The transduction efficiency. We also plot GFP intensities.
     fig_04d(chreef_data,
-            save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction_{grouping}.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias)
     # fig_04d(chreef_data,
     #         save_path=os.path.join(args.figure_dir, f"fig_04d_intensity.{FILE_EXTENSION}"),
     #         plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
     fig_04e(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction_{grouping}.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias, trendlines=True)
 
     fig_04e(chreef_data,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction_std_{grouping}.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_04e_transduction_std.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias, trendlines=True, trendline_std=True)
     # fig_04e(chreef_data,
     #         save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
@@ -875,8 +912,10 @@ def main():
             plot=args.plot, grouping="side_mono", gerbil=True, use_alias=use_alias)
 
     fig_04e(chreef_data_gerbil,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction_{grouping}.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction.{FILE_EXTENSION}"),
             plot=args.plot, gerbil=True, use_alias=use_alias, trendlines=True)
+
+    plot_legend_fig04e_gerbil(args.figure_dir)
 
     # fig_04e(chreef_data_gerbil,
     #         save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_intensity.{FILE_EXTENSION}"),
