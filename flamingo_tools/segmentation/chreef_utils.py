@@ -12,7 +12,7 @@ def coord_from_string(center_str):
     return tuple([int(c) for c in center_str.split("-")])
 
 
-def find_annotations(annotation_dir: str, cochlea: str) -> dict:
+def find_annotations(annotation_dir: str, cochlea: str, pattern: str = None) -> dict:
     """Create a dictionary for the analysis of ChReef annotations.
 
     Annotations should have format positive-negative_<cochlea>_crop_<coord>_allNegativeExcluded_thr<thr>.tif
@@ -31,7 +31,11 @@ def find_annotations(annotation_dir: str, cochlea: str) -> dict:
         center_str = crop_suffix.split("_")[0]
         return center_str
 
-    cochlea_files = [entry.name for entry in os.scandir(annotation_dir) if cochlea in entry.name]
+    if pattern is not None:
+        cochlea_files = [entry.name for entry in os.scandir(annotation_dir) if cochlea in entry.name
+                         and pattern in entry.name]
+    else:
+        cochlea_files = [entry.name for entry in os.scandir(annotation_dir) if cochlea in entry.name]
     dic = {"cochlea": cochlea}
     dic["cochlea_files"] = cochlea_files
     center_strings = list(set([extract_center_string(cochlea, name=f) for f in cochlea_files]))
@@ -140,7 +144,7 @@ def find_inbetween_ids(
     return inbetween_ids, allweak_positives, negexc_negatives
 
 
-def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
+def get_median_intensity(file_negexc, file_allweak, center, data_seg, table, column="median"):
     arr_negexc = tifffile.imread(file_negexc)
     arr_allweak = tifffile.imread(file_allweak)
 
@@ -155,23 +159,23 @@ def get_median_intensity(file_negexc, file_allweak, center, data_seg, table):
 
         subset_positive = table[table["label_id"].isin(allweak_positives)]
         subset_negative = table[table["label_id"].isin(negexc_negatives)]
-        lowest_positive = float(subset_positive["median"].min())
-        highest_negative = float(subset_negative["median"].max())
+        lowest_positive = float(subset_positive[column].min())
+        highest_negative = float(subset_negative[column].max())
         if np.isnan(lowest_positive) or np.isnan(highest_negative):
             return None
 
         return np.average([lowest_positive, highest_negative])
 
     subset = table[table["label_id"].isin(inbetween_ids)]
-    intensities = list(subset["median"])
+    intensities = list(subset[column])
 
     return np.median(list(intensities))
 
 
-def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure):
+def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure, column="median", pattern=None):
     """Find median intensities in blocks and assign them to center positions of cropped block.
     """
-    annotation_dic = find_annotations(annotation_dir, cochlea)
+    annotation_dic = find_annotations(annotation_dir, cochlea, pattern=pattern)
     # center_keys = [key for key in annotation_dic["center_strings"] if key in annotation_dic.keys()]
 
     for center_str in annotation_dic["center_strings"]:
@@ -179,7 +183,8 @@ def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure
         print(f"Getting median intensities for {center_coord}.")
         file_pos = annotation_dic[center_str]["file_pos"]
         file_neg = annotation_dic[center_str]["file_neg"]
-        median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg, table_measure)
+        median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg,
+                                                table_measure, column=column)
 
         if median_intensity is None:
             print(f"No threshold identified for {center_str}.")
