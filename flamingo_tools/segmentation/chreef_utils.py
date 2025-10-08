@@ -73,6 +73,9 @@ def get_roi(coord: tuple, roi_halo: tuple, resolution: float = 0.38) -> Tuple[in
     # reverse dimensions for correct extraction
     coords.reverse()
     coords = np.array(coords)
+    if not isinstance(resolution, float):
+        assert len(resolution) == 3
+        resolution = np.array(resolution)[::-1]
     coords = coords / resolution
     coords = np.round(coords).astype(np.int32)
 
@@ -144,12 +147,13 @@ def find_inbetween_ids(
     return inbetween_ids, allweak_positives, negexc_negatives
 
 
-def get_median_intensity(file_negexc, file_allweak, center, data_seg, table, column="median"):
+def get_median_intensity(file_negexc, file_allweak, center, data_seg, table, column="median",
+                         resolution=0.38):
     arr_negexc = tifffile.imread(file_negexc)
     arr_allweak = tifffile.imread(file_allweak)
 
     roi_halo = tuple([r // 2 for r in arr_negexc.shape])
-    roi = get_roi(center, roi_halo)
+    roi = get_roi(center, roi_halo, resolution=resolution)
 
     roi_seg = data_seg[roi]
     inbetween_ids, allweak_positives, negexc_negatives = find_inbetween_ids(arr_negexc, arr_allweak, roi_seg)
@@ -172,7 +176,8 @@ def get_median_intensity(file_negexc, file_allweak, center, data_seg, table, col
     return np.median(list(intensities))
 
 
-def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure, column="median", pattern=None):
+def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure, column="median", pattern=None,
+                                resolution=0.38):
     """Find median intensities in blocks and assign them to center positions of cropped block.
     """
     annotation_dic = find_annotations(annotation_dir, cochlea, pattern=pattern)
@@ -184,7 +189,7 @@ def localize_median_intensities(annotation_dir, cochlea, data_seg, table_measure
         file_pos = annotation_dic[center_str]["file_pos"]
         file_neg = annotation_dic[center_str]["file_neg"]
         median_intensity = get_median_intensity(file_neg, file_pos, center_coord, data_seg,
-                                                table_measure, column=column)
+                                                table_measure, column=column, resolution=resolution)
 
         if median_intensity is None:
             print(f"No threshold identified for {center_str}.")
