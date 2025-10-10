@@ -19,6 +19,7 @@ FILE_EXTENSION = "png"
 COLOR_P = "#9C5027"
 COLOR_R = "#67279C"
 COLOR_F = "#9C276F"
+COLOR_T = "#279C52"
 
 
 def scramble_instance_labels(arr):
@@ -125,76 +126,121 @@ def fig_02b_ihc(save_dir, plot=False):
         plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
 
 
-def supp_fig_02(save_path, plot=False, segm="SGN"):
+def plot_legend_suppfig02(figure_dir):
+    """Plot common legend for figure 2c.
+
+    Args:
+        chreef_data: Data of ChReef cochleae.
+        save_path: save path to save legend.
+        grouping: Grouping for cochleae.
+            "side_mono" for division in Injected and Non-Injected.
+            "side_multi" for division per cochlea.
+            "animal" for division per animal.
+        use_alias: Use alias.
+    """
+    save_path_colors = os.path.join(figure_dir, f"suppfig02_legend_colors.{FILE_EXTENSION}")
+    # Colors
+    color = [COLOR_P, COLOR_R, COLOR_F, COLOR_T]
+    label = ["Precision", "Recall", "F1-score", "Processing time"]
+
+    fl = lambda c: Line2D([], [], lw=3, color=c)
+    handles = [fl(c) for c in color]
+    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+    export_legend(legend, save_path_colors)
+    legend.remove()
+    plt.close()
+
+
+def supp_fig_02(save_path, plot=False, segm="SGN", mode="precision"):
     # SGN
     value_dict = {
         "SGN": {
-            "distance_unet": {
-                "label": "CochleaNet",
-                "precision": 0.886,
-                "recall": 0.804,
-                "f1-score": 0.837
+            "stardist": {
+                "label": "Stardist",
+                "precision": 0.706,
+                "recall": 0.630,
+                "f1-score": 0.628,
+                "marker": "o",
+                "runtime": 536.5,
+                "runtime_std": 148.4
+
             },
             "micro_sam": {
                 "label": "µSAM",
                 "precision": 0.140,
                 "recall": 0.782,
-                "f1-score": 0.228
-            },
-            "cellpose_sam": {
-                "label": "Cellpose-SAM",
-                "precision": 0.250,
-                "recall": 0.003,
-                "f1-score": 0.005
+                "f1-score": 0.228,
+                "marker": "D",
+                "runtime": 407.5,
+                "runtime_std": 107.5
             },
             "cellpose_3": {
                 "label": "Cellpose 3",
                 "precision": 0.117,
                 "recall": 0.607,
-                "f1-score": 0.186
+                "f1-score": 0.186,
+                "marker": "v",
+                "runtime": None,
+                "runtime_std": None
             },
-            "stardist": {
-                "label": "Stardist",
-                "precision": 0.706,
-                "recall": 0.630,
-                "f1-score": 0.628
+            "cellpose_sam": {
+                "label": "Cellpose-SAM",
+                "precision": 0.250,
+                "recall": 0.003,
+                "f1-score": 0.005,
+                "marker": "^",
+                "runtime": 167.9,
+                "runtime_std": 40.2
+            },
+            "distance_unet": {
+                "label": "CochleaNet",
+                "precision": 0.886,
+                "recall": 0.804,
+                "f1-score": 0.837,
+                "marker": "s",
+                "runtime": 168.8,
+                "runtime_std": 21.8
             },
         },
         "IHC": {
-            "distance_unet": {
-                "label": "CochleaNet",
-                "precision": 0.664,
-                "recall": 	0.661,
-                "f1-score": 0.659
-            },
             "micro_sam": {
                 "label": "µSAM",
                 "precision": 0.053,
                 "recall": 0.684,
-                "f1-score": 0.094
-            },
-            "cellpose_sam": {
-                "label": "Cellpose-SAM",
-                "precision": 0.636,
-                "recall": 0.025,
-                "f1-score": 0.047
+                "f1-score": 0.094,
+                "marker": "D",
+                "runtime": 445.6,
+                "runtime_std": 106.6
             },
             "cellpose_3": {
                 "label": "Cellpose 3",
                 "precision": 0.375,
                 "recall": 0.554,
-                "f1-score": 0.329
+                "f1-score": 0.329,
+                "marker": "v",
+                "runtime": 30.1,
+                "runtime_std": 162.3
+            },
+            "cellpose_sam": {
+                "label": "Cellpose-SAM",
+                "precision": 0.636,
+                "recall": 0.025,
+                "f1-score": 0.047,
+                "marker": "^",
+                "runtime": None,
+                "runtime_std": None
+            },
+            "distance_unet": {
+                "label": "CochleaNet",
+                "precision": 0.664,
+                "recall": 	0.661,
+                "f1-score": 0.659,
+                "marker": "s",
+                "runtime": 65.7,
+                "runtime_std": 72.6
             },
         }
     }
-
-    # SGN
-    precision = [value_dict[segm][key]["precision"] for key in value_dict[segm].keys()]
-    recall = [value_dict[segm][key]["recall"] for key in value_dict[segm].keys()]
-    f1 = [value_dict[segm][key]["f1-score"] for key in value_dict[segm].keys()]
-    labels = [value_dict[segm][key]["label"] for key in value_dict[segm].keys()]
-
-    x_pos = np.array([i * 2 for i in range(len(precision))])
 
     # Convert setting labels to numerical x positions
     offset = 0.08  # horizontal shift for scatter separation
@@ -202,20 +248,54 @@ def supp_fig_02(save_path, plot=False, segm="SGN"):
     # Plot
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    main_label_size = 22
+    main_label_size = 20
     main_tick_size = 16
 
-    plt.scatter(x_pos - offset, precision, label="Precision", color=COLOR_P, marker="^", s=80)
-    plt.scatter(x_pos,          recall, label="Recall", color=COLOR_R, marker="o", s=80)
-    plt.scatter(x_pos + offset, f1, label="F1-score manual", color=COLOR_F, marker="s", s=80)
+    labels = [value_dict[segm][key]["label"] for key in value_dict[segm].keys()]
 
-    # Labels and formatting
-    plt.xticks(x_pos, labels, fontsize=16)
-    plt.yticks(fontsize=main_tick_size)
-    plt.ylabel("Value", fontsize=main_label_size)
-    plt.ylim(-0.1, 1)
-    # plt.legend(loc="lower right", fontsize=legendsize)
-    plt.grid(axis="y", linestyle="solid", alpha=0.5)
+    if mode == "precision":
+        # Convert setting labels to numerical x positions
+        offset = 0.08  # horizontal shift for scatter separation
+        for num, key in enumerate(list(value_dict[segm].keys())):
+            precision = [value_dict[segm][key]["precision"]]
+            recall = [value_dict[segm][key]["recall"]]
+            f1score = [value_dict[segm][key]["f1-score"]]
+            marker = value_dict[segm][key]["marker"]
+            x_pos = num + 1
+
+            plt.scatter([x_pos - offset], precision, label="Precision manual", color=COLOR_P, marker=marker, s=80)
+            plt.scatter([x_pos],         recall, label="Recall manual", color=COLOR_R, marker=marker, s=80)
+            plt.scatter([x_pos + offset], f1score, label="F1-score manual", color=COLOR_F, marker=marker, s=80)
+
+        # Labels and formatting
+        x_pos = np.arange(1, len(labels)+1)
+        print(x_pos)
+        plt.xticks(x_pos, labels, fontsize=16)
+        plt.yticks(fontsize=main_tick_size)
+        plt.ylabel("Value", fontsize=main_label_size)
+        plt.ylim(-0.1, 1)
+        # plt.legend(loc="lower right", fontsize=legendsize)
+        plt.grid(axis="y", linestyle="solid", alpha=0.5)
+
+    elif mode == "runtime":
+        # Convert setting labels to numerical x positions
+        offset = 0.08  # horizontal shift for scatter separation
+        for num, key in enumerate(list(value_dict[segm].keys())):
+            runtime = [value_dict[segm][key]["runtime"]]
+            marker = value_dict[segm][key]["marker"]
+            x_pos = num + 1
+
+            plt.scatter([x_pos], runtime, label="Runtime", color=COLOR_T, marker=marker, s=80)
+
+        # Labels and formatting
+        x_pos = np.arange(1, len(labels)+1)
+        print(x_pos)
+        plt.xticks(x_pos, labels, fontsize=16)
+        plt.yticks(fontsize=main_tick_size)
+        plt.ylabel("Processing time [s]", fontsize=main_label_size)
+        plt.ylim(-0.1, 600)
+        # plt.legend(loc="lower right", fontsize=legendsize)
+        plt.grid(axis="y", linestyle="solid", alpha=0.5)
 
     plt.tight_layout()
     prism_cleanup_axes(ax)
@@ -553,9 +633,13 @@ def main():
     # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
     plot_legend_fig02c(figure_dir=args.figure_dir)
+    plot_legend_suppfig02(figure_dir=args.figure_dir)
 
     supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn.{FILE_EXTENSION}"), segm="SGN")
     supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc.{FILE_EXTENSION}"), segm="IHC")
+
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn_time.{FILE_EXTENSION}"), segm="SGN", mode="runtime")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc_time.{FILE_EXTENSION}"), segm="IHC", mode="runtime")
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
     fig_02d_01(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
