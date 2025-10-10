@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 
 from util import SYNAPSE_DIR_ROOT
-from plot_fig4 import get_chreef_data
 
 FILE_EXTENSION = "png"
 png_dpi = 300
@@ -143,10 +142,6 @@ def fig_05d(save_path, plot):
 
     # TODO would need the new intensity subtracted data here.
     # Reference: intensity distributions for ChReef
-    chreef_data = get_chreef_data()
-    for cochlea, tab in chreef_data.items():
-        plt.hist(tab["median"])
-        plt.show()
 
 
 def main():
