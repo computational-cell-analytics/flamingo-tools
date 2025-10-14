@@ -4,21 +4,62 @@ import sys
 from glob import glob
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from skimage.filters import threshold_otsu
 
 from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target, get_s3_path
 from flamingo_tools.measurements import compute_object_measures
 
-sys.path.append("../figures")
+
+# Define the animal specific octave bands.
+def _get_mapping(animal):
+    if animal == "mouse":
+        bin_edges = [0, 2, 4, 8, 16, 32, 64, np.inf]
+        bin_labels = [
+            "<2", "2–4", "4–8", "8–16", "16–32", "32–64", ">64"
+        ]
+    elif animal == "gerbil":
+        bin_edges = [0, 0.5, 1, 2, 4, 8, 16, 32, np.inf]
+        bin_labels = [
+            "<0.5", "0.5–1", "1–2", "2–4", "4–8", "8–16", "16–32", ">32"
+        ]
+    else:
+        raise ValueError
+    assert len(bin_edges) == len(bin_labels) + 1
+    return bin_edges, bin_labels
+
+
+def frequency_mapping(frequencies, values, animal="mouse", transduction_efficiency=False):
+    # Get the mapping of frequencies to octave bands for the given species.
+    bin_edges, bin_labels = _get_mapping(animal)
+
+    # Construct the data frame with octave bands.
+    df = pd.DataFrame({"freq_khz": frequencies, "value": values})
+    df["octave_band"] = pd.cut(
+        df["freq_khz"], bins=bin_edges, labels=bin_labels, right=False
+    )
+
+    if transduction_efficiency:  # We compute the transduction efficiency per band.
+        num_pos = df[df["value"] == 1].groupby("octave_band", observed=False).size()
+        num_tot = df[df["value"].isin([1, 2])].groupby("octave_band", observed=False).size()
+        value_by_band = (num_pos / num_tot).reindex(bin_labels)
+    else:  # Otherwise, aggregate the values over the octave band using the mean.
+        value_by_band = (
+            df.groupby("octave_band", observed=True)["value"]
+              .sum()
+              .reindex(bin_labels)   # keep octave order even if a bin is empty
+        )
+    return value_by_band
+
 
 # Map from cochlea names to channels
 COCHLEAE_FOR_SUBTYPES = {
     "M_LR_000099_L": ["PV", "Calb1", "Lypd1"],
-    "M_LR_000214_L": ["PV", "CR", "Calb1"],
-    "M_AMD_N62_L": ["PV", "CR", "Calb1"],
-    "M_AMD_N180_R": ["CR", "Ntng1", "CTBP2"],
-    "M_AMD_N180_L": ["CR", "Ntng1", "Lypd1"],
+    # "M_LR_000214_L": ["PV", "CR", "Calb1"],
+    # "M_AMD_N62_L": ["PV", "CR", "Calb1"],
+    # "M_AMD_N180_R": ["CR", "Ntng1", "CTBP2"],
+    # "M_AMD_N180_L": ["CR", "Ntng1", "Lypd1"],
     "M_LR_000184_R": ["PV", "Prph"],
     "M_LR_000184_L": ["PV", "Prph"],
     # Mutant / some stuff is weird.
@@ -26,9 +67,19 @@ COCHLEAE_FOR_SUBTYPES = {
     # This one still has to be stitched:
     # "M_LR_000184_R": {"PV", "Prph"},
 }
+
+COCHLEAE = {
+    "M_LR_000184_L": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
+    "M_LR_000184_R": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
+    "M_LR_000099_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1", "Lypd1"]},
+    # "M_LR_000214_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1"]},
+}
+
+
 REGULAR_COCHLEAE = [
-    "M_LR_000099_L", "M_LR_000214_L", "M_AMD_N62_L", "M_LR_000184_R", "M_LR_000184_L"
+    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L"
 ]
+#  "M_LR_000214_L", "M_AMD_N62_L",
 
 # For custom thresholds.
 THRESHOLDS = {
@@ -118,17 +169,17 @@ def check_processing_status():
         if channels_missing:
             print("Missing the expected channels:", channels_missing)
 
-        if "SGN_v2" in sources:
+        if "SGN_v2b" in sources:
+            print("SGN segmentation is present with name SGN_v2b")
+            table_folder = "tables/SGN_v2b"
+        elif "SGN_v2" in sources:
             print("SGN segmentation is present with name SGN_v2")
-            seg_name = "SGN-v2"
             table_folder = "tables/SGN_v2"
         elif "PV_SGN_v2" in sources:
             print("SGN segmentation is present with name PV_SGN_v2")
-            seg_name = "PV-SGN-v2"
             table_folder = "tables/PV_SGN_v2"
         elif "CR_SGN_v2" in sources:
             print("SGN segmentation is present with name CR_SGN_v2")
-            seg_name = "CR-SGN-v2"
             table_folder = "tables/CR_SGN_v2"
         else:
             print("SGN segmentation is MISSING")
@@ -136,14 +187,7 @@ def check_processing_status():
             continue
 
         # Check which tables we have.
-        if cochlea == "M_AMD_N180_L":  # we need all intensity measures here
-            seg_names = ["CR-SGN-v2", "Ntng1-SGN-v2", "Lypd1-SGN-v2"]
-            expected_tables = [f"{chan}_{sname}_object-measures.tsv" for chan in channels for sname in seg_names]
-        elif cochlea == "M_AMD_N180_R":
-            seg_names = ["CR-SGN-v2", "Ntng1-SGN-v2"]
-            expected_tables = [f"{chan}_{sname}_object-measures.tsv" for chan in channels for sname in seg_names]
-        else:
-            expected_tables = [f"{chan}_{seg_name}_object-measures.tsv" for chan in channels]
+        expected_tables = ["default.tsv"]
 
         tables = s3.ls(os.path.join(BUCKET_NAME, cochlea, table_folder))
         tables = [os.path.basename(tab) for tab in tables]
@@ -226,8 +270,12 @@ def compile_data_for_subtype_analysis():
             seg_source = sources[seg_name]
         except KeyError as e:
             if seg_name == "PV_SGN_v2":
-                seg_source = sources["SGN_v2"]
-                seg_name = "SGN_v2"
+                if "output_seg" in list(COCHLEAE[cochlea].keys()):
+                    seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
+                    seg_name = COCHLEAE[cochlea]["output_seg"]
+                else:
+                    seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
+                    seg_name = COCHLEAE[cochlea]["output_seg"]
             else:
                 raise e
         table_folder = os.path.join(
@@ -238,6 +286,7 @@ def compile_data_for_subtype_analysis():
 
         # Get the SGNs in the main component
         table = table[table.component_labels == 1]
+        print("Number of SGNs", len(table))
         valid_sgns = table.label_id
 
         output_table = {"label_id": table.label_id.values, "frequency[kHz]": table["frequency[kHz]"]}
@@ -246,6 +295,14 @@ def compile_data_for_subtype_analysis():
         reference_intensity = None
         for channel in channels:
             # Load the intensity table, prefer local.
+            table_folder = os.path.join(
+                BUCKET_NAME, cochlea, seg_source["segmentation"]["tableData"]["tsv"]["relativePath"]
+            )
+            table_content = s3.open(os.path.join(table_folder, "default.tsv"), mode="rb")
+            table = pd.read_csv(table_content, sep="\t")
+            table = table[table.component_labels == 1]
+
+            # local
             table_name = f"{channel}_{seg_name.replace('_', '-')}_object-measures.tsv"
             intensity_path = os.path.join("object_measurements", cochlea, table_name)
 
@@ -257,7 +314,6 @@ def compile_data_for_subtype_analysis():
 
                 intensities = pd.read_csv(table_content, sep="\t")
                 intensities = intensities[intensities.label_id.isin(valid_sgns)]
-
             assert len(table) == len(intensities)
             assert (intensities.label_id.values == table.label_id.values).all()
 
@@ -341,9 +397,8 @@ def _plot_2d(ratios, name, show_plots, classification=None, colors=None):
 
 
 def _plot_tonotopic_mapping(freq, classification, name, colors, show_plots):
-    from util import frequency_mapping
 
-    frequency_mapped = frequency_mapping(freq, classification, categorical=True)
+    frequency_mapped = frequency_mapping(freq, classification)
     result = next(iter(frequency_mapped.values()))
     bin_labels = pd.unique(result["octave_band"])
     band_to_x = {band: i for i, band in enumerate(bin_labels)}
@@ -379,30 +434,46 @@ def combined_analysis(results, show_plots):
     # Create the tonotopic mapping.
     #
     summary = {}
+    colors = {}
     for cochlea, result in results.items():
         if cochlea == "M_LR_000214_L":  # One of the signals cannot be analyzed.
             continue
-        mapping = result["tonotopic_mapping"]
-        summary[cochlea] = mapping
+        classification = result["classification"]
+        frequencies = result["frequencies"]
+        # get categories
+        cats = list(set([c[:c.find(" (")] for c in classification]))
+        cats.sort()
 
-    colors = {}
+        dic = {}
+        for c in cats:
+            sub_freq = [frequencies[i] for i in range(len(classification))
+                        if classification[i][:classification[i].find(" (")] == c]
+            mapping = frequency_mapping(sub_freq, [1 for _ in range(len(sub_freq))])
+            mapping = mapping.astype('float32')
+            dic[c] = mapping
+            bin_labels = pd.unique(mapping.index)
 
-    fig, axes = plt.subplots(len(summary), sharey=True, figsize=(8, 8))
-    for i, (cochlea, frequency_mapped) in enumerate(summary.items()):
-        ax = axes[i]
-
-        result = next(iter(frequency_mapped.values()))
-        bin_labels = pd.unique(result["octave_band"])
-        band_to_x = {band: i for i, band in enumerate(bin_labels)}
-        x_positions = result["octave_band"].map(band_to_x)
-
-        for cat, vals in frequency_mapped.items():
-            values = vals.value
-            cat = cat[:cat.find(" (")]
-            if cat not in colors:
+            if c not in colors:
                 current_colors = list(colors.values())
                 next_color = ALL_COLORS[len(current_colors)]
-                colors[cat] = next_color
+                colors[c] = next_color
+
+        for bin in bin_labels:
+            total = sum([dic[key][bin] for key in dic.keys()])
+            for key in dic.keys():
+                dic[key][bin] = float(dic[key][bin] / total)
+
+        summary[cochlea] = dic
+
+    fig, axes = plt.subplots(len(summary), sharey=True, figsize=(8, 8))
+    for i, (cochlea, dic) in enumerate(summary.items()):
+        types = list(dic.keys())
+        ax = axes[i]
+        for cat in types:
+            frequency_mapped = dic[cat]
+            bin_labels = pd.unique(frequency_mapped.index)
+            x_positions = [i for i in range(len(bin_labels))]
+            values = frequency_mapped.values
             ax.scatter(x_positions, values, label=cat, color=colors[cat])
 
         main_ticks = range(len(bin_labels))
@@ -462,6 +533,8 @@ def analyze_subtype_data_regular(show_plots=True):
     global PLOT_OUT, COLORS  # noqa
     PLOT_OUT = "subtype_plots/regular_mice"
 
+    s3 = create_s3_target()
+
     files = sorted(glob("./subtype_analysis/*.tsv"))
     results = {}
 
@@ -469,11 +542,43 @@ def analyze_subtype_data_regular(show_plots=True):
         cochlea = os.path.basename(ff)[:-len("_subtype_analysis.tsv")]
         if cochlea not in REGULAR_COCHLEAE:
             continue
-        print(cochlea)
         channels = COCHLEAE_FOR_SUBTYPES[cochlea]
 
         reference_channel = "PV"
         assert channels[0] == reference_channel
+
+        seg_name = "PV_SGN_v2"
+
+        content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
+        info = json.loads(content.read())
+        sources = info["sources"]
+
+        # Load the segmentation table.
+        try:
+            seg_source = sources[seg_name]
+        except KeyError as e:
+            if seg_name == "PV_SGN_v2":
+                if "output_seg" in list(COCHLEAE[cochlea].keys()):
+                    seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
+                    seg_name = COCHLEAE[cochlea]["output_seg"]
+                else:
+                    seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
+                    seg_name = COCHLEAE[cochlea]["output_seg"]
+            else:
+                raise e
+        table_folder = os.path.join(
+            BUCKET_NAME, cochlea, seg_source["segmentation"]["tableData"]["tsv"]["relativePath"]
+        )
+        table_content = s3.open(os.path.join(table_folder, "default.tsv"), mode="rb")
+        table = pd.read_csv(table_content, sep="\t")
+        table = table[table.component_labels == 1]
+
+        print(f"Length of table before filtering: {len(table)}")
+        # filter subtype table
+        for chan in channels[1:]:
+            column = f"marker_{chan}"
+            table = table.loc[table[column].isin([1,2])]
+            print(f"Length of table after filtering channel {chan}: {len(table)}")
 
         tab = pd.read_csv(ff, sep="\t")
 
@@ -488,12 +593,18 @@ def analyze_subtype_data_regular(show_plots=True):
         classification = []
         for chan in channels[1:]:
             column = f"{chan}_ratio_{reference_channel}"
-            name = f"{cochlea}_{chan}_histogram_ratio_{reference_channel}"
-            chan_classification = _plot_histogram(
-                tab, column, name, class_names=[f"{chan}-", f"{chan}+"], show_plots=show_plots
-            )
+            # e.g. Calb1_ratio_PV
+            column = f"marker_{chan}"
+            subset = table.loc[table[column].isin([1, 2])]
+            marker = list(subset[column])
+            chan_classification = []
+            for m in marker:
+                if m == 1:
+                    chan_classification.append(f"{chan}+")
+                elif m == 2:
+                    chan_classification.append(f"{chan}-")
             classification.append(chan_classification)
-            ratios[f"{chan}_{reference_channel}"] = tab[column].values
+            ratios[f"{chan}_{reference_channel}"] = table[column].values
 
         # Unify the classification and assign colors
         assert len(classification) in (1, 2)
@@ -521,19 +632,18 @@ def analyze_subtype_data_regular(show_plots=True):
                 COLORS[label] = ALL_COLORS[0]
 
         # 3.) Plot tonotopic mapping.
-        freq = tab["frequency[kHz]"].values
+        freq = table["frequency[kHz]"].values
         assert len(freq) == len(classification)
-        name = f"{cochlea}_tonotopic_mapping"
-        tonotopic_mapping = _plot_tonotopic_mapping(
-            freq, classification, name=name, colors=COLORS, show_plots=show_plots
-        )
+        #tonotopic_mapping = _plot_tonotopic_mapping(
+        #    freq, classification, name=name, colors=COLORS, show_plots=show_plots
+        #)
 
         # 4.) Plot 2D space of ratios.
         if show_2d:
             name = f"{cochlea}_2d"
             _plot_2d(ratios, name, show_plots, classification=classification, colors=COLORS)
 
-        results[cochlea] = {"classification": classification, "tonotopic_mapping": tonotopic_mapping}
+        results[cochlea] = {"classification": classification, "frequencies": freq}
 
     combined_analysis(results, show_plots=show_plots)
 
@@ -594,7 +704,8 @@ def export_for_annotation():
 def main():
     # These scripts are for computing the intensity tables etc.
     missing_tables = check_processing_status()
-    require_missing_tables(missing_tables)
+    print("missing tables",  missing_tables)
+    # require_missing_tables(missing_tables)
     compile_data_for_subtype_analysis()
 
     # This script is for exporting the tables for annotation in MoBIE.
