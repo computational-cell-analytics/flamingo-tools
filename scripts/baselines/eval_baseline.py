@@ -77,7 +77,7 @@ def eval_all_ihc():
     """
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
     seg_dir = os.path.join(cochlea_dir, "predictions/val_ihc")
-    annotation_dir = (cochlea_dir, "AnnotatedImageCrops/F1ValidationIHCs/consensus_annotation")
+    annotation_dir = os.path.join(cochlea_dir, "AnnotatedImageCrops/F1ValidationIHCs/consensus_annotation")
     baselines = [
         "cellpose3",
         "cellpose-sam",
@@ -137,12 +137,14 @@ def print_accuracy(eval_dir):
     precision_list = []
     recall_list = []
     f1_score_list = []
+    time_list = []
     for eval_dic in eval_dicts:
         with open(eval_dic, "r") as f:
             d = json.load(f)
         tp = len(d["tp_objects"])
         fp = len(d["fp"])
         fn = len(d["fn"])
+        time = d["time"]
 
         if tp + fp != 0:
             precision = tp / (tp + fp)
@@ -160,15 +162,17 @@ def print_accuracy(eval_dir):
         precision_list.append(precision)
         recall_list.append(recall)
         f1_score_list.append(f1_score)
+        time_list.append(time)
 
-    names = ["Precision", "Recall", "F1 score"]
-    for num, lis in enumerate([precision_list, recall_list, f1_score_list]):
+    names = ["Precision", "Recall", "F1 score", "Time"]
+    for num, lis in enumerate([precision_list, recall_list, f1_score_list, time_list]):
         print(names[num], sum(lis) / len(lis))
 
 
 def print_accuracy_sgn():
     """Print 'Precision', 'Recall', and 'F1-score' for all SGN baselines.
     """
+    print("Evaluating SGN segmentation")
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
     seg_dir = os.path.join(cochlea_dir, "predictions/val_sgn")
     baselines = [
@@ -185,6 +189,7 @@ def print_accuracy_sgn():
 def print_accuracy_ihc():
     """Print 'Precision', 'Recall', and 'F1-score' for all IHC baselines.
     """
+    print("Evaluating IHC segmentation")
     cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
     seg_dir = os.path.join(cochlea_dir, "predictions/val_ihc")
     baselines = [
