@@ -44,7 +44,7 @@ def filter_marker_instances(cochlea, segmentation, seg_name, group=None):
     else:
         raise ValueError("Choose either 'positive' or 'negative' as group value.")
 
-    segmentation = segmentation.astype("uint16")
+    segmentation = segmentation.astype("float32")
     return segmentation
 
 
@@ -68,7 +68,7 @@ def export_lower_resolution(args):
                 internal_path = os.path.join(args.cochlea, "images",  "ome-zarr", f"{channel}.ome.zarr")
                 s3_store, fs = get_s3_path(internal_path, bucket_name=BUCKET_NAME, service_endpoint=SERVICE_ENDPOINT)
                 with zarr.open(s3_store, mode="r") as f:
-                    data = f[input_key][:]
+                    data = f[input_key][:].astype("float32")
                 print("Data shape", data.shape)
 
                 print(f"Filtering {group} marker instances.")
