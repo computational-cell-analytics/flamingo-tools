@@ -57,29 +57,23 @@ def frequency_mapping(frequencies, values, animal="mouse", transduction_efficien
 COCHLEAE_FOR_SUBTYPES = {
     "M_LR_000099_L": ["PV", "Calb1", "Lypd1"],
     # "M_LR_000214_L": ["PV", "CR", "Calb1"],
-    # "M_AMD_N62_L": ["PV", "CR", "Calb1"],
-    # "M_AMD_N180_R": ["CR", "Ntng1", "CTBP2"],
-    # "M_AMD_N180_L": ["CR", "Ntng1", "Lypd1"],
     "M_LR_000184_R": ["PV", "Prph"],
     "M_LR_000184_L": ["PV", "Prph"],
-    # Mutant / some stuff is weird.
-    # "M_AMD_Runx1_L": ["PV", "Lypd1", "Calb1"],
-    # This one still has to be stitched:
-    # "M_LR_000184_R": {"PV", "Prph"},
+    "M_LR_000260_L": ["PV", "Prph", "Tuj1"],
 }
 
 COCHLEAE = {
+    "M_LR_000099_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1", "Lypd1"]},
     "M_LR_000184_L": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
     "M_LR_000184_R": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
-    "M_LR_000099_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1", "Lypd1"]},
+    "M_LR_000260_L": {"seg_data": "SGN_v2", "subtype": ["Prph", "Tuj1"]},
     # "M_LR_000214_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1"]},
 }
 
 
 REGULAR_COCHLEAE = [
-    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L"
+    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L", "M_LR_000260_L"
 ]
-#  "M_LR_000214_L", "M_AMD_N62_L",
 
 # For custom thresholds.
 THRESHOLDS = {
@@ -123,6 +117,12 @@ def stain_to_type(stain):
         "Calb1+/Lypd1-": "Type Ib",
         "Calb1-/Lypd1+": "Type Ic",
         "Calb1-/Lypd1-": "inconclusive",  # Can be Type Ia or Type II
+
+        # Combinations of Prph and Tuj1:
+        "Prph+/Tuj1+": "Type II",
+        "Prph+/Tuj1-": "Type I",
+        "Prph-/Tuj1+": "Type I",
+        "Prph-/Tuj1-": "inconclusive",
 
         # Prph is isolated.
         "Prph+": "Type II",
@@ -274,8 +274,8 @@ def compile_data_for_subtype_analysis():
                     seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
                     seg_name = COCHLEAE[cochlea]["output_seg"]
                 else:
-                    seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
-                    seg_name = COCHLEAE[cochlea]["output_seg"]
+                    seg_source = sources[COCHLEAE[cochlea]["seg_data"]]
+                    seg_name = COCHLEAE[cochlea]["seg_data"]
             else:
                 raise e
         table_folder = os.path.join(
@@ -449,6 +449,8 @@ def combined_analysis(results, show_plots):
             sub_freq = [frequencies[i] for i in range(len(classification))
                         if classification[i][:classification[i].find(" (")] == c]
             mapping = frequency_mapping(sub_freq, [1 for _ in range(len(sub_freq))])
+            mapping.fillna(0, inplace=True)
+
             mapping = mapping.astype('float32')
             dic[c] = mapping
             bin_labels = pd.unique(mapping.index)
@@ -562,8 +564,8 @@ def analyze_subtype_data_regular(show_plots=True):
                     seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
                     seg_name = COCHLEAE[cochlea]["output_seg"]
                 else:
-                    seg_source = sources[COCHLEAE[cochlea]["output_seg"]]
-                    seg_name = COCHLEAE[cochlea]["output_seg"]
+                    seg_source = sources[COCHLEAE[cochlea]["seg_data"]]
+                    seg_name = COCHLEAE[cochlea]["seg_data"]
             else:
                 raise e
         table_folder = os.path.join(
@@ -573,6 +575,7 @@ def analyze_subtype_data_regular(show_plots=True):
         table = pd.read_csv(table_content, sep="\t")
         table = table[table.component_labels == 1]
 
+        print(cochlea)
         print(f"Length of table before filtering: {len(table)}")
         # filter subtype table
         for chan in channels[1:]:
@@ -659,7 +662,6 @@ def export_for_annotation():
         if cochlea not in REGULAR_COCHLEAE:
             continue
 
-        print(cochlea)
         channels = COCHLEAE_FOR_SUBTYPES[cochlea]
         reference_channel = "PV"
         assert channels[0] == reference_channel
