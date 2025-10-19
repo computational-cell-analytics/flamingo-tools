@@ -203,7 +203,7 @@ def evaluate_marker_annotation(
                                    if len(find_annotations(a, cochlea, subtype)["center_strings"]) != 0]
             print(f"Evaluating data for cochlea {cochlea} in {cochlea_annotations}.")
 
-            # Find the threholds from the annotated blocks and save it if specified.
+            # Find the thresholds from the annotated blocks and save them if specified.
             intensity_dic = find_thresholds(cochlea_annotations, cochlea, data_seg,
                                             table_measurement, column=column, pattern=subtype)
             if threshold_save_dir is not None:
@@ -211,6 +211,14 @@ def evaluate_marker_annotation(
                 threshold_out_path = os.path.join(threshold_save_dir, f"{cochlea_str}_{subtype}_{seg_string}.json")
                 with open(threshold_out_path, "w") as f:
                     json.dump(intensity_dic, f, sort_keys=True, indent=4)
+
+            # load measurement table of output segmentation
+            if "output_seg" in list(COCHLEAE[cochlea].keys()):
+                output_seg = COCHLEAE[cochlea]["output_seg"]
+                table_measurement_path = f"{cochlea}/tables/{output_seg}/subtype_ratio.tsv"
+                table_path_s3, fs = get_s3_path(table_measurement_path)
+                with fs.open(table_path_s3, "r") as f:
+                    table_measurement = pd.read_csv(f, sep="\t")
 
             # Apply the threshold to all SGNs.
             table_seg = apply_nearest_threshold(
