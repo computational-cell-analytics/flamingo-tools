@@ -141,18 +141,27 @@ def sgn_subtype_annotation(prefix, subtype, seg_version="SGN_v2", default_stat="
     file_names = [entry.name for entry in os.scandir(direc)]
 
     stain1_file = [name for name in file_names if basename in name and subtype in name][0]
-    stain2_file = [name for name in file_names if basename in name and "PV.tif" in name][0]
+    pv_files = [name for name in file_names if basename in name and "PV.tif" in name]
+    if len(pv_files) == 0:
+        ratio = False
+        stain2_name = ""
+        stain2 = None
+        seg_version = "SGN_merged"
+    else:
+        ratio = True
+        stain2_name = "PV"
+        stain2_file = [name for name in file_names if basename in name and "PV.tif" in name][0]
+        stain2 = imageio.imread(os.path.join(direc, stain2_file))
+
     seg_file = [name for name in file_names if basename in name and "SGN" in name][0]
 
     if "PV" in seg_file:
         seg_version = f"PV_{seg_version}"
 
     stain1_name = subtype
-    stain2_name = "PV"
     seg_name = "SGN"
 
     stain1 = imageio.imread(os.path.join(direc, stain1_file))
-    stain2 = imageio.imread(os.path.join(direc, stain2_file))
     seg = imageio.imread(os.path.join(direc, seg_file))
 
     # bb = np.s_[128:-128, 128:-128, 128:-128]
@@ -166,22 +175,33 @@ def sgn_subtype_annotation(prefix, subtype, seg_version="SGN_v2", default_stat="
     # Compute the intensity statistics.
     mask = None
 
-    cochlea = os.path.basename(stain2_file).split("_crop_")[0]
+    cochlea = os.path.basename(stain1_file).split("_crop_")[0]
 
-    table_measurement_path = f"{cochlea}/tables/{seg_version}/subtype_ratio.tsv"
-    print(table_measurement_path)
-    table_path_s3, fs = get_s3_path(table_measurement_path)
-    with fs.open(table_path_s3, "r") as f:
-        table_measurement = pd.read_csv(f, sep="\t")
+    if ratio:
+        table_measurement_path = f"{cochlea}/tables/{seg_version}/subtype_ratio.tsv"
+        print(table_measurement_path)
+        table_path_s3, fs = get_s3_path(table_measurement_path)
+        with fs.open(table_path_s3, "r") as f:
+            table_measurement = pd.read_csv(f, sep="\t")
 
-    subtype_ratio = f"{subtype}_ratio_PV"
-    statistics = get_object_measures_from_table(seg, table=table_measurement, keyword=subtype_ratio)
+        subtype_ratio = f"{subtype}_ratio_PV"
+        statistics = get_object_measures_from_table(seg, table=table_measurement, keyword=subtype_ratio)
+    else:
+        seg_string = "-".join(seg_version.split("_"))
+        table_measurement_path = f"{cochlea}/tables/{seg_version}/{stain1_name}_{seg_string}_object-measures.tsv"
+        print(table_measurement_path)
+        table_path_s3, fs = get_s3_path(table_measurement_path)
+        with fs.open(table_path_s3, "r") as f:
+            table_measurement = pd.read_csv(f, sep="\t")
+        statistics = get_object_measures_from_table(seg, table=table_measurement)
+
     # Open the napari viewer.
     v = napari.Viewer()
 
     # Add the base layers.
     v.add_image(stain1, name=stain1_name)
-    v.add_image(stain2, visible=False, name=stain2_name)
+    if stain2 is not None:
+        v.add_image(stain2, visible=False, name=stain2_name)
     v.add_labels(seg, visible=False, name=f"{seg_name}s")
     v.add_labels(seg_extended, name=f"{seg_name}s-extended")
     if mask is not None:
