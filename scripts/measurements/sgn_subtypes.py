@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 from glob import glob
 
 import matplotlib.pyplot as plt
@@ -8,7 +7,7 @@ import numpy as np
 import pandas as pd
 from skimage.filters import threshold_otsu
 
-from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target, get_s3_path
+from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 from flamingo_tools.measurements import compute_object_measures
 
 
@@ -59,7 +58,7 @@ COCHLEAE_FOR_SUBTYPES = {
     # "M_LR_000214_L": ["PV", "CR", "Calb1"],
     "M_LR_000184_R": ["PV", "Prph"],
     "M_LR_000184_L": ["PV", "Prph"],
-    "M_LR_000260_L": ["PV", "Prph", "Tuj1"],
+    # "M_LR_000260_L": ["PV", "Prph", "Tuj1"],
 }
 
 COCHLEAE = {
@@ -72,7 +71,7 @@ COCHLEAE = {
 
 
 REGULAR_COCHLEAE = [
-    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L", "M_LR_000260_L"
+    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L",  # "M_LR_000260_L"
 ]
 
 # For custom thresholds.
@@ -85,7 +84,16 @@ THRESHOLDS = {
 
 # For consistent colors.
 ALL_COLORS = ["red", "blue", "orange", "yellow", "cyan", "magenta", "green", "purple", "gray", "black"]
-COLORS = {}
+COLORS = {
+    "Type Ib": "#27339C",
+    "Type Ib/Ic": "#67279C",
+    "Type Ic": "#9C276F",
+    "inconclusive": "#9C8227",
+
+    "Type I": "#9C3B27",
+    "Type II": "#279C96",
+    "default": "#279C47"
+}
 
 PLOT_OUT = "./subtype_plots"
 
@@ -120,7 +128,7 @@ def stain_to_type(stain):
 
         # Combinations of Prph and Tuj1:
         "Prph+/Tuj1+": "Type II",
-        "Prph+/Tuj1-": "Type I",
+        "Prph+/Tuj1-": "Type II",
         "Prph-/Tuj1+": "Type I",
         "Prph-/Tuj1-": "inconclusive",
 
@@ -476,7 +484,11 @@ def combined_analysis(results, show_plots):
             bin_labels = pd.unique(frequency_mapped.index)
             x_positions = [i for i in range(len(bin_labels))]
             values = frequency_mapped.values
-            ax.scatter(x_positions, values, label=cat, color=colors[cat])
+            if cat in COLORS.keys():
+                color = COLORS[cat]
+            else:
+                color = COLORS["default"]
+            ax.scatter(x_positions, values, label=cat, color=color)
 
         main_ticks = range(len(bin_labels))
         ax.set_xticks(main_ticks)
@@ -513,14 +525,21 @@ def combined_analysis(results, show_plots):
             summary[cochlea][stype] = type_ratio
 
     types = list(set(types))
+    types.sort()
     df = pd.DataFrame(summary).fillna(0)  # missing values → 0
 
     # Transpose → cochleae on x-axis, subtypes stacked
-    ax = df.T.plot(kind="bar", stacked=True, figsize=(8, 5))
+    if len(types) == 6:
+        types = [types[2], types[3], types[4], types[5], types[0], types[1]]
+    print(types)
+    colors = [COLORS[t] for t in types]
+
+    ax = df.T.plot(kind="bar", stacked=True, figsize=(8, 5), color=colors)
 
     ax.set_ylabel("Fraction")
     ax.set_xlabel("Cochlea")
     ax.set_title("Subtype Fractions per Cochlea")
+    plt.legend(loc="lower right")
     plt.xticks(rotation=0)
     plt.tight_layout()
 
@@ -580,7 +599,7 @@ def analyze_subtype_data_regular(show_plots=True):
         # filter subtype table
         for chan in channels[1:]:
             column = f"marker_{chan}"
-            table = table.loc[table[column].isin([1,2])]
+            table = table.loc[table[column].isin([1, 2])]
             print(f"Length of table after filtering channel {chan}: {len(table)}")
 
         tab = pd.read_csv(ff, sep="\t")
@@ -627,19 +646,15 @@ def analyze_subtype_data_regular(show_plots=True):
         for label in unique_labels:
             if label in COLORS:
                 continue
-            if COLORS:
-                last_color = list(COLORS.values())[-1]
-                next_color = ALL_COLORS[ALL_COLORS.index(last_color) + 1]
-                COLORS[label] = next_color
             else:
                 COLORS[label] = ALL_COLORS[0]
 
         # 3.) Plot tonotopic mapping.
         freq = table["frequency[kHz]"].values
         assert len(freq) == len(classification)
-        #tonotopic_mapping = _plot_tonotopic_mapping(
+        # tonotopic_mapping = _plot_tonotopic_mapping(
         #    freq, classification, name=name, colors=COLORS, show_plots=show_plots
-        #)
+        # )
 
         # 4.) Plot 2D space of ratios.
         if show_2d:
