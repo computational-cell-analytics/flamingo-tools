@@ -78,7 +78,7 @@ def fig_05c(save_path, plot=False):
     ylim1 = 24
     y_ticks = [i for i in range(0, 25, 5)]
 
-    axes[1].set_ylabel("Ribbon Syn. per IHC", fontsize=main_label_size)
+    axes[1].set_ylabel("Synapses per IHC", fontsize=main_label_size)
     axes[1].set_yticks(y_ticks)
     axes[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
     axes[1].set_ylim(ylim0, ylim1)

@@ -21,6 +21,8 @@ COLOR_R = "#67279C"
 COLOR_F = "#9C276F"
 COLOR_T = "#279C52"
 
+COLOR_MEASUREMENT = "#9C7427"
+COLOR_LITERATURE = "#27339C"
 
 def scramble_instance_labels(arr):
     """Scramble indexes of instance segmentation to avoid neighboring colors.
@@ -269,7 +271,6 @@ def supp_fig_02(save_path, plot=False, segm="SGN", mode="precision"):
 
         # Labels and formatting
         x_pos = np.arange(1, len(labels)+1)
-        print(x_pos)
         plt.xticks(x_pos, labels, fontsize=16)
         plt.yticks(fontsize=main_tick_size)
         plt.ylabel("Value", fontsize=main_label_size)
@@ -454,8 +455,17 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         ax = axes.flatten()
 
         save_path_new = save_path.split(".")[0] + suffix + "." + save_path.split(".")[1]
-        ax[0].boxplot(sgn_values)
-        ax[1].boxplot(ihc_values)
+        box_plot = ax[0].boxplot(sgn_values, patch_artist=True, zorder=1)
+        for median in box_plot['medians']:
+            median.set_color(COLOR_MEASUREMENT)
+        for boxcolor in box_plot['boxes']:
+            boxcolor.set_facecolor("white")
+
+        box_plot = ax[1].boxplot(ihc_values, patch_artist=True, zorder=1)
+        for median in box_plot['medians']:
+            median.set_color(COLOR_MEASUREMENT)
+        for boxcolor in box_plot['boxes']:
+            boxcolor.set_facecolor("white")
 
         # Labels and formatting
         ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
@@ -475,9 +485,9 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         xmax = 1.5
         ax[0].set_xlim(xmin, xmax)
         lower_y, upper_y = literature_reference_values("SGN")
-        ax[0].hlines([lower_y, upper_y], xmin, xmax)
+        ax[0].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
         ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
-                   color="C0", fontsize=main_label_size, ha="center")
+                   color=COLOR_LITERATURE, fontsize=main_label_size, ha="center")
         ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
 
         ylim0 = 600
@@ -497,9 +507,9 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
         xmax = 1.5
         lower_y, upper_y = literature_reference_values("IHC")
         ax[1].set_xlim(xmin, xmax)
-        ax[1].hlines([lower_y, upper_y], xmin, xmax)
+        ax[1].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
         # ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
-        ax[1].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
+        ax[1].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
 
         if plot_average_ribbon_synapses:
             ribbon_synapse_counts = _load_ribbon_synapse_counts()
@@ -507,7 +517,12 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             ylim1 = 41
             y_ticks = [0, 10, 20, 30, 40, 50]
 
-            ax[2].boxplot(ribbon_synapse_counts)
+            box_plot = ax[2].boxplot(ribbon_synapse_counts, patch_artist=True, zorder=1)
+            for median in box_plot['medians']:
+                median.set_color(COLOR_MEASUREMENT)
+            for boxcolor in box_plot['boxes']:
+                boxcolor.set_facecolor("white")
+
             ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
             ax[2].set_yticks(y_ticks)
             ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
@@ -518,9 +533,9 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
             xmax = 1.5
             lower_y, upper_y = literature_reference_values("synapse")
             ax[2].set_xlim(xmin, xmax)
-            ax[2].hlines([lower_y, upper_y], xmin, xmax)
+            ax[2].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
             # ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
-            ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
+            ax[2].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
 
         prism_cleanup_axes(axes)
         plt.tight_layout()

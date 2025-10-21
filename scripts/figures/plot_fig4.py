@@ -588,6 +588,8 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                 eff = float(n_pos) / (n_pos + n_neg)
                 values.append(eff)
         alias, values_left, values_right = group_lr(aliases, values)
+        print(f"Average expression efficiency left {values_left}")
+        print(f"Average expression efficiency right {values_right}")
 
     result = pd.DataFrame(result)
     bin_labels = pd.unique(result["octave_band"])
