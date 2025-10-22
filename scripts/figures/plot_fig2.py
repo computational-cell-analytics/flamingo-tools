@@ -6,9 +6,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from matplotlib.lines import Line2D
-import tifffile
-from matplotlib import colors
-from skimage.segmentation import find_boundaries
 
 from util import literature_reference_values, SYNAPSE_DIR_ROOT
 from util import prism_style, prism_cleanup_axes, export_legend, custom_formatter_2
@@ -24,123 +21,13 @@ COLOR_T = "#279C52"
 COLOR_MEASUREMENT = "#9C7427"
 COLOR_LITERATURE = "#27339C"
 
-def scramble_instance_labels(arr):
-    """Scramble indexes of instance segmentation to avoid neighboring colors.
-    """
-    unique = list(np.unique(arr)[1:])
-    rng = np.random.default_rng(seed=42)
-    new_list = rng.uniform(1, len(unique) + 1, size=(len(unique)))
-    new_arr = np.zeros(arr.shape)
-    for old_id, new_id in zip(unique, new_list):
-        new_arr[arr == old_id] = new_id
-    return new_arr
 
-
-def plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba=[0, 0, 0, 0.5], plot=False):
-    seg = tifffile.imread(seg_path)
-    if len(seg.shape) == 3:
-        seg = seg[10, xlim1:xlim2, ylim1:ylim2]
-    else:
-        seg = seg[xlim1:xlim2, ylim1:ylim2]
-
-    img = tifffile.imread(img_path)
-    img = img[10, xlim1:xlim2, ylim1:ylim2]
-
-    # create color map with random distribution for coloring instance segmentation
-    unique = list(np.unique(seg)[1:])
-    n_instances = len(unique)
-
-    seg = scramble_instance_labels(seg)
-
-    rng = np.random.default_rng(seed=42)   # fixed seed for reproducibility
-    colors_array = rng.uniform(0, 1, size=(n_instances, 4))  # RGBA values in [0,1]
-    colors_array[:, 3] = 1.0  # full alpha
-    colors_array[0, 3] = 0.0  # make label 0 transparent (background)
-    cmap = colors.ListedColormap(colors_array)
-
-    boundaries = find_boundaries(seg, mode="inner")
-    boundary_overlay = np.zeros((*boundaries.shape, 4))
-
-    boundary_overlay[boundaries] = boundary_rgba  # RGBA = black
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.imshow(img, cmap="gray")
-    ax.imshow(seg, cmap=cmap, alpha=0.5, interpolation="nearest")
-    ax.imshow(boundary_overlay)
-    ax.axis("off")
-    plt.tight_layout()
-    if ".png" in save_path:
-        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
-    else:
-        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
-
-    if plot:
-        plt.show()
-    else:
-        plt.close()
-
-
-def fig_02a_sgn(save_dir, plot=False):
-    """Plot crops of SGN segmentation of CochleaNet, Cellpose and micro-sam.
-    """
-    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
-    val_sgn_dir = f"{cochlea_dir}/predictions/val_sgn"
-    image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationSGNs/for_consensus_annotation"
-
-    crop_name = "MLR169R_PV_z3420_allturns_full"
-    img_path = os.path.join(image_dir, f"{crop_name}.tif")
-
-    xlim1 = 2000
-    xlim2 = 2500
-    ylim1 = 3100
-    ylim2 = 3600
-    boundary_rgba = [1, 1, 1, 0.5]
-
-    for seg_net in ["distance_unet", "cellpose-sam", "micro-sam"]:
-        save_path = os.path.join(save_dir, f"fig_02b_sgn_{seg_net}.png")
-        seg_dir = os.path.join(val_sgn_dir, seg_net)
-        seg_path = os.path.join(seg_dir, f"{crop_name}_seg.tif")
-
-        plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
-
-
-def fig_02b_ihc(save_dir, plot=False):
-    """Plot crops of IHC segmentation of CochleaNet, Cellpose and micro-sam.
-    """
-    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
-    val_sgn_dir = f"{cochlea_dir}/predictions/val_ihc"
-    image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationIHCs"
-
-    crop_name = "MLR226L_VGlut3_z1200_3turns_full"
-    img_path = os.path.join(image_dir, f"{crop_name}.tif")
-
-    xlim1 = 1900
-    xlim2 = 2400
-    ylim1 = 2000
-    ylim2 = 2500
-    boundary_rgba = [1, 1, 1, 0.5]
-
-    for seg_net in ["distance_unet_v4b", "cellpose-sam", "micro-sam"]:
-        save_path = os.path.join(save_dir, f"fig_02b_ihc_{seg_net}.png")
-        seg_dir = os.path.join(val_sgn_dir, seg_net)
-        seg_path = os.path.join(seg_dir, f"{crop_name}_seg.tif")
-
-        plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
-
-
-def plot_legend_suppfig02(figure_dir):
+def plot_legend_suppfig02(save_path):
     """Plot common legend for figure 2c.
 
     Args:
-        chreef_data: Data of ChReef cochleae.
         save_path: save path to save legend.
-        grouping: Grouping for cochleae.
-            "side_mono" for division in Injected and Non-Injected.
-            "side_multi" for division per cochlea.
-            "animal" for division per animal.
-        use_alias: Use alias.
     """
-    save_path_colors = os.path.join(figure_dir, f"suppfig02_legend_colors.{FILE_EXTENSION}")
     # Colors
     color = [COLOR_P, COLOR_R, COLOR_F, COLOR_T]
     label = ["Precision", "Recall", "F1-score", "Processing time"]
@@ -148,7 +35,7 @@ def plot_legend_suppfig02(figure_dir):
     fl = lambda c: Line2D([], [], lw=3, color=c)
     handles = [fl(c) for c in color]
     legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
-    export_legend(legend, save_path_colors)
+    export_legend(legend, save_path)
     legend.remove()
     plt.close()
 
@@ -290,7 +177,6 @@ def supp_fig_02(save_path, plot=False, segm="SGN", mode="precision"):
 
         # Labels and formatting
         x_pos = np.arange(1, len(labels)+1)
-        print(x_pos)
         plt.xticks(x_pos, labels, fontsize=16)
         plt.yticks(fontsize=main_tick_size)
         plt.ylabel("Processing time [s]", fontsize=main_label_size)
@@ -312,43 +198,40 @@ def supp_fig_02(save_path, plot=False, segm="SGN", mode="precision"):
         plt.close()
 
 
-def plot_legend_fig02c(figure_dir):
+def plot_legend_fig02c(save_path, plot_mode="shapes"):
     """Plot common legend for figure 2c.
 
-    Args:
-        chreef_data: Data of ChReef cochleae.
+    Args:.
         save_path: save path to save legend.
-        grouping: Grouping for cochleae.
-            "side_mono" for division in Injected and Non-Injected.
-            "side_multi" for division per cochlea.
-            "animal" for division per animal.
-        use_alias: Use alias.
+        plot_mode: Plot either 'shapes' or 'colors' of data points.
     """
-    save_path_shapes = os.path.join(figure_dir, f"fig_02c_legend_shapes.{FILE_EXTENSION}")
-    save_path_colors = os.path.join(figure_dir, f"fig_02c_legend_colors.{FILE_EXTENSION}")
+    if plot_mode == "shapes":
+        # Shapes
+        color = ["black", "black"]
+        marker = ["o", "s"]
+        label = ["Manual", "Automatic"]
 
-    # Shapes
-    color = ["black", "black"]
-    marker = ["o", "s"]
-    label = ["Manual", "Automatic"]
+        f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
+        handles = [f(m, c) for (c, m) in zip(color, marker)]
+        legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+        export_legend(legend, save_path)
+        legend.remove()
+        plt.close()
 
-    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
-    handles = [f(m, c) for (c, m) in zip(color, marker)]
-    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
-    export_legend(legend, save_path_shapes)
-    legend.remove()
-    plt.close()
+    elif plot_mode =="colors":
+        # Colors
+        color = [COLOR_P, COLOR_R, COLOR_F]
+        label = ["Precision", "Recall", "F1-score"]
 
-    # Colors
-    color = [COLOR_P, COLOR_R, COLOR_F]
-    label = ["Precision", "Recall", "F1-score"]
+        fl = lambda c: Line2D([], [], lw=3, color=c)
+        handles = [fl(c) for c in color]
+        legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+        export_legend(legend, save_path)
+        legend.remove()
+        plt.close()
 
-    fl = lambda c: Line2D([], [], lw=3, color=c)
-    handles = [fl(c) for c in color]
-    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
-    export_legend(legend, save_path_colors)
-    legend.remove()
-    plt.close()
+    else:
+        raise ValueError("Choose either 'shapes' or 'colors' as plot_mode.")
 
 
 def fig_02c(save_path, plot=False, all_versions=False):
@@ -434,7 +317,7 @@ def _load_ribbon_synapse_counts():
     return syn_counts
 
 
-def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_synapses=False):
+def fig_02d(save_path, plot=False, plot_average_ribbon_synapses=False):
     """Box plot showing the counts for SGN and IHC per (mouse) cochlea in comparison to literature values.
     """
     prism_style()
@@ -445,181 +328,91 @@ def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_sy
     columns = 3 if plot_average_ribbon_synapses else 2
 
     sgn_values = [11153, 11398, 10333, 11820]
-    ihc_v4c_values = [712, 710, 721, 675]
+    ihc_values = [712, 710, 721, 675]
 
-    ihc_list = [ihc_v4c_values]
-    suffixes = ["_v4c"]
+    fig, axes = plt.subplots(rows, columns, figsize=(10, 4.5))
+    ax = axes.flatten()
+    box_plot = ax[0].boxplot(sgn_values, patch_artist=True, zorder=1)
+    for median in box_plot['medians']:
+        median.set_color(COLOR_MEASUREMENT)
+    for boxcolor in box_plot['boxes']:
+        boxcolor.set_facecolor("white")
 
-    for (ihc_values, suffix) in zip(ihc_list, suffixes):
-        fig, axes = plt.subplots(rows, columns, figsize=(10, 4.5))
-        ax = axes.flatten()
-
-        save_path_new = save_path.split(".")[0] + suffix + "." + save_path.split(".")[1]
-        box_plot = ax[0].boxplot(sgn_values, patch_artist=True, zorder=1)
-        for median in box_plot['medians']:
-            median.set_color(COLOR_MEASUREMENT)
-        for boxcolor in box_plot['boxes']:
-            boxcolor.set_facecolor("white")
-
-        box_plot = ax[1].boxplot(ihc_values, patch_artist=True, zorder=1)
-        for median in box_plot['medians']:
-            median.set_color(COLOR_MEASUREMENT)
-        for boxcolor in box_plot['boxes']:
-            boxcolor.set_facecolor("white")
-
-        # Labels and formatting
-        ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
-
-        ylim0 = 8500
-        ylim1 = 12500
-        y_ticks = [i for i in range(9000, 12000 + 1, 1000)]
-
-        ax[0].set_ylabel("Count per cochlea", fontsize=main_label_size)
-        ax[0].set_yticks(y_ticks)
-        ax[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-        ax[0].set_ylim(ylim0, ylim1)
-        ax[0].yaxis.set_ticks_position("left")
-
-        # set range of literature values
-        xmin = 0.5
-        xmax = 1.5
-        ax[0].set_xlim(xmin, xmax)
-        lower_y, upper_y = literature_reference_values("SGN")
-        ax[0].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
-        ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
-                   color=COLOR_LITERATURE, fontsize=main_label_size, ha="center")
-        ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
-
-        ylim0 = 600
-        ylim1 = 800
-        y_ticks = [i for i in range(600, 800 + 1, 100)]
-
-        ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
-        ax[1].set_yticks(y_ticks)
-        ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-        ax[1].set_ylim(ylim0, ylim1)
-        if not plot_average_ribbon_synapses:
-            ax[1].yaxis.tick_right()
-            ax[1].yaxis.set_ticks_position("right")
-
-        # set range of literature values
-        xmin = 0.5
-        xmax = 1.5
-        lower_y, upper_y = literature_reference_values("IHC")
-        ax[1].set_xlim(xmin, xmax)
-        ax[1].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
-        # ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
-        ax[1].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
-
-        if plot_average_ribbon_synapses:
-            ribbon_synapse_counts = _load_ribbon_synapse_counts()
-            ylim0 = -1
-            ylim1 = 41
-            y_ticks = [0, 10, 20, 30, 40, 50]
-
-            box_plot = ax[2].boxplot(ribbon_synapse_counts, patch_artist=True, zorder=1)
-            for median in box_plot['medians']:
-                median.set_color(COLOR_MEASUREMENT)
-            for boxcolor in box_plot['boxes']:
-                boxcolor.set_facecolor("white")
-
-            ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
-            ax[2].set_yticks(y_ticks)
-            ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-            ax[2].set_ylim(ylim0, ylim1)
-
-            # set range of literature values
-            xmin = 0.5
-            xmax = 1.5
-            lower_y, upper_y = literature_reference_values("synapse")
-            ax[2].set_xlim(xmin, xmax)
-            ax[2].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
-            # ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
-            ax[2].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
-
-        prism_cleanup_axes(axes)
-        plt.tight_layout()
-
-        if ".png" in save_path:
-            plt.savefig(save_path_new, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
-        else:
-            plt.savefig(save_path_new, bbox_inches='tight', pad_inches=0)
-
-        if plot:
-            plt.show()
-        else:
-            plt.close()
-
-
-def fig_02d_02(save_path, filter_zeros=True, plot=False):
-    """Bar plot showing the distribution of synapse markers per IHC segmentation average over multiple clochleae.
-    """
-    cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R"]
-    ihc_version = "ihc_counts_v4b"
-    synapse_dir = os.path.join(SYNAPSE_DIR_ROOT, ihc_version)
-
-    max_dist = 3
-    bins = 10
-    cap = 30
-    plot_density = False
-
-    results = []
-    for cochlea in cochleae:
-        synapse_file = os.path.join(synapse_dir, f"ihc_count_{cochlea}.tsv")
-        ihc_table = pd.read_csv(synapse_file, sep="\t")
-        syn_per_ihc = list(ihc_table["synapse_count"])
-        if filter_zeros:
-            syn_per_ihc = [s for s in syn_per_ihc if s != 0]
-        results.append(syn_per_ihc)
-
-    results = [np.clip(r, 0, cap) for r in results]
-
-    # Define bins (shared for all datasets)
-    bins = np.linspace(0, 30, 11)  # 29 bins
-
-    # Compute histogram (relative) for each dataset
-    histograms = []
-    for data in results:
-        counts, _ = np.histogram(data, bins=bins, density=plot_density)
-        histograms.append(counts)
-
-    histograms = np.array(histograms)
-
-    # Compute mean and std for each bin across datasets
-    mean_counts = histograms.mean(axis=0)
-    std_counts = histograms.std(axis=0)
-
-    # Get bin centers for plotting
-    bin_centers = 0.5 * (bins[1:] + bins[:-1])
-
-    # Plot
-    plt.figure(figsize=(8, 5))
-    plt.bar(bin_centers, mean_counts, width=(bins[1] - bins[0]), yerr=std_counts, alpha=0.7, capsize=4,
-            label="Mean ± Std Dev", edgecolor="black")
-
-    main_label_size = 20
-    main_tick_size = 16
-    legendsize = 16
+    box_plot = ax[1].boxplot(ihc_values, patch_artist=True, zorder=1)
+    for median in box_plot['medians']:
+        median.set_color(COLOR_MEASUREMENT)
+    for boxcolor in box_plot['boxes']:
+        boxcolor.set_facecolor("white")
 
     # Labels and formatting
-    x_ticks = [i for i in range(0, cap + 1, 5)]
-    if plot_density:
-        y_ticks = [i * 0.02 for i in range(0, 10, 2)]
-    else:
-        y_ticks = [i for i in range(0, 300, 50)]
+    ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
 
-    plt.xticks(x_ticks, fontsize=main_tick_size)
-    plt.yticks(y_ticks, fontsize=main_tick_size)
-    if plot_density:
-        plt.ylabel("Proportion of IHCs [%]", fontsize=main_label_size)
-    else:
-        plt.ylabel("Number of IHCs", fontsize=main_label_size)
-    plt.xlabel(f"Ribbon Synapses per IHC @ {max_dist} µm", fontsize=main_label_size)
+    ylim0 = 8500
+    ylim1 = 12500
+    y_ticks = [i for i in range(9000, 12000 + 1, 1000)]
 
-    plt.title("Average Synapses per IHC for a Dataset of 4 Cochleae")
+    ax[0].set_ylabel("Count per cochlea", fontsize=main_label_size)
+    ax[0].set_yticks(y_ticks)
+    ax[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[0].set_ylim(ylim0, ylim1)
+    ax[0].yaxis.set_ticks_position("left")
 
-    plt.grid(axis="y", linestyle="solid", alpha=0.5)
-    plt.legend(fontsize=legendsize)
+    # set range of literature values
+    xmin = 0.5
+    xmax = 1.5
+    ax[0].set_xlim(xmin, xmax)
+    lower_y, upper_y = literature_reference_values("SGN")
+    ax[0].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
+                color=COLOR_LITERATURE, fontsize=main_label_size, ha="center")
+    ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
+
+    ylim0 = 600
+    ylim1 = 800
+    y_ticks = [i for i in range(600, 800 + 1, 100)]
+
+    ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
+    ax[1].set_yticks(y_ticks)
+    ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[1].set_ylim(ylim0, ylim1)
+    if not plot_average_ribbon_synapses:
+        ax[1].yaxis.tick_right()
+        ax[1].yaxis.set_ticks_position("right")
+
+    # set range of literature values
+    xmin = 0.5
+    xmax = 1.5
+    lower_y, upper_y = literature_reference_values("IHC")
+    ax[1].set_xlim(xmin, xmax)
+    ax[1].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[1].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
+
+    if plot_average_ribbon_synapses:
+        ribbon_synapse_counts = _load_ribbon_synapse_counts()
+        ylim0 = -1
+        ylim1 = 41
+        y_ticks = [0, 10, 20, 30, 40, 50]
+
+        box_plot = ax[2].boxplot(ribbon_synapse_counts, patch_artist=True, zorder=1)
+        for median in box_plot['medians']:
+            median.set_color(COLOR_MEASUREMENT)
+        for boxcolor in box_plot['boxes']:
+            boxcolor.set_facecolor("white")
+
+        ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
+        ax[2].set_yticks(y_ticks)
+        ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+        ax[2].set_ylim(ylim0, ylim1)
+
+        # set range of literature values
+        xmin = 0.5
+        xmax = 1.5
+        lower_y, upper_y = literature_reference_values("synapse")
+        ax[2].set_xlim(xmin, xmax)
+        ax[2].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+        ax[2].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
+
+    prism_cleanup_axes(axes)
     plt.tight_layout()
 
     if ".png" in save_path:
@@ -641,30 +434,21 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    # Panes A and B: Qualitative comparison of visualization results.
-    # fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
-    # fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
-
     # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
-    plot_legend_fig02c(figure_dir=args.figure_dir)
-    plot_legend_suppfig02(figure_dir=args.figure_dir)
-
-    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn.{FILE_EXTENSION}"), segm="SGN")
-    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc.{FILE_EXTENSION}"), segm="IHC")
-
-    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn_time.{FILE_EXTENSION}"), segm="SGN", mode="runtime")
-    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc_time.{FILE_EXTENSION}"), segm="IHC", mode="runtime")
+    plot_legend_fig02c(os.path.join(args.figure_dir, f"fig_02c_legend_shapes.{FILE_EXTENSION}"), plot_mode="shapes")
+    plot_legend_fig02c(os.path.join(args.figure_dir, f"fig_02c_legend_colors.{FILE_EXTENSION}"), plot_mode="colors")
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
-    fig_02d_01(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
+    fig_02d(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
                plot=args.plot, plot_average_ribbon_synapses=True)
 
-    # Alternative version of synapse distribution for panel D.
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02"), plot=args.plot)
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4c"), filter_zeros=False, plot=plot)
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4c_filtered"), filter_zeros=True, plot=plot)
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4b"), filter_zeros=True, plot=args.plot)
+    # Supplementary Figure 2: Comparing other methods in terms of segmentation accuracy and runtime
+    plot_legend_suppfig02(save_path=os.path.join(args.figure_dir, f"suppfig02_legend_colors.{FILE_EXTENSION}"))
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn.{FILE_EXTENSION}"), segm="SGN")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc.{FILE_EXTENSION}"), segm="IHC")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn_time.{FILE_EXTENSION}"), segm="SGN", mode="runtime")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc_time.{FILE_EXTENSION}"), segm="IHC", mode="runtime")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
 from util import sliding_runlength_sum, frequency_mapping, SYNAPSE_DIR_ROOT
 from util import prism_style, prism_cleanup_axes, export_legend
 
-INPUT_ROOT = "/home/martin/Documents/lightsheet-cochlea/M_LR_000227_R"
+INPUT_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/frequency_mapping/M_LR_000227_R/scale3"
 
 TYPE_TO_CHANNEL = {
     "Type-Ia": "CR",
@@ -31,10 +31,10 @@ png_dpi = 300
 
 # The cochlea for the CHReef analysis.
 COCHLEAE_DICT = {
-    "M_LR_000226_L": {"alias": "M01L", "component": [1]},
-    "M_LR_000226_R": {"alias": "M01R", "component": [1]},
-    "M_LR_000227_L": {"alias": "M02L", "component": [1]},
-    "M_LR_000227_R": {"alias": "M02R", "component": [1]},
+    "M_LR_000226_L": {"alias": "M01L", "component": [1], "color": "#9C5027"},
+    "M_LR_000226_R": {"alias": "M01R", "component": [1], "color": "#279C52"},
+    "M_LR_000227_L": {"alias": "M02L", "component": [1], "color": "#67279C"},
+    "M_LR_000227_R": {"alias": "M02R", "component": [1], "color": "#27339C"},
 }
 
 
@@ -201,14 +201,11 @@ def fig_03c_rl(save_path, plot=False):
         plt.close()
 
 
-def plot_legend_fig03c(figure_dir):
-    color_dict = {
-        "M01L": "#9C5027",
-        "M01R": "#279C52",
-        "M02L": "#67279C",
-        "M02R": "#27339C",
-    }
-    save_path = os.path.join(figure_dir, f"fig_03c_legend.{FILE_EXTENSION}")
+def plot_legend_fig03c(save_path):
+    color_dict = {}
+    for key in COCHLEAE_DICT.keys():
+        color_dict[COCHLEAE_DICT[key]["alias"]] = COCHLEAE_DICT[key]["color"]
+
     marker = ["o" for _ in color_dict]
     label = list(color_dict.keys())
     color = [color_dict[key] for key in color_dict.keys()]
@@ -219,15 +216,6 @@ def plot_legend_fig03c(figure_dir):
     export_legend(legend, save_path)
     legend.remove()
     plt.close()
-
-
-def _get_trendline_params3(y_values):
-    means = []
-    std = []
-    for i in range(len(y_values[0])):
-        means.append(np.mean([yval[i] for yval in y_values]))
-        std.append(np.std([yval[i] for yval in y_values]))
-    return means, std
 
 
 def _get_trendline_dict(trend_dict,):
@@ -283,12 +271,14 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendl
     label_size = 20
 
     result = {"cochlea": [], "octave_band": [], "value": []}
+    color_dict = {}
     for name, values in tonotopic_data.items():
         if use_alias:
             alias = COCHLEAE_DICT[name]["alias"]
         else:
             alias = name.replace("_", "").replace("0", "")
 
+        color_dict[alias] = COCHLEAE_DICT[name]["color"]
         freq = values["frequency[kHz]"].values
         syn_count = values["syn_per_IHC"].values
         octave_binned = frequency_mapping(freq, syn_count, animal="mouse")
@@ -302,13 +292,6 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendl
     band_to_x = {band: i for i, band in enumerate(bin_labels)}
     result["x_pos"] = result["octave_band"].map(band_to_x)
 
-    colors = {
-        "M01L": "#9C5027",
-        "M01R": "#279C52",
-        "M02L": "#67279C",
-        "M02R": "#27339C",
-    }
-
     fig, ax = plt.subplots(figsize=(8, 4))
 
     offset = 0.08
@@ -317,7 +300,7 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendl
     for num, (name, grp) in enumerate(result.groupby("cochlea")):
         x_sorted = grp["x_pos"]
         x_positions = [x - len(grp["x_pos"]) // 2 * offset + offset * num for x in grp["x_pos"]]
-        ax.scatter(x_positions, grp["value"], marker="o", label=name, s=80, alpha=1, color=colors[name])
+        ax.scatter(x_positions, grp["value"], marker="o", label=name, s=80, alpha=1, color=color_dict[name])
 
         # y_values.append(list(grp["value"]))
 
@@ -369,7 +352,6 @@ def fig_03c_octave(tonotopic_data, save_path, plot=False, use_alias=True, trendl
                          color="gray", alpha=0.05, interpolate=True)
 
     ax.set_ylabel("Ribbon synapses per IHC")
-    # plt.legend(title="Cochlea")
     plt.tight_layout()
     prism_cleanup_axes(ax)
 
@@ -424,9 +406,6 @@ def fig_03d_fraction(save_path, plot):
             results["fraction"].append(subtype_fraction)
             results["cochlea"].append(cochlea)
 
-        # coexpr = np.logical_and(subtype_table.iloc[:, 0].values, subtype_table.iloc[:, 1].values)
-        # print("Co-expression:", coexpr.sum())
-
     results = pd.DataFrame(results)
     fig, ax = plt.subplots()
     for cochlea, group in results.groupby("cochlea"):
@@ -454,25 +433,23 @@ def fig_03d_octave(save_path, plot):
 def main():
     parser = argparse.ArgumentParser(description="Generate plots for Fig 3 of the cochlea paper.")
     parser.add_argument("--figure_dir", "-f", type=str, help="Output directory for plots.", default="./panels/fig3")
+    parser.add_argument("--napari", action="store_true", help="Visualize tonotopic mapping in napari.")
     parser.add_argument("--plot", action="store_true")
     args = parser.parse_args()
 
     os.makedirs(args.figure_dir, exist_ok=True)
     tonotopic_data = get_tonotopic_data()
 
-    # Panel A: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
+    # Panel C: Tonotopic mapping of SGNs and IHCs (rendering in napari + heatmap)
     cmap = "plasma"
-    # fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap_{cmap}.{FILE_EXTENSION}"),
-    #         plot=args.plot, plot_napari=True, cmap=cmap)
+    fig_03a(save_path=os.path.join(args.figure_dir, f"fig_03a_cmap_{cmap}.{FILE_EXTENSION}"),
+            plot=args.plot, plot_napari=args.napari, cmap=cmap)
 
-    # Panel C: Spatial distribution of synapses across the cochlea.
-    # We have two options: running sum over the runlength or per octave band
-    # fig_03c_rl(save_path=os.path.join(args.figure_dir, f"fig_03c_runlength.{FILE_EXTENSION}"), plot=args.plot)
+    # Panel C: Spatial distribution of synapses across the cochlea (running sum per octave band)
     fig_03c_octave(tonotopic_data=tonotopic_data,
                    save_path=os.path.join(args.figure_dir, f"fig_03c_octave.{FILE_EXTENSION}"),
                    plot=args.plot, trendline=True)
-
-    plot_legend_fig03c(args.figure_dir)
+    plot_legend_fig03c(save_path=os.path.join(args.figure_dir, f"fig_03c_legend.{FILE_EXTENSION}"))
 
     # Panel D: Spatial distribution of SGN sub-types.
     # fig_03d_fraction(save_path=os.path.join(args.figure_dir, f"fig_03d_fraction.{FILE_EXTENSION}"), plot=args.plot)

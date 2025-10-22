@@ -33,14 +33,6 @@ COCHLEAE_DICT = {
     "G_EK_000049_R": {"alias": "G1R", "component": [1, 2]},
 }
 
-COLORS_ANIMAL_01 = {
-    "M05": "#DB3000",
-    "M06": "#DB0063",
-    "M07": "#8F00DB",
-    "M08": "#0004DB",
-    "M09": "#0093DB"
-}
-
 COLORS_ANIMAL = {
     "M05": "#9C5027",
     "M06": "#279C52",
@@ -57,28 +49,12 @@ COLORS_LEFT = {
     "M09R": "#4C2E5C"
 }
 
-COLORS_LEFT_01 = {
-    "M05L": "#00D3DB",
-    "M06L": "#1DACB1",
-    "M07L": "#2D8386",
-    "M08L": "#2E5A5C",
-    "M09L": "#223233"
-}
-
 COLORS_RIGHT = {
     "M05L": "#FF0063",
     "M06L": "#DB0063",
     "M07L": "#B11D60",
     "M08L": "#862D55",
     "M09L": "#5C2E43"
-}
-
-COLORS_RIGHT_01 = {
-    "M05R": "#00DB50",
-    "M06R": "#1DB153",
-    "M07R": "#2D864E",
-    "M08R": "#2E5C3F",
-    "M09R": "#223328"
 }
 
 FILE_EXTENSION = "png"
@@ -247,8 +223,8 @@ def plot_legend(chreef_data, save_path, grouping="side_mono", use_alias=True,
     plt.close()
 
 
-def plot_legend_fig04e_gerbil(figure_dir):
-    """Plot common legend for figure 4e gerbil.
+def plot_legend_fig05e_gerbil(save_path):
+    """Plot common legend for figure 5e gerbil.
 
     Args:
         chreef_data: Data of ChReef cochleae.
@@ -259,8 +235,6 @@ def plot_legend_fig04e_gerbil(figure_dir):
             "animal" for division per animal.
         use_alias: Use alias.
     """
-    save_path_shapes = os.path.join(figure_dir, f"fig_04e_gerbil_legend.{FILE_EXTENSION}")
-
     # Shapes
     color = [COLOR_LEFT, COLOR_RIGHT]
     marker = ["o", "^"]
@@ -269,7 +243,7 @@ def plot_legend_fig04e_gerbil(figure_dir):
     f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
     handles = [f(m, c) for (c, m) in zip(color, marker)]
     legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
-    export_legend(legend, save_path_shapes)
+    export_legend(legend, save_path)
     legend.remove()
     plt.close()
 
@@ -588,8 +562,8 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
                 eff = float(n_pos) / (n_pos + n_neg)
                 values.append(eff)
         alias, values_left, values_right = group_lr(aliases, values)
-        print(f"Average expression efficiency left {values_left}")
-        print(f"Average expression efficiency right {values_right}")
+        print(f"Average expression efficiency left: {round(values_left[0], 4)}")
+        print(f"Average expression efficiency right: {round(values_right[0], 4)}")
 
     result = pd.DataFrame(result)
     bin_labels = pd.unique(result["octave_band"])
@@ -707,7 +681,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
             trend_l, = ax.plot(
                 x_sorted,
                 y_sorted,
-                linestyle="dotted",
+                linestyle="dashed",
                 color=color_trend_l,
                 alpha=0.6,
                 linewidth=trendline_width,
@@ -741,7 +715,7 @@ def fig_04e(chreef_data, save_path, plot, intensity=False, gerbil=False,
             trend_r, = ax.plot(
                 x_sorted,
                 y_sorted,
-                linestyle="dashed",
+                linestyle="dotted",
                 color=color_trend_r,
                 alpha=0.7,
                 linewidth=trendline_width,
@@ -873,15 +847,10 @@ def main():
     # remove other cochlea to have only pairs remaining
     chreef_data.pop("M_LR_000143_R")
 
-    plot_legend(chreef_data, grouping="side_mono",
-                save_path=os.path.join(args.figure_dir, f"fig_04_legend_mono.{FILE_EXTENSION}"))
-    plot_legend(chreef_data, grouping="side_multi",
-                save_path=os.path.join(args.figure_dir, f"fig_04_legend_multi.{FILE_EXTENSION}"))
-    plot_legend(chreef_data, grouping="animal",
-                save_path=os.path.join(args.figure_dir, f"fig_04_legend_animal.{FILE_EXTENSION}"))
-
     # Create the panels:
     grouping = "animal"
+    plot_legend(chreef_data, grouping=grouping,
+                save_path=os.path.join(args.figure_dir, f"fig_04_legend_{grouping}.{FILE_EXTENSION}"))
 
     # C: The SGN count compared to reference values from literature and healthy
     # Maybe remove literature reference from plot?
@@ -889,39 +858,28 @@ def main():
             save_path=os.path.join(args.figure_dir, f"fig_04c.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias)
 
-    # D: The transduction efficiency. We also plot GFP intensities.
+    # D: The expression efficiency. We also plot GFP intensities.
     fig_04d(chreef_data,
             save_path=os.path.join(args.figure_dir,  f"fig_04d_transduction.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias)
-    # fig_04d(chreef_data,
-    #         save_path=os.path.join(args.figure_dir, f"fig_04d_intensity.{FILE_EXTENSION}"),
-    #         plot=args.plot, plot_by_side=True, intensity=True, use_alias=use_alias)
 
+    # E: The expression efficiency per octave band.
+    # trendlines without standard deviation
     fig_04e(chreef_data,
             save_path=os.path.join(args.figure_dir, f"fig_04e_transduction.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias, trendlines=True)
-
+    # trendlines with standard deviation
     fig_04e(chreef_data,
             save_path=os.path.join(args.figure_dir, f"fig_04e_transduction_std.{FILE_EXTENSION}"),
             plot=args.plot, grouping=grouping, use_alias=use_alias, trendlines=True, trendline_std=True)
-    # fig_04e(chreef_data,
-    #         save_path=os.path.join(args.figure_dir, f"fig_04e_intensity.{FILE_EXTENSION}"),
-    #         plot=args.plot, intensity=True, use_alias=use_alias)
 
+    # Figures for gerbil (Figure 5)
     chreef_data_gerbil = get_chreef_data(animal="gerbil")
-    fig_04d(chreef_data_gerbil,
-            save_path=os.path.join(args.figure_dir, f"fig_04d_gerbil_transduction.{FILE_EXTENSION}"),
-            plot=args.plot, grouping="side_mono", gerbil=True, use_alias=use_alias)
-
     fig_04e(chreef_data_gerbil,
-            save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_transduction.{FILE_EXTENSION}"),
+            save_path=os.path.join(args.figure_dir, f"fig_05e_gerbil_transduction.{FILE_EXTENSION}"),
             plot=args.plot, gerbil=True, use_alias=use_alias, trendlines=True)
 
-    plot_legend_fig04e_gerbil(args.figure_dir)
-
-    # fig_04e(chreef_data_gerbil,
-    #         save_path=os.path.join(args.figure_dir, f"fig_04e_gerbil_intensity.{FILE_EXTENSION}"),
-    #         plot=args.plot, intensity=True, use_alias=use_alias)
+    plot_legend_fig05e_gerbil(save_path=os.path.join(args.figure_dir, f"fig_05e_gerbil_legend.{FILE_EXTENSION}"))
 
 
 if __name__ == "__main__":
