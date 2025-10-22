@@ -4,62 +4,189 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import tifffile
-from matplotlib import colors
-from skimage.segmentation import find_boundaries
+import matplotlib.ticker as mticker
+from matplotlib.lines import Line2D
 
 from util import literature_reference_values, SYNAPSE_DIR_ROOT
-from util import prism_style, prism_cleanup_axes
+from util import prism_style, prism_cleanup_axes, export_legend, custom_formatter_2
 
 png_dpi = 300
 FILE_EXTENSION = "png"
 
+COLOR_P = "#9C5027"
+COLOR_R = "#67279C"
+COLOR_F = "#9C276F"
+COLOR_T = "#279C52"
 
-def scramble_instance_labels(arr):
-    """Scramble indexes of instance segmentation to avoid neighboring colors.
+COLOR_MEASUREMENT = "#9C7427"
+COLOR_LITERATURE = "#27339C"
+
+
+def plot_legend_suppfig02(save_path):
+    """Plot common legend for figure 2c.
+
+    Args:
+        save_path: save path to save legend.
     """
-    unique = list(np.unique(arr)[1:])
-    rng = np.random.default_rng(seed=42)
-    new_list = rng.uniform(1, len(unique) + 1, size=(len(unique)))
-    new_arr = np.zeros(arr.shape)
-    for old_id, new_id in zip(unique, new_list):
-        new_arr[arr == old_id] = new_id
-    return new_arr
+    # Colors
+    color = [COLOR_P, COLOR_R, COLOR_F, COLOR_T]
+    label = ["Precision", "Recall", "F1-score", "Processing time"]
+
+    fl = lambda c: Line2D([], [], lw=3, color=c)
+    handles = [fl(c) for c in color]
+    legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+    export_legend(legend, save_path)
+    legend.remove()
+    plt.close()
 
 
-def plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba=[0, 0, 0, 0.5], plot=False):
-    seg = tifffile.imread(seg_path)
-    if len(seg.shape) == 3:
-        seg = seg[10, xlim1:xlim2, ylim1:ylim2]
-    else:
-        seg = seg[xlim1:xlim2, ylim1:ylim2]
+def supp_fig_02(save_path, plot=False, segm="SGN", mode="precision"):
+    # SGN
+    value_dict = {
+        "SGN": {
+            "stardist": {
+                "label": "Stardist",
+                "precision": 0.706,
+                "recall": 0.630,
+                "f1-score": 0.628,
+                "marker": "o",
+                "runtime": 536.5,
+                "runtime_std": 148.4
 
-    img = tifffile.imread(img_path)
-    img = img[10, xlim1:xlim2, ylim1:ylim2]
+            },
+            "micro_sam": {
+                "label": "µSAM",
+                "precision": 0.140,
+                "recall": 0.782,
+                "f1-score": 0.228,
+                "marker": "D",
+                "runtime": 407.5,
+                "runtime_std": 107.5
+            },
+            "cellpose_3": {
+                "label": "Cellpose 3",
+                "precision": 0.117,
+                "recall": 0.607,
+                "f1-score": 0.186,
+                "marker": "v",
+                "runtime": None,
+                "runtime_std": None
+            },
+            "cellpose_sam": {
+                "label": "Cellpose-SAM",
+                "precision": 0.250,
+                "recall": 0.003,
+                "f1-score": 0.005,
+                "marker": "^",
+                "runtime": 167.9,
+                "runtime_std": 40.2
+            },
+            "distance_unet": {
+                "label": "CochleaNet",
+                "precision": 0.886,
+                "recall": 0.804,
+                "f1-score": 0.837,
+                "marker": "s",
+                "runtime": 168.8,
+                "runtime_std": 21.8
+            },
+        },
+        "IHC": {
+            "micro_sam": {
+                "label": "µSAM",
+                "precision": 0.053,
+                "recall": 0.684,
+                "f1-score": 0.094,
+                "marker": "D",
+                "runtime": 445.6,
+                "runtime_std": 106.6
+            },
+            "cellpose_3": {
+                "label": "Cellpose 3",
+                "precision": 0.375,
+                "recall": 0.554,
+                "f1-score": 0.329,
+                "marker": "v",
+                "runtime": 30.1,
+                "runtime_std": 162.3
+            },
+            "cellpose_sam": {
+                "label": "Cellpose-SAM",
+                "precision": 0.636,
+                "recall": 0.025,
+                "f1-score": 0.047,
+                "marker": "^",
+                "runtime": None,
+                "runtime_std": None
+            },
+            "distance_unet": {
+                "label": "CochleaNet",
+                "precision": 0.664,
+                "recall": 	0.661,
+                "f1-score": 0.659,
+                "marker": "s",
+                "runtime": 65.7,
+                "runtime_std": 72.6
+            },
+        }
+    }
 
-    # create color map with random distribution for coloring instance segmentation
-    unique = list(np.unique(seg)[1:])
-    n_instances = len(unique)
+    # Convert setting labels to numerical x positions
+    offset = 0.08  # horizontal shift for scatter separation
 
-    seg = scramble_instance_labels(seg)
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
 
-    rng = np.random.default_rng(seed=42)   # fixed seed for reproducibility
-    colors_array = rng.uniform(0, 1, size=(n_instances, 4))  # RGBA values in [0,1]
-    colors_array[:, 3] = 1.0  # full alpha
-    colors_array[0, 3] = 0.0  # make label 0 transparent (background)
-    cmap = colors.ListedColormap(colors_array)
+    main_label_size = 20
+    main_tick_size = 16
 
-    boundaries = find_boundaries(seg, mode="inner")
-    boundary_overlay = np.zeros((*boundaries.shape, 4))
+    labels = [value_dict[segm][key]["label"] for key in value_dict[segm].keys()]
 
-    boundary_overlay[boundaries] = boundary_rgba  # RGBA = black
+    if mode == "precision":
+        # Convert setting labels to numerical x positions
+        offset = 0.08  # horizontal shift for scatter separation
+        for num, key in enumerate(list(value_dict[segm].keys())):
+            precision = [value_dict[segm][key]["precision"]]
+            recall = [value_dict[segm][key]["recall"]]
+            f1score = [value_dict[segm][key]["f1-score"]]
+            marker = value_dict[segm][key]["marker"]
+            x_pos = num + 1
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.imshow(img, cmap="gray")
-    ax.imshow(seg, cmap=cmap, alpha=0.5, interpolation="nearest")
-    ax.imshow(boundary_overlay)
-    ax.axis("off")
+            plt.scatter([x_pos - offset], precision, label="Precision manual", color=COLOR_P, marker=marker, s=80)
+            plt.scatter([x_pos],         recall, label="Recall manual", color=COLOR_R, marker=marker, s=80)
+            plt.scatter([x_pos + offset], f1score, label="F1-score manual", color=COLOR_F, marker=marker, s=80)
+
+        # Labels and formatting
+        x_pos = np.arange(1, len(labels)+1)
+        plt.xticks(x_pos, labels, fontsize=16)
+        plt.yticks(fontsize=main_tick_size)
+        plt.ylabel("Value", fontsize=main_label_size)
+        plt.ylim(-0.1, 1)
+        # plt.legend(loc="lower right", fontsize=legendsize)
+        plt.grid(axis="y", linestyle="solid", alpha=0.5)
+
+    elif mode == "runtime":
+        # Convert setting labels to numerical x positions
+        offset = 0.08  # horizontal shift for scatter separation
+        for num, key in enumerate(list(value_dict[segm].keys())):
+            runtime = [value_dict[segm][key]["runtime"]]
+            marker = value_dict[segm][key]["marker"]
+            x_pos = num + 1
+
+            plt.scatter([x_pos], runtime, label="Runtime", color=COLOR_T, marker=marker, s=80)
+
+        # Labels and formatting
+        x_pos = np.arange(1, len(labels)+1)
+        plt.xticks(x_pos, labels, fontsize=16)
+        plt.yticks(fontsize=main_tick_size)
+        plt.ylabel("Processing time [s]", fontsize=main_label_size)
+        plt.ylim(-0.1, 600)
+        # plt.legend(loc="lower right", fontsize=legendsize)
+        plt.grid(axis="y", linestyle="solid", alpha=0.5)
+
     plt.tight_layout()
+    prism_cleanup_axes(ax)
+
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     else:
@@ -71,52 +198,40 @@ def plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, bou
         plt.close()
 
 
-def fig_02a_sgn(save_dir, plot=False):
-    """Plot crops of SGN segmentation of CochleaNet, Cellpose and micro-sam.
+def plot_legend_fig02c(save_path, plot_mode="shapes"):
+    """Plot common legend for figure 2c.
+
+    Args:.
+        save_path: save path to save legend.
+        plot_mode: Plot either 'shapes' or 'colors' of data points.
     """
-    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
-    val_sgn_dir = f"{cochlea_dir}/predictions/val_sgn"
-    image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationSGNs/for_consensus_annotation"
+    if plot_mode == "shapes":
+        # Shapes
+        color = ["black", "black"]
+        marker = ["o", "s"]
+        label = ["Manual", "Automatic"]
 
-    crop_name = "MLR169R_PV_z3420_allturns_full"
-    img_path = os.path.join(image_dir, f"{crop_name}.tif")
+        f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
+        handles = [f(m, c) for (c, m) in zip(color, marker)]
+        legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+        export_legend(legend, save_path)
+        legend.remove()
+        plt.close()
 
-    xlim1 = 2000
-    xlim2 = 2500
-    ylim1 = 3100
-    ylim2 = 3600
-    boundary_rgba = [1, 1, 1, 0.5]
+    elif plot_mode =="colors":
+        # Colors
+        color = [COLOR_P, COLOR_R, COLOR_F]
+        label = ["Precision", "Recall", "F1-score"]
 
-    for seg_net in ["distance_unet", "cellpose-sam", "micro-sam"]:
-        save_path = os.path.join(save_dir, f"fig_02b_sgn_{seg_net}.png")
-        seg_dir = os.path.join(val_sgn_dir, seg_net)
-        seg_path = os.path.join(seg_dir, f"{crop_name}_seg.tif")
+        fl = lambda c: Line2D([], [], lw=3, color=c)
+        handles = [fl(c) for c in color]
+        legend = plt.legend(handles, label, loc=3, ncol=len(label), framealpha=1, frameon=False)
+        export_legend(legend, save_path)
+        legend.remove()
+        plt.close()
 
-        plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
-
-
-def fig_02b_ihc(save_dir, plot=False):
-    """Plot crops of IHC segmentation of CochleaNet, Cellpose and micro-sam.
-    """
-    cochlea_dir = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet"
-    val_sgn_dir = f"{cochlea_dir}/predictions/val_ihc"
-    image_dir = f"{cochlea_dir}/AnnotatedImageCrops/F1ValidationIHCs"
-
-    crop_name = "MLR226L_VGlut3_z1200_3turns_full"
-    img_path = os.path.join(image_dir, f"{crop_name}.tif")
-
-    xlim1 = 1900
-    xlim2 = 2400
-    ylim1 = 2000
-    ylim2 = 2500
-    boundary_rgba = [1, 1, 1, 0.5]
-
-    for seg_net in ["distance_unet_v4b", "cellpose-sam", "micro-sam"]:
-        save_path = os.path.join(save_dir, f"fig_02b_ihc_{seg_net}.png")
-        seg_dir = os.path.join(val_sgn_dir, seg_net)
-        seg_path = os.path.join(seg_dir, f"{crop_name}_seg.tif")
-
-        plot_seg_crop(img_path, seg_path, save_path, xlim1, xlim2, ylim1, ylim2, boundary_rgba, plot=plot)
+    else:
+        raise ValueError("Choose either 'shapes' or 'colors' as plot_mode.")
 
 
 def fig_02c(save_path, plot=False, all_versions=False):
@@ -128,88 +243,66 @@ def fig_02c(save_path, plot=False, all_versions=False):
     sgn_unet = [0.887, 0.88, 0.884]
     sgn_annotator = [0.95, 0.849, 0.9]
 
-    ihc_v4b = [0.91, 0.819, 0.862]
     ihc_v4c = [0.905, 0.831, 0.866]
-    ihc_v4c_filter = [0.919, 0.775, 0.841]
 
     ihc_annotator = [0.958, 0.956, 0.957]
     syn_unet = [0.931, 0.905, 0.918]
 
-    # This is the version with IHC v4b segmentation:
-    # 4th version of the network with optimized segmentation params
-    version_1 = [sgn_unet, sgn_annotator, ihc_v4b, ihc_annotator, syn_unet]
-    settings_1 = ["automatic", "manual", "automatic", "manual", "automatic"]
+    setting = ["SGN", "IHC", "Synapse"]
 
     # This is the version with IHC v4c segmentation:
     # 4th version of the network with optimized segmentation params and split of falsely merged IHCs
-    version_2 = [sgn_unet, sgn_annotator, ihc_v4c, ihc_annotator, syn_unet]
-    settings_2 = ["automatic", "manual", "automatic", "manual", "automatic"]
+    manual = [sgn_annotator, ihc_annotator]
+    automatic = [sgn_unet, ihc_v4c, syn_unet]
 
-    # This is the version with IHC v4c + filter segmentation:
-    # 4th version of the network with optimized segmentation params and split of falsely merged IHCs
-    # + filtering out IHCs with zero mapped synapses.
-    version_3 = [sgn_unet, sgn_annotator, ihc_v4c_filter, ihc_annotator, syn_unet]
-    settings_3 = ["automatic", "manual", "automatic", "manual", "automatic"]
+    precision_manual = [i[0] for i in manual]
+    recall_manual = [i[1] for i in manual]
+    f1score_manual = [i[2] for i in manual]
 
-    if all_versions:
-        versions = [version_1, version_2, version_3]
-        settings = [settings_1, settings_2, settings_3]
-        save_suffix = ["_v4b", "_v4c", "_v4c_filter"]
-        save_paths = [save_path.split(".")[0] + i + "." + save_path.split(".")[1] for i in save_suffix]
+    precision_automatic = [i[0] for i in automatic]
+    recall_automatic = [i[1] for i in automatic]
+    f1score_automatic = [i[2] for i in automatic]
+
+    # Convert setting labels to numerical x positions
+    x_manual = np.array([0.8, 1.8])
+    x_automatic = np.array([1.2, 2.2, 3])
+    offset = 0.08  # horizontal shift for scatter separation
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+
+    main_label_size = 20
+    main_tick_size = 16
+
+    plt.scatter(x_manual - offset, precision_manual, label="Precision manual", color=COLOR_P, marker="o", s=80)
+    plt.scatter(x_manual,         recall_manual, label="Recall manual", color=COLOR_R, marker="o", s=80)
+    plt.scatter(x_manual + offset, f1score_manual, label="F1-score manual", color=COLOR_F, marker="o", s=80)
+
+    plt.scatter(x_automatic - offset, precision_automatic, label="Precision automatic", color=COLOR_P, marker="s", s=80)
+    plt.scatter(x_automatic,         recall_automatic, label="Recall automatic", color=COLOR_R, marker="s", s=80)
+    plt.scatter(x_automatic + offset, f1score_automatic, label="F1-score automatic", color=COLOR_F, marker="s", s=80)
+
+    # Labels and formatting
+    plt.xticks([1, 2, 3], setting, fontsize=main_label_size)
+    plt.yticks(fontsize=main_tick_size)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(custom_formatter_2))
+    plt.ylabel("Value", fontsize=main_label_size)
+    plt.ylim(0.76, 1)
+    # plt.legend(loc="lower right", fontsize=legendsize)
+    plt.grid(axis="y", linestyle="solid", alpha=0.5)
+
+    plt.tight_layout()
+    prism_cleanup_axes(ax)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     else:
-        versions = [version_2]
-        settings = [settings_2]
-        save_suffix = ["_v4c"]
-        save_paths = [save_path.split(".")[0] + i + "." + save_path.split(".")[1] for i in save_suffix]
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
 
-    for version, setting, save_path in zip(versions, settings, save_paths):
-        precision = [i[0] for i in version]
-        recall = [i[1] for i in version]
-        f1score = [i[2] for i in version]
-
-        descr_y = 0.72
-
-        # Convert setting labels to numerical x positions
-        x = np.array([0.8, 1.2, 1.8, 2.2, 3])
-        offset = 0.08  # horizontal shift for scatter separation
-
-        # Plot
-        fig, ax = plt.subplots(figsize=(8, 5))
-
-        main_label_size = 22
-        sub_label_size = 16
-        main_tick_size = 16
-        legendsize = 18
-
-        plt.scatter(x - offset, precision, label="Precision", marker="o", s=80)
-        plt.scatter(x,         recall, label="Recall", marker="^", s=80)
-        plt.scatter(x + offset, f1score, label="F1-score", marker="*", s=80)
-
-        plt.text(1, descr_y, "SGN", fontsize=main_label_size, horizontalalignment="center")
-        plt.text(2, descr_y, "IHC", fontsize=main_label_size, horizontalalignment="center")
-        plt.text(3, descr_y, "Synapse", fontsize=main_label_size, horizontalalignment="center")
-
-        # Labels and formatting
-        plt.xticks(x, setting, fontsize=sub_label_size)
-        plt.yticks(fontsize=main_tick_size)
-        plt.ylabel("Value", fontsize=main_label_size)
-        plt.ylim(0.76, 1)
-        plt.legend(loc="lower right",
-                   fontsize=legendsize)
-        plt.grid(axis="y", linestyle="--", alpha=0.5)
-
-        plt.tight_layout()
-        prism_cleanup_axes(ax)
-
-        if ".png" in save_path:
-            plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
-        else:
-            plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
-
-        if plot:
-            plt.show()
-        else:
-            plt.close()
+    if plot:
+        plt.show()
+    else:
+        plt.close()
 
 
 # Load the synapse counts for all IHCs from the relevant tables.
@@ -224,183 +317,102 @@ def _load_ribbon_synapse_counts():
     return syn_counts
 
 
-def fig_02d_01(save_path, plot=False, all_versions=False, plot_average_ribbon_synapses=False):
+def fig_02d(save_path, plot=False, plot_average_ribbon_synapses=False):
     """Box plot showing the counts for SGN and IHC per (mouse) cochlea in comparison to literature values.
     """
-    main_tick_size = 20
-    main_label_size = 26
+    prism_style()
+    main_tick_size = 16
+    main_label_size = 20
 
     rows = 1
     columns = 3 if plot_average_ribbon_synapses else 2
 
     sgn_values = [11153, 11398, 10333, 11820]
-    ihc_v4b_values = [836, 808, 796, 901]
-    ihc_v4c_values = [712, 710, 721, 675]
-    ihc_v4c_filtered_values = [562, 647, 626, 628]
+    ihc_values = [712, 710, 721, 675]
 
-    if all_versions:
-        ihc_list = [ihc_v4b_values, ihc_v4c_values, ihc_v4c_filtered_values]
-        suffixes = ["_v4b", "_v4c", "_v4c_filtered"]
-        assert not plot_average_ribbon_synapses
-    else:
-        ihc_list = [ihc_v4c_values]
-        suffixes = ["_v4c"]
+    fig, axes = plt.subplots(rows, columns, figsize=(10, 4.5))
+    ax = axes.flatten()
+    box_plot = ax[0].boxplot(sgn_values, patch_artist=True, zorder=1)
+    for median in box_plot['medians']:
+        median.set_color(COLOR_MEASUREMENT)
+    for boxcolor in box_plot['boxes']:
+        boxcolor.set_facecolor("white")
 
-    for (ihc_values, suffix) in zip(ihc_list, suffixes):
-        fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
-        ax = axes.flatten()
-
-        save_path_new = save_path.split(".")[0] + suffix + "." + save_path.split(".")[1]
-        ax[0].boxplot(sgn_values)
-        ax[1].boxplot(ihc_values)
-
-        # Labels and formatting
-        ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
-
-        ylim0 = 8500
-        ylim1 = 12500
-        y_ticks = [i for i in range(9000, 12000 + 1, 1000)]
-
-        ax[0].set_ylabel("Count per cochlea", fontsize=main_label_size)
-        ax[0].set_yticks(y_ticks)
-        ax[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-        ax[0].set_ylim(ylim0, ylim1)
-        ax[0].yaxis.set_ticks_position("left")
-
-        # set range of literature values
-        xmin = 0.5
-        xmax = 1.5
-        ax[0].set_xlim(xmin, xmax)
-        lower_y, upper_y = literature_reference_values("SGN")
-        ax[0].hlines([lower_y, upper_y], xmin, xmax)
-        ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
-                   color="C0", fontsize=main_tick_size, ha="center")
-        ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
-
-        ylim0 = 600
-        ylim1 = 800
-        y_ticks = [i for i in range(600, 800 + 1, 100)]
-
-        ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
-        ax[1].set_yticks(y_ticks)
-        ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-        ax[1].set_ylim(ylim0, ylim1)
-        if not plot_average_ribbon_synapses:
-            ax[1].yaxis.tick_right()
-            ax[1].yaxis.set_ticks_position("right")
-
-        # set range of literature values
-        xmin = 0.5
-        xmax = 1.5
-        lower_y, upper_y = literature_reference_values("IHC")
-        ax[1].set_xlim(xmin, xmax)
-        ax[1].hlines([lower_y, upper_y], xmin, xmax)
-        # ax[1].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
-        ax[1].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
-
-        if plot_average_ribbon_synapses:
-            ribbon_synapse_counts = _load_ribbon_synapse_counts()
-            ylim0 = -1
-            ylim1 = 41
-            y_ticks = [0, 10, 20, 30, 40, 50]
-
-            ax[2].boxplot(ribbon_synapse_counts)
-            ax[2].set_xticklabels(["Ribbon Syn. per IHC"], fontsize=main_label_size)
-            ax[2].set_yticks(y_ticks)
-            ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-            ax[2].set_ylim(ylim0, ylim1)
-
-            # set range of literature values
-            xmin = 0.5
-            xmax = 1.5
-            lower_y, upper_y = literature_reference_values("synapse")
-            ax[2].set_xlim(xmin, xmax)
-            ax[2].hlines([lower_y, upper_y], xmin, xmax)
-            # ax[2].text(1.1, (lower_y + upper_y) // 2, "literature", color="C0", fontsize=main_tick_size, ha="left")
-            ax[2].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
-
-        plt.tight_layout()
-
-        if ".png" in save_path:
-            plt.savefig(save_path_new, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
-        else:
-            plt.savefig(save_path_new, bbox_inches='tight', pad_inches=0)
-
-        if plot:
-            plt.show()
-        else:
-            plt.close()
-
-
-def fig_02d_02(save_path, filter_zeros=True, plot=False):
-    """Bar plot showing the distribution of synapse markers per IHC segmentation average over multiple clochleae.
-    """
-    cochleae = ["M_LR_000226_L", "M_LR_000226_R", "M_LR_000227_L", "M_LR_000227_R"]
-    ihc_version = "ihc_counts_v4b"
-    synapse_dir = os.path.join(SYNAPSE_DIR_ROOT, ihc_version)
-
-    max_dist = 3
-    bins = 10
-    cap = 30
-    plot_density = False
-
-    results = []
-    for cochlea in cochleae:
-        synapse_file = os.path.join(synapse_dir, f"ihc_count_{cochlea}.tsv")
-        ihc_table = pd.read_csv(synapse_file, sep="\t")
-        syn_per_ihc = list(ihc_table["synapse_count"])
-        if filter_zeros:
-            syn_per_ihc = [s for s in syn_per_ihc if s != 0]
-        results.append(syn_per_ihc)
-
-    results = [np.clip(r, 0, cap) for r in results]
-
-    # Define bins (shared for all datasets)
-    bins = np.linspace(0, 30, 11)  # 29 bins
-
-    # Compute histogram (relative) for each dataset
-    histograms = []
-    for data in results:
-        counts, _ = np.histogram(data, bins=bins, density=plot_density)
-        histograms.append(counts)
-
-    histograms = np.array(histograms)
-
-    # Compute mean and std for each bin across datasets
-    mean_counts = histograms.mean(axis=0)
-    std_counts = histograms.std(axis=0)
-
-    # Get bin centers for plotting
-    bin_centers = 0.5 * (bins[1:] + bins[:-1])
-
-    # Plot
-    plt.figure(figsize=(8, 5))
-    plt.bar(bin_centers, mean_counts, width=(bins[1] - bins[0]), yerr=std_counts, alpha=0.7, capsize=4,
-            label="Mean ± Std Dev", edgecolor="black")
-
-    main_label_size = 20
-    main_tick_size = 16
-    legendsize = 16
+    box_plot = ax[1].boxplot(ihc_values, patch_artist=True, zorder=1)
+    for median in box_plot['medians']:
+        median.set_color(COLOR_MEASUREMENT)
+    for boxcolor in box_plot['boxes']:
+        boxcolor.set_facecolor("white")
 
     # Labels and formatting
-    x_ticks = [i for i in range(0, cap + 1, 5)]
-    if plot_density:
-        y_ticks = [i * 0.02 for i in range(0, 10, 2)]
-    else:
-        y_ticks = [i for i in range(0, 300, 50)]
+    ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
 
-    plt.xticks(x_ticks, fontsize=main_tick_size)
-    plt.yticks(y_ticks, fontsize=main_tick_size)
-    if plot_density:
-        plt.ylabel("Proportion of IHCs [%]", fontsize=main_label_size)
-    else:
-        plt.ylabel("Number of IHCs", fontsize=main_label_size)
-    plt.xlabel(f"Ribbon Synapses per IHC @ {max_dist} µm", fontsize=main_label_size)
+    ylim0 = 8500
+    ylim1 = 12500
+    y_ticks = [i for i in range(9000, 12000 + 1, 1000)]
 
-    plt.title("Average Synapses per IHC for a Dataset of 4 Cochleae")
+    ax[0].set_ylabel("Count per cochlea", fontsize=main_label_size)
+    ax[0].set_yticks(y_ticks)
+    ax[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[0].set_ylim(ylim0, ylim1)
+    ax[0].yaxis.set_ticks_position("left")
 
-    plt.grid(axis="y", linestyle="--", alpha=0.5)
-    plt.legend(fontsize=legendsize)
+    # set range of literature values
+    xmin = 0.5
+    xmax = 1.5
+    ax[0].set_xlim(xmin, xmax)
+    lower_y, upper_y = literature_reference_values("SGN")
+    ax[0].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[0].text(1., lower_y + (upper_y - lower_y) * 0.2, "literature",
+                color=COLOR_LITERATURE, fontsize=main_label_size, ha="center")
+    ax[0].fill_between([xmin, xmax], lower_y, upper_y, color="C0", alpha=0.05, interpolate=True)
+
+    ylim0 = 600
+    ylim1 = 800
+    y_ticks = [i for i in range(600, 800 + 1, 100)]
+
+    ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
+    ax[1].set_yticks(y_ticks)
+    ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[1].set_ylim(ylim0, ylim1)
+    if not plot_average_ribbon_synapses:
+        ax[1].yaxis.tick_right()
+        ax[1].yaxis.set_ticks_position("right")
+
+    # set range of literature values
+    xmin = 0.5
+    xmax = 1.5
+    lower_y, upper_y = literature_reference_values("IHC")
+    ax[1].set_xlim(xmin, xmax)
+    ax[1].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[1].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
+
+    if plot_average_ribbon_synapses:
+        ribbon_synapse_counts = _load_ribbon_synapse_counts()
+        ylim0 = -1
+        ylim1 = 41
+        y_ticks = [0, 10, 20, 30, 40, 50]
+
+        box_plot = ax[2].boxplot(ribbon_synapse_counts, patch_artist=True, zorder=1)
+        for median in box_plot['medians']:
+            median.set_color(COLOR_MEASUREMENT)
+        for boxcolor in box_plot['boxes']:
+            boxcolor.set_facecolor("white")
+
+        ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
+        ax[2].set_yticks(y_ticks)
+        ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+        ax[2].set_ylim(ylim0, ylim1)
+
+        # set range of literature values
+        xmin = 0.5
+        xmax = 1.5
+        lower_y, upper_y = literature_reference_values("synapse")
+        ax[2].set_xlim(xmin, xmax)
+        ax[2].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+        ax[2].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
+
+    prism_cleanup_axes(axes)
     plt.tight_layout()
 
     if ".png" in save_path:
@@ -422,22 +434,21 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    # Panes A and B: Qualitative comparison of visualization results.
-    fig_02a_sgn(save_dir=args.figure_dir, plot=args.plot)
-    fig_02b_ihc(save_dir=args.figure_dir, plot=args.plot)
-
     # Panel C: Evaluation of the segmentation results:
     fig_02c(save_path=os.path.join(args.figure_dir, f"fig_02c.{FILE_EXTENSION}"), plot=args.plot, all_versions=False)
+    plot_legend_fig02c(os.path.join(args.figure_dir, f"fig_02c_legend_shapes.{FILE_EXTENSION}"), plot_mode="shapes")
+    plot_legend_fig02c(os.path.join(args.figure_dir, f"fig_02c_legend_colors.{FILE_EXTENSION}"), plot_mode="colors")
 
     # Panel D: The number of SGNs, IHCs and average number of ribbon synapses per IHC
-    fig_02d_01(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
+    fig_02d(save_path=os.path.join(args.figure_dir, f"fig_02d.{FILE_EXTENSION}"),
                plot=args.plot, plot_average_ribbon_synapses=True)
 
-    # Alternative version of synapse distribution for panel D.
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02"), plot=args.plot)
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4c"), filter_zeros=False, plot=plot)
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4c_filtered"), filter_zeros=True, plot=plot)
-    # fig_02d_02(save_path=os.path.join(args.figure_dir, "fig_02d_02_v4b"), filter_zeros=True, plot=args.plot)
+    # Supplementary Figure 2: Comparing other methods in terms of segmentation accuracy and runtime
+    plot_legend_suppfig02(save_path=os.path.join(args.figure_dir, f"suppfig02_legend_colors.{FILE_EXTENSION}"))
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn.{FILE_EXTENSION}"), segm="SGN")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc.{FILE_EXTENSION}"), segm="IHC")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_sgn_time.{FILE_EXTENSION}"), segm="SGN", mode="runtime")
+    supp_fig_02(save_path=os.path.join(args.figure_dir, f"figsupp_02_ihc_time.{FILE_EXTENSION}"), segm="IHC", mode="runtime")
 
 
 if __name__ == "__main__":
