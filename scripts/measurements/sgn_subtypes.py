@@ -135,6 +135,13 @@ def stain_to_type(stain):
         # Prph is isolated.
         "Prph+": "Type II",
         "Prph-": "Type I",
+
+        # Combinations of CR and Ntng1
+        "CR+/Ntng1+": "Type Ib",
+        "CR+/Ntng1-": "Type Ia",
+        "CR-/Ntng1+": "Type Ic",
+        "CR-/Ntng1-": "inconclusive",
+
     }
 
     if stain_norm not in stain_to_type:

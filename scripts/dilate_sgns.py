@@ -7,6 +7,7 @@ from elf.parallel import seeded_watershed, distance_transform
 
 LOWER_RESOLUTION_DIR = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/lower_resolution"
 
+
 def dilate_sgns(in_path, out_path, dilation_distance, block_shape=[64, 128, 128], halo=[8, 16, 16]):
     print(f"Dilating {in_path} with dilation distance {dilation_distance}.")
     seg = tifffile.imread(in_path).astype("uint32")
