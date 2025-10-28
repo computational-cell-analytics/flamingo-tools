@@ -13,10 +13,12 @@ MARKER_DIR_SUBTYPE = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsh
 # The cochlea for the CHReef analysis.
 
 COCHLEAE = {
-    "M_LR_000184_L": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
-    "M_LR_000184_R": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
-    "M_LR_000099_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1", "Lypd1"]},
-    "M_LR_000214_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1"]},
+    "M_AMD_N180_L": {"seg_data": "SGN_merged", "subtype": ["CR", "Lypd1", "Ntng1"], "intensity": "absolute"},
+    "M_AMD_N180_R": {"seg_data": "SGN_merged", "subtype": ["CR", "Ntng1"], "intensity": "absolute"},
+    "M_LR_000184_L": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b", "intensity": "ratio"},
+    "M_LR_000184_R": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b", "intensity": "ratio"},
+    "M_LR_000099_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1", "Lypd1"], "intensity": "ratio"},
+    "M_LR_000214_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1"], "intensity": "ratio"},
 }
 
 
@@ -190,11 +192,21 @@ def evaluate_marker_annotation(
         with fs.open(table_path_s3, "r") as f:
             table_seg = pd.read_csv(f, sep="\t")
 
-        table_measurement_path = f"{cochlea}/tables/{data_name}/subtype_ratio.tsv"
+        # Check whether to use intensity ratio of subtype / PV or object measures for thresholding
+        intensity_mode = COCHLEAE[cochlea]["intensity"]
 
         # iterate through subtypes
         for subtype in subtypes:
-            column = f"{subtype}_ratio_PV"
+            pattern = subtype
+            if intensity_mode == "ratio":
+                table_measurement_path = f"{cochlea}/tables/{data_name}/subtype_ratio.tsv"
+                column = f"{subtype}_ratio_PV"
+            elif intensity_mode == "absolute":
+                table_measurement_path = f"{cochlea}/tables/{data_name}/{subtype}_{seg_string}_object-measures.tsv"
+                column = "median"
+            else:
+                raise ValueError("Choose either 'ratio' or 'median' as intensity mode.")
+
             table_path_s3, fs = get_s3_path(table_measurement_path)
             with fs.open(table_path_s3, "r") as f:
                 table_measurement = pd.read_csv(f, sep="\t")
@@ -205,7 +217,7 @@ def evaluate_marker_annotation(
 
             # Find the thresholds from the annotated blocks and save them if specified.
             intensity_dic = find_thresholds(cochlea_annotations, cochlea, data_seg,
-                                            table_measurement, column=column, pattern=subtype)
+                                            table_measurement, column=column, pattern=pattern)
             if threshold_save_dir is not None:
                 os.makedirs(threshold_save_dir, exist_ok=True)
                 threshold_out_path = os.path.join(threshold_save_dir, f"{cochlea_str}_{subtype}_{seg_string}.json")
