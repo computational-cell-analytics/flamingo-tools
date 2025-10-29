@@ -58,10 +58,14 @@ COCHLEAE_FOR_SUBTYPES = {
     # "M_LR_000214_L": ["PV", "CR", "Calb1"],
     "M_LR_000184_R": ["PV", "Prph"],
     "M_LR_000184_L": ["PV", "Prph"],
+    "M_LR_000098_L": ["PV", "CR", "Ntng1"],
+    "M_LR_N152_L": ["PV", "CR", "Ntng1"],
     # "M_LR_000260_L": ["PV", "Prph", "Tuj1"],
 }
 
 COCHLEAE = {
+    "M_LR_N152_L": {"seg_data": "SGN_v2", "subtype": ["CR", "Ntng1"], "component_list": [1, 2]},
+    "M_LR_000098_L": {"seg_data": "SGN_v2", "subtype": ["CR", "Ntng1"], "component_list": [1, 2]},
     "M_LR_000099_L": {"seg_data": "PV_SGN_v2", "subtype": ["Calb1", "Lypd1"]},
     "M_LR_000184_L": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
     "M_LR_000184_R": {"seg_data": "SGN_v2", "subtype": ["Prph"], "output_seg": "SGN_v2b"},
@@ -71,7 +75,7 @@ COCHLEAE = {
 
 
 REGULAR_COCHLEAE = [
-    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L",  # "M_LR_000260_L"
+    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L", "M_LR_000098_L", "M_LR_N152_L"  # "M_LR_000260_L"
 ]
 
 # For custom thresholds.
@@ -300,7 +304,10 @@ def compile_data_for_subtype_analysis():
         table = pd.read_csv(table_content, sep="\t")
 
         # Get the SGNs in the main component
-        table = table[table.component_labels == 1]
+        component_list = [1]
+        if "component_list" in list(COCHLEAE[cochlea].keys()):
+            component_list = COCHLEAE[cochlea]["component_list"]
+        table = table[table["component_labels"].isin(component_list)]
         print("Number of SGNs", len(table))
         valid_sgns = table.label_id
 
@@ -315,7 +322,7 @@ def compile_data_for_subtype_analysis():
             )
             table_content = s3.open(os.path.join(table_folder, "default.tsv"), mode="rb")
             table = pd.read_csv(table_content, sep="\t")
-            table = table[table.component_labels == 1]
+            table = table[table["component_labels"].isin(component_list)]
 
             # local
             table_name = f"{channel}_{seg_name.replace('_', '-')}_object-measures.tsv"
