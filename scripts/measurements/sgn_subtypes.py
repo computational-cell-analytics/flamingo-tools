@@ -60,7 +60,7 @@ COCHLEAE_FOR_SUBTYPES = {
     "M_LR_000184_L": ["PV", "Prph"],
     "M_LR_000098_L": ["PV", "CR", "Ntng1"],
     "M_LR_N152_L": ["PV", "CR", "Ntng1"],
-    # "M_LR_000260_L": ["PV", "Prph", "Tuj1"],
+    "M_LR_000260_L": ["PV", "Prph", "Tuj1"],
 }
 
 COCHLEAE = {
@@ -75,7 +75,7 @@ COCHLEAE = {
 
 
 REGULAR_COCHLEAE = [
-    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L", "M_LR_000098_L", "M_LR_N152_L"  # "M_LR_000260_L"
+    "M_LR_000099_L", "M_LR_000184_R", "M_LR_000184_L", "M_LR_000098_L", "M_LR_N152_L", "M_LR_000260_L"
 ]
 
 # For custom thresholds.
