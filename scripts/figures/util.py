@@ -5,6 +5,7 @@ import pandas as pd
 # Directory with synapse measurement tables
 SYNAPSE_DIR_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/predictions/synapses"
 # SYNAPSE_DIR_ROOT = "./synapses"
+png_dpi = 300
 
 
 def ax_prism_boxplot(ax, data, positions=None, color="tab:blue"):
@@ -31,6 +32,42 @@ def ax_prism_boxplot(ax, data, positions=None, color="tab:blue"):
     return bp
 
 
+prism_palette = [
+    "#4E79A7",  # blue
+    "#F28E2B",  # orange
+    "#E15759",  # red
+    "#76B7B2",  # teal
+    "#59A14F",  # green
+    "#EDC948",  # yellow
+    "#B07AA1",  # purple
+    "#FF9DA7",  # pink
+    "#9C755F",  # brown
+    "#BAB0AC"   # gray
+]
+
+
+def custom_formatter_1(x, pos):
+    if np.isclose(x, 1.0):
+        return '1'  # no decimal
+    else:
+        return f"{x:.1f}"
+
+
+def custom_formatter_2(x, pos):
+    if np.isclose(x, 1.0):
+        return '1'  # no decimal
+    else:
+        return f"{x:.2f}"
+
+
+def export_legend(legend, filename="legend.png"):
+    legend.axes.axis("off")
+    fig = legend.figure
+    fig.canvas.draw()
+    bbox = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(filename, bbox_inches=bbox, dpi=png_dpi)
+
+
 def prism_style():
     plt.style.use("default")  # reset any active styles
     plt.rcParams.update({
@@ -44,6 +81,7 @@ def prism_style():
         "axes.linewidth": 1.2,
         "axes.labelsize": 14,
         "axes.labelweight": "bold",
+        "axes.prop_cycle": plt.cycler("color", prism_palette),
 
         # Ticks
         "xtick.direction": "out",
@@ -93,12 +131,12 @@ def _get_mapping(animal):
     if animal == "mouse":
         bin_edges = [0, 2, 4, 8, 16, 32, 64, np.inf]
         bin_labels = [
-            "<2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", "32–64 k", ">64 k"
+            "<2", "2–4", "4–8", "8–16", "16–32", "32–64", ">64"
         ]
     elif animal == "gerbil":
         bin_edges = [0, 0.5, 1, 2, 4, 8, 16, 32, np.inf]
         bin_labels = [
-            "<0.5 k", "0.5–1 k", "1–2 k", "2–4 k", "4–8 k", "8–16 k", "16–32 k", ">32 k"
+            "<0.5", "0.5–1", "1–2", "2–4", "4–8", "8–16", "16–32", ">32"
         ]
     else:
         raise ValueError

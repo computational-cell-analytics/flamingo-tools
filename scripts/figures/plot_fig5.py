@@ -6,111 +6,203 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from flamingo_tools.s3_utils import BUCKET_NAME, create_s3_target
+from flamingo_tools.s3_utils import BUCKET_NAME
+from util import literature_reference_values_gerbil, prism_cleanup_axes, prism_style, SYNAPSE_DIR_ROOT
 
 from util import SYNAPSE_DIR_ROOT
-from plot_fig4 import get_chreef_data
 
 FILE_EXTENSION = "png"
 png_dpi = 300
 
+COLOR_LEFT = "#8E00DB"
+COLOR_RIGHT = "#DB0063"
+MARKER_LEFT = "o"
+MARKER_RIGHT = "^"
+COLOR_MEASUREMENT = "#9C7427"
+COLOR_LITERATURE = "#27339C"
+COLOR_UNTREATED = "#DB7B00"
 
+# Load the synapse counts for all IHCs from the relevant tables.
 def _load_ribbon_synapse_counts():
-    # TODO update the version!
-    ihc_version = "ihc_counts_v4b"
-    table_path = os.path.join(SYNAPSE_DIR_ROOT, ihc_version, "ihc_count_M_AMD_OTOF1_L.tsv")
-    x = pd.read_csv(table_path, sep="\t")
-    syn_counts = x.synapse_count.values.tolist()
+    ihc_version = "ihc_counts_v6"
+    synapse_dir = os.path.join(SYNAPSE_DIR_ROOT, ihc_version)
+    tables = [entry.path for entry in os.scandir(synapse_dir) if "ihc_count_G_" in entry.name]
+    print(f"Synapse count for tables {tables}.")
+    syn_counts = []
+    for tab in tables:
+        x = pd.read_csv(tab, sep="\t")
+        syn_counts.extend(x["synapse_count"].values.tolist())
     return syn_counts
 
 
 def fig_05c(save_path, plot=False):
-    """Bar plot showing the IHC count and distribution of synapse markers per IHC segmentation over OTOF cochlea.
+    """Box plot showing the counts for SGN and IHC per gerbil cochlea in comparison to literature values.
     """
-    # TODO update the alias.
-    # For MOTOF1L
-    alias = "M10L"
-
+    main_tick_size = 20
     main_label_size = 20
-    main_tick_size = 12
-    htext_size = 10
+    prism_style()
+
+    rows = 1
+    columns = 3
+
+    fig, ax = plt.subplots(rows, columns, figsize=(8.5, 4.5))
+
+    sgn_values = [18541]
+    ihc_values = [1180]
+
+    ax[0].scatter([1], sgn_values, color=COLOR_MEASUREMENT, marker="x", s=100)
+    ax[1].scatter([1], ihc_values, color=COLOR_MEASUREMENT, marker="x", s=100)
+
+    # Labels and formatting
+    ax[0].set_xticks([1])
+    ax[0].set_xticklabels(["SGN"], fontsize=main_label_size)
+
+    ylim0 = 14000
+    ylim1 = 30000
+    ytick_gap = 4000
+    y_ticks = [i for i in range((((ylim0 - 1) // ytick_gap) + 1) * ytick_gap, ylim1 + 1, ytick_gap)]
+
+    ax[0].set_ylabel('Count per cochlea', fontsize=main_label_size)
+    ax[0].set_yticks(y_ticks)
+    ax[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[0].set_ylim(ylim0, ylim1)
+
+    # set range of literature values
+    xmin = 0.5
+    xmax = 1.5
+    ax[0].set_xlim(xmin, xmax)
+    lower_y, upper_y = literature_reference_values_gerbil("SGN")
+    ax[0].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[0].text(1, upper_y - 2000, "literature", color=COLOR_LITERATURE, fontsize=main_tick_size, ha="center")
+    ax[0].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
+
+    ylim0 = 900
+    ylim1 = 1400
+    ytick_gap = 200
+    y_ticks = [i for i in range((((ylim0 - 1) // ytick_gap) + 1) * ytick_gap, ylim1 + 1, ytick_gap)]
+
+    ax[1].set_xticks([1])
+    ax[1].set_xticklabels(["IHC"], fontsize=main_label_size)
+
+    ax[1].set_yticks(y_ticks)
+    ax[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[1].set_ylim(ylim0, ylim1)
+
+    # set range of literature values
+    xmin = 0.5
+    xmax = 1.5
+    ax[1].set_xlim(xmin, xmax)
+    lower_y, upper_y = literature_reference_values_gerbil("IHC")
+    ax[1].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[1].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
 
     ribbon_synapse_counts = _load_ribbon_synapse_counts()
-
-    rows, columns = 1, 2
-    fig, axes = plt.subplots(rows, columns, figsize=(columns*4, rows*4))
-
-    #
-    # Create the plot for IHCs.
-    #
-    ihc_values = [len(ribbon_synapse_counts)]
-
-    ylim0 = 600
-    ylim1 = 800
-    y_ticks = [i for i in range(600, 800 + 1, 100)]
-
-    axes[0].set_ylabel("IHC count", fontsize=main_label_size)
-    axes[0].set_yticks(y_ticks)
-    axes[0].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-    axes[0].set_ylim(ylim0, ylim1)
-
-    axes[0].boxplot(ihc_values)
-    axes[0].set_xticklabels([alias], fontsize=main_label_size)
-
-    # Set the reference values for healthy cochleae
-    xmin = 0.5
-    xmax = 1.5
-    ihc_reference_values = [712, 710, 721, 675]  # MLR226L, MLR226R, MLR227L, MLR227R
-
-    ihc_value = np.mean(ihc_reference_values)
-    ihc_std = np.std(ihc_reference_values)
-
-    upper_y = ihc_value + 1.96 * ihc_std
-    lower_y = ihc_value - 1.96 * ihc_std
-
-    axes[0].hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
-    axes[0].text(1, upper_y + 10, "healthy cochleae", color="C1", fontsize=main_tick_size, ha="center")
-    axes[0].fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
-
-    #
-    # Create the plot for ribbon synapse distribution.
-    #
     ylim0 = -1
-    ylim1 = 24
-    y_ticks = [i for i in range(0, 25, 5)]
+    ylim1 = 80
+    ytick_gap = 20
+    y_ticks = [i for i in range((((ylim0 - 1) // ytick_gap) + 1) * ytick_gap, ylim1 + 1, ytick_gap)]
 
-    axes[1].set_ylabel("Ribbon Syn. per IHC", fontsize=main_label_size)
-    axes[1].set_yticks(y_ticks)
-    axes[1].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
-    axes[1].set_ylim(ylim0, ylim1)
+    box_plot = ax[2].boxplot(ribbon_synapse_counts, patch_artist=True)
+    for median in box_plot['medians']:
+        median.set_color(COLOR_MEASUREMENT)
+    for boxcolor in box_plot['boxes']:
+        boxcolor.set_facecolor("white")
 
-    axes[1].boxplot(ribbon_synapse_counts)
-    axes[1].set_xticklabels([alias], fontsize=main_label_size)
+    ax[2].set_xticklabels(["Synapses per IHC"], fontsize=main_label_size)
+    ax[2].set_yticks(y_ticks)
+    ax[2].set_yticklabels(y_ticks, rotation=0, fontsize=main_tick_size)
+    ax[2].set_ylim(ylim0, ylim1)
 
-    axes[1].yaxis.tick_right()
-    axes[1].yaxis.set_ticks_position("right")
-    axes[1].yaxis.set_label_position("right")
-
-    # Set the reference values for healthy cochleae
+    # set range of literature values
     xmin = 0.5
     xmax = 1.5
-    syn_reference_values = [14.1, 12.7, 13.8, 13.4]  # MLR226L, MLR226R, MLR227L, MLR227R
+    lower_y, upper_y = literature_reference_values_gerbil("synapse")
+    ax[2].set_xlim(xmin, xmax)
+    ax[2].hlines([lower_y, upper_y], xmin, xmax, color=COLOR_LITERATURE)
+    ax[2].fill_between([xmin, xmax], lower_y, upper_y, color=COLOR_LITERATURE, alpha=0.05, interpolate=True)
 
-    syn_value = np.mean(syn_reference_values)
-    syn_std = np.std(syn_reference_values)
-
-    upper_y = syn_value + 1.96 * syn_std
-    lower_y = syn_value - 1.96 * syn_std
-
-    plt.hlines([lower_y, upper_y], xmin, xmax, colors=["C1" for _ in range(2)])
-    plt.text(
-        1.25, upper_y + 0.01*axes[1].get_ylim()[1]-axes[1].get_ylim()[0], "healthy cochleae",
-        color="C1", fontsize=htext_size, ha="center"
-    )
-    plt.fill_between([xmin, xmax], lower_y, upper_y, color="C1", alpha=0.05, interpolate=True)
-
-    # Save and plot the figure.
     plt.tight_layout()
+    prism_cleanup_axes(ax)
+
+    if ".png" in save_path:
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
+    else:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+    if plot:
+        plt.show()
+    else:
+        plt.close()
+
+
+def fig_05d(save_path, plot=False):
+    """Box plot showing the SGN counts of ChReef treated cochleae compared to healthy ones.
+    """
+    prism_style()
+    values_left = [11351]
+    values_right = [21995]
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(4, 5))
+
+    main_label_size = 20
+    sub_label_size = 16
+    main_tick_size = 16
+
+    offset = 0.08
+    x_left = 1
+    x_right = 2
+
+    x_pos_inj = [x_left - len(values_left) // 2 * offset + offset * i for i in range(len(values_left))]
+    x_pos_non = [x_right - len(values_right) // 2 * offset + offset * i for i in range(len(values_right))]
+
+    # lines between cochleae of same animal
+    for num, (left, right) in enumerate(zip(values_left, values_right)):
+        ax.plot(
+            [x_pos_inj[num], x_pos_non[num]],
+            [left, right],
+            linestyle="solid",
+            color="grey",
+            alpha=0.4,
+            zorder=0
+        )
+    plt.scatter(x_pos_inj, values_left, label="Injected",
+                color=COLOR_LEFT, marker=MARKER_LEFT, s=80, zorder=1)
+    plt.scatter(x_pos_non, values_right, label="Non-Injected",
+                color=COLOR_RIGHT, marker=MARKER_RIGHT, s=80, zorder=1)
+
+    # Labels and formatting
+    plt.xticks([x_left, x_right], ["Injected", "Non-\nInjected"], fontsize=sub_label_size)
+    for label in plt.gca().get_xticklabels():
+        label.set_verticalalignment('center')
+    ax.tick_params(axis='x', which='major', pad=16)
+
+    plt.ylim(10000, 24000)
+    y_ticks = [i for i in range(10000, 24000, 4000)]
+
+    plt.yticks(y_ticks, fontsize=main_tick_size)
+    plt.ylabel("SGN count per cochlea", fontsize=main_label_size)
+    xmin = 0.5
+    xmax = 2.5
+    plt.xlim(xmin, xmax)
+
+    sgn_values = [18541]  # G_EK_000233_L
+    sgn_value = np.mean(sgn_values)
+    sgn_std = np.std(sgn_values)
+
+    upper_y = sgn_value + 1.96 * sgn_std
+    lower_y = sgn_value - 1.96 * sgn_std
+
+    c_untreated = COLOR_UNTREATED
+
+    plt.hlines([lower_y, upper_y], xmin, xmax, colors=[c_untreated for _ in range(2)], zorder=-1)
+    plt.text((xmin + xmax) / 2, upper_y + 200, "untreated cochleae\n(95% confidence interval)",
+             color=c_untreated, fontsize=11, ha="center")
+    plt.fill_between([xmin, xmax], lower_y, upper_y, color=c_untreated, alpha=0.05, interpolate=True)
+
+    plt.tight_layout()
+
+    prism_cleanup_axes(ax)
+
     if ".png" in save_path:
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.1, dpi=png_dpi)
     else:
@@ -122,33 +214,6 @@ def fig_05c(save_path, plot=False):
         plt.close()
 
 
-# TODO
-def fig_05d(save_path, plot):
-    if False:
-        s3 = create_s3_target()
-
-        # Intensity distribution for OTOF
-        cochlea = "M_AMD_OTOF1_L"
-        content = s3.open(f"{BUCKET_NAME}/{cochlea}/dataset.json", mode="r", encoding="utf-8")
-        info = json.loads(content.read())
-        sources = info["sources"]
-
-        # Load the seg table and filter the compartments.
-        source_name = "IHC_v4c"
-        source = sources[source_name]["segmentation"]
-        rel_path = source["tableData"]["tsv"]["relativePath"]
-        table_content = s3.open(os.path.join(BUCKET_NAME, cochlea, rel_path, "default.tsv"), mode="rb")
-        table = pd.read_csv(table_content, sep="\t")
-        print(table)
-
-    # TODO would need the new intensity subtracted data here.
-    # Reference: intensity distributions for ChReef
-    chreef_data = get_chreef_data()
-    for cochlea, tab in chreef_data.items():
-        plt.hist(tab["median"])
-        plt.show()
-
-
 def main():
     parser = argparse.ArgumentParser(description="Generate plots for Fig 5 of the cochlea paper.")
     parser.add_argument("--figure_dir", "-f", type=str, help="Output directory for plots.", default="./panels/fig5")
@@ -157,8 +222,8 @@ def main():
 
     os.makedirs(args.figure_dir, exist_ok=True)
 
-    # Panel C: Monitoring of the Syn / IHC loss
-    # fig_05c(save_path=os.path.join(args.figure_dir, "fig_05c"), plot=args.plot)
+    # Panel C: The number of SGNs, IHCs and average number of ribbon synapses per IHC
+    fig_05c(save_path=os.path.join(args.figure_dir, "fig_05c"), plot=args.plot)
 
     # Panel D: Tonotopic mapping of the intensities.
     fig_05d(save_path=os.path.join(args.figure_dir, f"fig_05d.{FILE_EXTENSION}"), plot=args.plot)
