@@ -144,9 +144,13 @@ def _get_mapping(animal):
     return bin_edges, bin_labels
 
 
-def frequency_mapping(frequencies, values, animal="mouse", transduction_efficiency=False):
+def frequency_mapping(
+    frequencies, values, animal="mouse", transduction_efficiency=False, bin_edges=None, bin_labels=None
+):
     # Get the mapping of frequencies to octave bands for the given species.
-    bin_edges, bin_labels = _get_mapping(animal)
+    if bin_edges is None:
+        assert bin_labels is None
+        bin_edges, bin_labels = _get_mapping(animal)
 
     # Construct the data frame with octave bands.
     df = pd.DataFrame({"freq_khz": frequencies, "value": values})

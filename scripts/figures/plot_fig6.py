@@ -153,8 +153,15 @@ def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_m
         color_dict[alias] = COCHLEAE_DICT[name]["color"]
         if mapping == "default":
             freq = values["frequency[kHz]"].values
+            bin_edges, bin_labels = None, None
         elif mapping == "mueller":
             freq = values["frequency-mueller[kHz]"].values
+            # We need custom bin edges and bin labels in this case.
+            bin_edges = [0, 8, 12, 16, 24, np.inf]
+            bin_labels = [
+                "4-8", "8-12", "12–16", "16-24", "24-32"
+            ]
+            assert len(bin_edges) == len(bin_labels) + 1
         else:
             raise ValueError("Choose either 'default' or 'mueller' for tonotopic mapping.")
         marker_labels = values["expression_classification"].values
@@ -162,7 +169,10 @@ def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_m
         marker_neg = len([1 for i in marker_labels if i == 2])
         expression_eff = marker_pos / (marker_pos + marker_neg)
         print(f"Cochlea {name}, average expression efficiency {expression_eff}")
-        octave_binned = frequency_mapping(freq, marker_labels, animal="mouse", transduction_efficiency=True)
+        octave_binned = frequency_mapping(
+            freq, marker_labels, animal="mouse", transduction_efficiency=True,
+            bin_edges=bin_edges, bin_labels=bin_labels
+        )
 
         result["cochlea"].extend([alias] * len(octave_binned))
         result["octave_band"].extend(octave_binned.axes[0].values.tolist())
