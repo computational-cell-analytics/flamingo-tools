@@ -35,6 +35,11 @@ def repro_tonotopic_mapping(
     for dic in param_dicts:
         cochlea = dic["cochlea"]
         seg_channel = dic["segmentation_channel"]
+        if "OTOF" in cochlea:
+            otof = True
+        else:
+            otof = False
+
         if cochlea[0] in ["M", "m"]:
             animal = "mouse"
         elif cochlea[0] in ["G", "g"]:
@@ -71,7 +76,8 @@ def repro_tonotopic_mapping(
         if not os.path.isfile(output_table_path) or force_overwrite:
             table = tonotopic_mapping(table, component_label=component_list, animal=animal,
                                       cell_type=cell_type, component_mapping=component_mapping,
-                                      apex_higher=apex_higher, max_edge_distance=max_edge_distance)
+                                      apex_higher=apex_higher, max_edge_distance=max_edge_distance,
+                                      otof=otof)
 
             table.to_csv(output_table_path, sep="\t", index=False)
 
