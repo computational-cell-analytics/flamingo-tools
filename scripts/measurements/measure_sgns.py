@@ -34,6 +34,7 @@ def main():
     else:
         cochleae = args.cochleae
 
+    n_sgns = []
     for dataset in cochleae:
         if dataset not in project_info["datasets"]:
             print("Could not find cochleae", dataset)
@@ -60,10 +61,14 @@ def main():
                 component_ids, n_per_component = np.unique(
                     remaining_sgns, return_counts=True
                 )
-                print("Number of SGNs (largest component):", max(n_per_component))
+                n_sgn = max(n_per_component)
+                print("Number of SGNs (largest component):", n_sgn)
+                n_sgns.append(n_sgn)
             else:
                 print(source)
                 print("Number of SGNs (no postprocessing):", len(table))
+
+    print("Average number of SGNs:", np.mean(n_sgns), "+-", np.std(n_sgns))
 
 
 if __name__ == "__main__":

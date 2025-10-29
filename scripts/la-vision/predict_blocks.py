@@ -12,9 +12,11 @@ from torch_em.util.prediction import predict_with_halo
 
 
 def _get_files(sgn=True):
-    input_root = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/more-annotations/LA_VISION_M04"  # noqa
-    input_root2 = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/more-annotations/LA_VISION_M04_2"  # noqa
-    input_root3 = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/more-annotations/LA_VISION_Mar05"  # noqa
+    # root = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/more-annotations"
+    root = "/home/pape/Work/my_projects/flamingo-tools/scripts/more-annotation"
+    input_root = os.path.join(root, "LA_VISION_M04")
+    input_root2 = os.path.join(root, "LA_VISION_M04_2")
+    input_root3 = os.path.join(root, "LA_VISION_Mar05")
 
     input_root_ihc = "/mnt/vast-nhr/home/pape41/u12086/Work/my_projects/flamingo-tools/scripts/more-annotations/LA_VISION_Mar05-ihc"  # noqa
 

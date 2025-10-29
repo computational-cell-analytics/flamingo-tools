@@ -13,7 +13,7 @@ from flamingo_tools.segmentation.postprocessing import filter_cochlea_volume, fi
 # from skimage.segmentation import relabel_sequential
 
 
-def filter_component(fs, segmentation, cochlea, seg_name, components):
+def filter_component(fs, segmentation, cochlea, seg_name, components, min_size):
     # First, we download the MoBIE table for this segmentation.
     internal_path = os.path.join(BUCKET_NAME, cochlea, "tables",  seg_name, "default.tsv")
     with fs.open(internal_path, "r") as f:
@@ -21,6 +21,9 @@ def filter_component(fs, segmentation, cochlea, seg_name, components):
 
     # Then we get the ids for the components and us them to filter the segmentation.
     component_mask = np.isin(table.component_labels.values, components)
+    if min_size is not None:
+        component_mask = np.logical_and(component_mask, table.n_pixels > min_size)
+
     keep_label_ids = table.label_id.values[component_mask].astype("int64")
     if max(keep_label_ids) > np.iinfo("uint16").max:
         warnings.warn(f"Label ID exceeds maximum of data type 'uint16': {np.iinfo('uint16').max}.")
@@ -155,9 +158,13 @@ def export_lower_resolution(args):
             with zarr.open(s3_store, mode="r") as f:
                 data = f[input_key][:].astype("float32")
             print("Data shape", data.shape)
+
             if args.filter_by_components is not None:
                 print(f"Filtering channel {channel} by components {args.filter_by_components}.")
-                data = filter_component(fs, data, args.cochlea, channel, args.filter_by_components)
+                data = filter_component(
+                    fs, data, args.cochlea, channel, args.filter_by_components, min_size=args.min_size
+                )
+
             if args.filter_cochlea_channels is not None:
                 us_factor = ds_factor // (2 ** scale)
                 upscaled_filter = upscale_volume(data, filter_volume, upscale_factor=us_factor)
@@ -183,6 +190,7 @@ def main():
     parser.add_argument("--binarize", action="store_true")
     parser.add_argument("--filter_cochlea_channels", nargs="+", type=str, default=None)
     parser.add_argument("--filter_dilation_iterations", type=int, default=8)
+    parser.add_argument("--min_size", default=None, type=int)
     args = parser.parse_args()
 
     export_lower_resolution(args)
