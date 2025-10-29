@@ -18,7 +18,7 @@ INTENSITY_ROOT = "/mnt/vast-nhr/projects/nim00007/data/moser/cochlea-lightsheet/
 
 # The cochlea for the CHReef analysis.
 COCHLEAE_DICT = {
-    "LaVision-OTOF23R": {"alias": "01", "component": [4, 18, 7], "color":"#9C5027"},
+    "LaVision-OTOF23R": {"alias": "01", "component": [4, 18, 7], "color": "#9C5027"},
     "LaVision-OTOF25R": {"alias": "02", "component": [1], "color": "#67279C"},
 }
 
@@ -54,7 +54,8 @@ def get_otof_data():
         table = table[table.component_labels.isin(component_labels)]
         # The relevant values for analysis.
         try:
-            values = table[["label_id", "length[µm]", "frequency[kHz]", "expression_classification"]]
+            values = table[["label_id", "length[µm]", "frequency[kHz]", "frequency-mueller[kHz]",
+                            "expression_classification"]]
         except KeyError:
             print("Could not find the values for", cochlea, "it will be skippped.")
             continue
@@ -135,7 +136,7 @@ def _get_trendline_params(trend_dict):
     return x_values, y_values_center, y_values_upper, y_values_lower
 
 
-def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_mode=None):
+def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_mode=None, mapping="default"):
     prism_style()
     label_size = 20
     tick_label_size = 14
@@ -150,7 +151,12 @@ def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_m
             alias = name.replace("_", "").replace("0", "")
 
         color_dict[alias] = COCHLEAE_DICT[name]["color"]
-        freq = values["frequency[kHz]"].values
+        if mapping == "default":
+            freq = values["frequency[kHz]"].values
+        elif mapping == "mueller":
+            freq = values["frequency-mueller[kHz]"].values
+        else:
+            raise ValueError("Choose either 'default' or 'mueller' for tonotopic mapping.")
         marker_labels = values["expression_classification"].values
         marker_pos = len([1 for i in marker_labels if i == 1])
         marker_neg = len([1 for i in marker_labels if i == 2])
@@ -188,7 +194,7 @@ def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_m
                                 }
     # central line
     if trendline_mode == "filled":
-        #mean, std = _get_trendline_params(y_values)
+        # mean, std = _get_trendline_params(y_values)
         x_sorted, y_sorted, y_sorted_upper, y_sorted_lower = _get_trendline_params(trend_dict)
         trend_center, = ax.plot(
             x_sorted,
@@ -282,10 +288,11 @@ def main():
     args = parser.parse_args()
     plot = False
 
+    tonotopic_mapping = "mueller"
     otof_data = get_otof_data()
     plot_legend_fig06e(save_path=os.path.join(args.figure_dir, f"fig_06e_legend.{FILE_EXTENSION}"))
     fig_06e_octave(otof_data, save_path=os.path.join(args.figure_dir, f"fig_06e.{FILE_EXTENSION}"), plot=plot,
-                   trendline_mode="mean")
+                   trendline_mode="mean", mapping=tonotopic_mapping)
 
     # fig_06d(save_path=os.path.join(args.figure_dir, f"fig_06d.{FILE_EXTENSION}"), plot=plot)
 
