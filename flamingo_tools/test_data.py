@@ -91,3 +91,15 @@ def create_test_data(root: str, size: int = 256, n_channels: int = 2, n_tiles: i
             out_path = os.path.join(out_folder, file_name_pattern % (tile_id, chan_id))
             data = binary_blobs(size, n_dim=3).astype("uint8") * 255
             imageio.imwrite(out_path, data)
+
+
+def sample_data_pv():
+    pass
+
+
+def sample_data_vglut3():
+    pass
+
+
+def sample_data_ctbp2():
+    pass
