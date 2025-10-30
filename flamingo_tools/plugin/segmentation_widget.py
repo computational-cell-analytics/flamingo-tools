@@ -10,7 +10,7 @@ from qtpy.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox
 
 from .base_widget import BaseWidget
 from .util import get_default_tiling, get_device
-from ..models import get_model, get_model_registry
+from ..model_utils import get_model, get_model_registry
 
 
 def _load_custom_model(model_path: str, device: Optional[Union[str, torch.device]] = None) -> torch.nn.Module:
@@ -111,7 +111,7 @@ class SegmentationWidget(BaseWidget):
         title_label = QLabel("Select Model:")
 
         # Exclude the models that are only offered through the CLI and not in the plugin.
-        model_list = set(get_model_registry().urls.keys())
+        model_list = list(get_model_registry().urls.keys())
 
         models = ["- choose -"] + model_list
         self.model_selector = QComboBox()
