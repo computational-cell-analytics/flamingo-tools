@@ -73,8 +73,7 @@ def check_implementation():
 
 def compare_gerbil_cochleae():
     # We need the tonotopic mapping for G_EK_000233_L
-    # cochleae = ["G_EK_000233_L", "G_EK_000049_L", "G_EK_000049_R"]
-    cochleae = ["G_EK_000049_L", "G_EK_000049_R"]
+    cochleae = ["G_EK_000233_L", "G_EK_000049_L", "G_EK_000049_R"]
 
     plt.figure(figsize=(6, 3))
     for cochlea in cochleae:
@@ -86,6 +85,10 @@ def compare_gerbil_cochleae():
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+
+# TODO: implement the same for mouse cochleae (healthy vs. opto treatment)
+# also show this in tonotopic mapping
 
 
 def main():
