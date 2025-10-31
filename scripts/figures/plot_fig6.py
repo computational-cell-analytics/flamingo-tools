@@ -83,7 +83,7 @@ def plot_legend_fig06e(save_path):
     label = list(color_dict.keys())
     color = [color_dict[key] for key in color_dict.keys()]
 
-    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]
+    f = lambda m, c: plt.plot([], [], marker=m, color=c, ls="none")[0]  # noqa
     handles = [f(m, c) for (c, m) in zip(color, marker)]
     legend = plt.legend(handles, label, loc=3, ncol=2, framealpha=1, frameon=False)
     export_legend(legend, save_path)
@@ -169,6 +169,7 @@ def fig_06e_octave(otof_data, save_path, plot=False, use_alias=True, trendline_m
         marker_neg = len([1 for i in marker_labels if i == 2])
         expression_eff = marker_pos / (marker_pos + marker_neg)
         print(f"Cochlea {name}, average expression efficiency {expression_eff}")
+        print(f"Cochlea {name}, number of IHCs: {len(freq)}")
         octave_binned = frequency_mapping(
             freq, marker_labels, animal="mouse", transduction_efficiency=True,
             bin_edges=bin_edges, bin_labels=bin_labels
